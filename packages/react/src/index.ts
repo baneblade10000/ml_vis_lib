@@ -14,6 +14,8 @@ export type { ReactFlowNetworkGraphProps } from "./playground/network/ReactFlowN
 export { NetworkInspector } from "./playground/network/NetworkInspector";
 export { NeuralNetworkPlayground } from "./playground/NeuralNetworkPlayground";
 export type { NeuralNetworkPlaygroundProps } from "./playground/NeuralNetworkPlayground";
+export { ComputationalGraphPlayground } from "./playground/autograd/ComputationalGraphPlayground";
+export type { ComputationalGraphPlaygroundProps } from "./playground/autograd/ComputationalGraphPlayground";
 
 export {
   I18nProvider,

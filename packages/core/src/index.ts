@@ -133,6 +133,31 @@ export type {
 } from "./playground/tf";
 
 export {
+  AutogradGraph,
+  AutogradNode,
+  AutogradEdge,
+  AUTOGRAD_PALETTE_OPS,
+  AUTOGRAD_PRESETS,
+  buildAutogradPreset,
+  CompGraphEngine,
+  DEFAULT_COMPGRAPH_CONFIG,
+  evaluateOp,
+  localDerivatives,
+  OP_SPECS,
+  resetAutogradIdCounter,
+} from "./playground/autograd";
+export type {
+  AutogradEdgeDef,
+  AutogradNodeDef,
+  AutogradOp,
+  AutogradPosition,
+  AutogradPresetId,
+  AutogradSnapshot,
+  CompGraphConfig,
+  OpSpec,
+} from "./playground/autograd";
+
+export {
   coreMessages,
   getLocale,
   localeLabels,

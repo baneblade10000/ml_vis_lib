@@ -1,8 +1,8 @@
 import type { ComponentType } from "react";
-import { MonteCarloPiPlayground, NeuralNetworkPlayground } from "@ml-vis/react";
+import { ComputationalGraphPlayground, MonteCarloPiPlayground, NeuralNetworkPlayground } from "@ml-vis/react";
 import type { PlaygroundMessages } from "../i18n";
 
-export type VisualizationId = "neural-network" | "monte-carlo-pi";
+export type VisualizationId = "neural-network" | "computational-graph" | "monte-carlo-pi";
 
 export interface VisualizationEntry {
   id: VisualizationId;
@@ -13,6 +13,13 @@ export interface VisualizationEntry {
 }
 
 export const visualizations: VisualizationEntry[] = [
+  {
+    id: "computational-graph",
+    path: "/viz/computational-graph",
+    titleKey: "vizComputationalGraphTitle",
+    descriptionKey: "vizComputationalGraphDescription",
+    component: ComputationalGraphPlayground,
+  },
   {
     id: "neural-network",
     path: "/viz/neural-network",

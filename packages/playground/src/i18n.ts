@@ -6,6 +6,8 @@ export type PlaygroundMessages = {
   catalogDescription: string;
   openVisualization: string;
   backToCatalog: string;
+  vizComputationalGraphTitle: string;
+  vizComputationalGraphDescription: string;
   vizNeuralNetworkTitle: string;
   vizNeuralNetworkDescription: string;
   vizMonteCarloPiTitle: string;
@@ -19,6 +21,9 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     catalogDescription: "Interactive demos for exploring machine learning concepts.",
     openVisualization: "Open",
     backToCatalog: "Back to catalog",
+    vizComputationalGraphTitle: "Computational Graph",
+    vizComputationalGraphDescription:
+      "Build an expression from atomic operations (+, ×, tanh…) and watch the forward pass compute values and the backward pass propagate gradients — the foundation behind neural networks.",
     vizNeuralNetworkTitle: "Neural Network Playground",
     vizNeuralNetworkDescription:
       "Train a small neural network on 2D datasets and watch the decision boundary, loss, and activations update live.",
@@ -32,6 +37,9 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     catalogDescription: "Интерактивные демо для изучения концепций машинного обучения.",
     openVisualization: "Открыть",
     backToCatalog: "Назад к каталогу",
+    vizComputationalGraphTitle: "Вычислительный граф",
+    vizComputationalGraphDescription:
+      "Соберите выражение из атомарных операций (+, ×, tanh…) и наблюдайте, как прямой ход считает значения, а обратный — распространяет градиенты. Это основа, на которой работают нейросети.",
     vizNeuralNetworkTitle: "Neural Network Playground",
     vizNeuralNetworkDescription:
       "Обучайте небольшую нейросеть на 2D-данных и наблюдайте за границей решений, loss и активациями в реальном времени.",
