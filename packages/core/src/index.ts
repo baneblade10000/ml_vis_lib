@@ -17,20 +17,6 @@ export type {
 export { downsample, extent } from "./utils/math";
 
 export {
-  DEFAULT_MONTE_CARLO_CONFIG,
-  MonteCarloPiEngine,
-  PI_TRUE,
-  estimateError,
-  estimatePi,
-  isInsideUnitQuarterCircle,
-} from "./montecarlo";
-export type {
-  MonteCarloConfig,
-  MonteCarloHistoryPoint,
-  MonteCarloPoint,
-} from "./montecarlo";
-
-export {
   ACTIVATIONS,
   DATASETS,
   DEFAULT_CONFIG,

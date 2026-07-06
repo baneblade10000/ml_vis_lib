@@ -7,8 +7,6 @@ export {
 } from "./DecisionBoundaryPlayground";
 export type { DecisionBoundaryChartProps, PlaygroundControlsProps } from "./DecisionBoundaryPlayground";
 
-export { MonteCarloPiPlayground } from "./playground/MonteCarloPiPlayground";
-export type { MonteCarloPiPlaygroundProps } from "./playground/MonteCarloPiPlayground";
 export { ReactFlowNetworkGraph } from "./playground/network/ReactFlowNetworkGraph";
 export type { ReactFlowNetworkGraphProps } from "./playground/network/ReactFlowNetworkGraph";
 export { NetworkInspector } from "./playground/network/NetworkInspector";

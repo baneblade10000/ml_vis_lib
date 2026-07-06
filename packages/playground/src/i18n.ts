@@ -10,42 +10,35 @@ export type PlaygroundMessages = {
   vizComputationalGraphDescription: string;
   vizNeuralNetworkTitle: string;
   vizNeuralNetworkDescription: string;
-  vizMonteCarloPiTitle: string;
-  vizMonteCarloPiDescription: string;
 };
 
 export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
   en: {
     language: "Language",
     catalogTitle: "Visualizations",
-    catalogDescription: "Interactive demos for exploring machine learning concepts.",
+    catalogDescription:
+      "Interactive visualizations for machine learning.",
     openVisualization: "Open",
     backToCatalog: "Back to catalog",
     vizComputationalGraphTitle: "Computational Graph",
     vizComputationalGraphDescription:
-      "Build an expression from atomic operations (+, ×, tanh…) and watch the forward pass compute values and the backward pass propagate gradients — the foundation behind neural networks.",
-    vizNeuralNetworkTitle: "Neural Network Playground",
+      "Assembly of a computational graph from elementary operations. Forward pass evaluates node values; backward pass propagates gradients via reverse-mode automatic differentiation—the foundation of backpropagation.",
+    vizNeuralNetworkTitle: "Neural Network",
     vizNeuralNetworkDescription:
-      "Train a small neural network on 2D datasets and watch the decision boundary, loss, and activations update live.",
-    vizMonteCarloPiTitle: "Monte Carlo π",
-    vizMonteCarloPiDescription:
-      "Estimate π by throwing random points into a square — watch the quarter circle fill up and the estimate converge.",
+      "Train a feedforward network on two-dimensional classification tasks; visualize the decision boundary, loss, and layer activations during optimization.",
   },
   ru: {
     language: "Язык",
     catalogTitle: "Визуализации",
-    catalogDescription: "Интерактивные демо для изучения концепций машинного обучения.",
+    catalogDescription: "Интерактивные визуализации для изучения методов машинного обучения.",
     openVisualization: "Открыть",
     backToCatalog: "Назад к каталогу",
     vizComputationalGraphTitle: "Вычислительный граф",
     vizComputationalGraphDescription:
-      "Соберите выражение из атомарных операций (+, ×, tanh…) и наблюдайте, как прямой ход считает значения, а обратный — распространяет градиенты. Это основа, на которой работают нейросети.",
-    vizNeuralNetworkTitle: "Neural Network Playground",
+      "Построение вычислительного графа из элементарных операций. Прямой проход вычисляет значения узлов, обратный — распространяет градиенты (автоматическое дифференцирование, reverse mode). Основа алгоритма обратного распространения ошибки.",
+    vizNeuralNetworkTitle: "Нейронная сеть",
     vizNeuralNetworkDescription:
-      "Обучайте небольшую нейросеть на 2D-данных и наблюдайте за границей решений, loss и активациями в реальном времени.",
-    vizMonteCarloPiTitle: "Monte Carlo π",
-    vizMonteCarloPiDescription:
-      "Оценивайте π случайными точками в квадрате — наблюдайте, как заполняется четверть круга и сходится оценка.",
+      "Обучение полносвязной сети на двумерных задачах классификации; визуализация границы решений, функции потерь и активаций в процессе оптимизации.",
   },
 };
 
