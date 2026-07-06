@@ -10,7 +10,6 @@ import {
 } from "@ml-vis/core";
 import { NetworkInspector } from "./network/NetworkInspector";
 import { NetworkArchitecturePanel } from "./network/NetworkArchitecturePanel";
-import { NetworkPalette } from "./network/NetworkPalette";
 import { NetworkTrainingPanel } from "./network/NetworkTrainingPanel";
 import { ReactFlowNetworkGraph } from "./network/ReactFlowNetworkGraph";
 import { paintAllBoundaries, paintAllBoundariesAfterCommit, paintBoundaryNode } from "./network/boundaryPaint";
@@ -93,7 +92,6 @@ type GraphPaneProps = {
   onSelectEdge: (edgeId: string | null) => void;
   onToggleFeature: (id: string) => void;
   onConnect: (sourceId: string, targetId: string) => void;
-  onDropNode: (kind: Parameters<PlaygroundEngine["addPaletteNode"]>[0], position: { x: number; y: number }) => void;
   onMoveNode: (nodeId: string, position: { x: number; y: number }) => void;
   onRemoveNode: (nodeId: string) => void;
   onRemoveEdge: (sourceId: string, targetId: string) => void;
@@ -102,7 +100,6 @@ type GraphPaneProps = {
   onAddNeuron: (layerIdx: number) => void;
   onRemoveNeuron: (layerIdx: number) => void;
   onNormalizeLayout: () => void;
-  onArchitecturePresetChange: (preset: TfPlaygroundConfig["architecturePreset"]) => void;
   onLearningRateChange: (learningRate: number) => void;
   onActivationChange: (activation: TfPlaygroundConfig["activation"]) => void;
   onBatchSizeChange: (batchSize: number) => void;
@@ -129,7 +126,6 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
   onSelectEdge,
   onToggleFeature,
   onConnect,
-  onDropNode,
   onMoveNode,
   onRemoveNode,
   onRemoveEdge,
@@ -138,7 +134,6 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
   onAddNeuron,
   onRemoveNeuron,
   onNormalizeLayout,
-  onArchitecturePresetChange,
   onLearningRateChange,
   onActivationChange,
   onBatchSizeChange,
@@ -152,8 +147,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
   const engine = engineRef.current!;
   const cfg = engine.config;
   const t = useNetworkMessages();
-  const isMlp = cfg.architecturePreset === "mlp";
-  const fitViewKey = `${cfg.architecturePreset}:${engine.graph.inputIds.join(",")}`;
+  const fitViewKey = engine.graph.inputIds.join(",");
 
   return (
     <ReactFlowNetworkGraph
@@ -174,7 +168,6 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
       onSelectEdge={onSelectEdge}
       onToggleFeature={onToggleFeature}
       onConnect={onConnect}
-      onDropNode={onDropNode}
       onMoveNode={onMoveNode}
       onRemoveNode={onRemoveNode}
       onRemoveEdge={onRemoveEdge}
@@ -184,7 +177,14 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
       discretize={cfg.discretize}
     >
       <aside className="tf-flow-dock tf-flow-dock--left">
-        <NetworkPalette />
+        <NetworkArchitecturePanel
+          numHiddenLayers={cfg.numHiddenLayers}
+          networkShape={cfg.networkShape}
+          onAddLayer={onAddLayer}
+          onRemoveLayer={onRemoveLayer}
+          onAddNeuron={onAddNeuron}
+          onRemoveNeuron={onRemoveNeuron}
+        />
         <div className="tf-flow-dock-section">
           <button type="button" className="tf-btn tf-btn--secondary tf-reset-weights" onClick={onResetWeights}>
             {t.resetWeights}
@@ -194,16 +194,6 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
             {t.arrangeLayout}
           </button>
         </div>
-        {isMlp && (
-          <NetworkArchitecturePanel
-            numHiddenLayers={cfg.numHiddenLayers}
-            networkShape={cfg.networkShape}
-            onAddLayer={onAddLayer}
-            onRemoveLayer={onRemoveLayer}
-            onAddNeuron={onAddNeuron}
-            onRemoveNeuron={onRemoveNeuron}
-          />
-        )}
         <div className="tf-flow-dock-section">
           <h4 className="tf-flow-dock-title">{t.dataset}</h4>
           <div className="dataset-list dataset-list--compact">
@@ -231,14 +221,12 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
       </aside>
       <aside className="tf-flow-dock tf-flow-dock--right">
         <NetworkTrainingPanel
-          architecturePreset={cfg.architecturePreset}
           learningRate={cfg.learningRate}
           activation={cfg.activation}
           batchSize={cfg.batchSize}
           noise={cfg.noise}
           percTrainData={cfg.percTrainData}
           discretize={cfg.discretize ?? false}
-          onArchitecturePresetChange={onArchitecturePresetChange}
           onLearningRateChange={onLearningRateChange}
           onActivationChange={onActivationChange}
           onBatchSizeChange={onBatchSizeChange}
@@ -446,13 +434,6 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     bump();
   }, [bump, requestPaint, syncRuntimeRefs]);
 
-  const onDropNode = useCallback((kind: Parameters<PlaygroundEngine["addPaletteNode"]>[0], position: { x: number; y: number }) => {
-    engineRef.current.addPaletteNode(kind, position);
-    syncRuntimeRefs();
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
-
   const onMoveNode = useCallback((nodeId: string, position: { x: number; y: number }) => {
     engineRef.current.setNodePosition(nodeId, position);
   }, []);
@@ -506,15 +487,6 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     setRefitViewKey((n) => n + 1);
     bump();
   }, [bump]);
-
-  const onArchitecturePresetChange = useCallback((preset: TfPlaygroundConfig["architecturePreset"]) => {
-    engineRef.current.setArchitecturePreset(preset);
-    setSelectedNodeId(null);
-    setSelectedEdgeId(null);
-    syncRuntimeRefs();
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
 
   const onDiscretizeChange = useCallback((discretize: boolean) => {
     engineRef.current.config.discretize = discretize;
@@ -601,7 +573,6 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           onSelectEdge={setSelectedEdgeId}
           onToggleFeature={onToggleFeature}
           onConnect={onConnect}
-          onDropNode={onDropNode}
           onMoveNode={onMoveNode}
           onRemoveNode={onRemoveNode}
           onRemoveEdge={onRemoveEdge}
@@ -610,7 +581,6 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           onAddNeuron={onAddNeuron}
           onRemoveNeuron={onRemoveNeuron}
           onNormalizeLayout={onNormalizeLayout}
-          onArchitecturePresetChange={onArchitecturePresetChange}
           onLearningRateChange={onLearningRateChange}
           onActivationChange={onActivationChange}
           onBatchSizeChange={onBatchSizeChange}

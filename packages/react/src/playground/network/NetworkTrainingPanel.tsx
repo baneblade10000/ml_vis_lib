@@ -1,18 +1,16 @@
 import type { CSSProperties } from "react";
-import { TF_ACTIVATIONS, type ArchitecturePresetId, type TfActivationId } from "@ml-vis/core";
+import { TF_ACTIVATIONS, type TfActivationId } from "@ml-vis/core";
 import { useNetworkMessages } from "./messages";
 
 const LEARNING_RATES = [0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10];
 
 export interface NetworkTrainingPanelProps {
-  architecturePreset: ArchitecturePresetId;
   learningRate: number;
   activation: TfActivationId;
   batchSize: number;
   noise: number;
   percTrainData: number;
   discretize: boolean;
-  onArchitecturePresetChange: (preset: ArchitecturePresetId) => void;
   onLearningRateChange: (rate: number) => void;
   onActivationChange: (activation: TfActivationId) => void;
   onBatchSizeChange: (size: number) => void;

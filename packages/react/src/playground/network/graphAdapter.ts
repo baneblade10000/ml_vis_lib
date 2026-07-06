@@ -113,10 +113,3 @@ export function graphToFlow(
 
   return { nodes, edges };
 }
-
-export function flowKindFromDrag(kind: string): GraphNodeKind | null {
-  if (kind === "dense" || kind === "sum" || kind === "output") return kind;
-  return null;
-}
-
-export const PALETTE_DRAG_TYPE = "application/reactflow-network";

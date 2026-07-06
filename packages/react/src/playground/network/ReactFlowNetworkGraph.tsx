@@ -16,11 +16,9 @@ import {
   type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { ComputationalGraph, GraphNodeKind } from "@ml-vis/core";
+import type { ComputationalGraph } from "@ml-vis/core";
 import {
-  flowKindFromDrag,
   graphToFlow,
-  PALETTE_DRAG_TYPE,
   type NetworkNodeData,
   type WeightEdgeData,
 } from "./graphAdapter";
@@ -43,7 +41,6 @@ export interface ReactFlowNetworkGraphProps {
   onSelectEdge: (edgeId: string | null) => void;
   onToggleFeature: (featureId: string) => void;
   onConnect: (sourceId: string, targetId: string) => void;
-  onDropNode: (kind: GraphNodeKind, position: { x: number; y: number }) => void;
   onMoveNode: (nodeId: string, position: { x: number; y: number }) => void;
   onRemoveNode: (nodeId: string) => void;
   onRemoveEdge: (sourceId: string, targetId: string) => void;
@@ -122,7 +119,6 @@ function ReactFlowNetworkGraphInner({
   onSelectEdge,
   onToggleFeature,
   onConnect,
-  onDropNode,
   onMoveNode,
   onRemoveNode,
   onRemoveEdge,
@@ -133,7 +129,6 @@ function ReactFlowNetworkGraphInner({
   paintGeneration = 0,
 }: ReactFlowNetworkGraphProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const rfInstance = useRef<{ screenToFlowPosition: (pos: { x: number; y: number }) => { x: number; y: number } } | null>(null);
   const topologyKeyRef = useRef("");
   const fitViewKeyRef = useRef("");
   const refitViewKeyRef = useRef<string | number | undefined>(undefined);
@@ -316,27 +311,6 @@ function ReactFlowNetworkGraphInner({
     [onConnect],
   );
 
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-  }, []);
-
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault();
-      const kind = flowKindFromDrag(event.dataTransfer.getData(PALETTE_DRAG_TYPE));
-      if (!kind || !rfInstance.current || !reactFlowWrapper.current) return;
-
-      const bounds = reactFlowWrapper.current.getBoundingClientRect();
-      const position = rfInstance.current.screenToFlowPosition({
-        x: event.clientX - bounds.left,
-        y: event.clientY - bounds.top,
-      });
-      onDropNode(kind, position);
-    },
-    [onDropNode],
-  );
-
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node<NetworkNodeData>) => {
       onSelectEdge(null);
@@ -401,9 +375,6 @@ function ReactFlowNetworkGraphInner({
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onInit={(instance) => {
-          rfInstance.current = instance;
-        }}
         nodeTypes={networkNodeTypes}
         edgeTypes={networkEdgeTypes}
         onNodesChange={handleNodesChange}
@@ -411,8 +382,6 @@ function ReactFlowNetworkGraphInner({
         onNodeDragStop={onNodeDragStop}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onEdgeClick={onEdgeClick}

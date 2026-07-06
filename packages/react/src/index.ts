@@ -11,7 +11,6 @@ export { MonteCarloPiPlayground } from "./playground/MonteCarloPiPlayground";
 export type { MonteCarloPiPlaygroundProps } from "./playground/MonteCarloPiPlayground";
 export { ReactFlowNetworkGraph } from "./playground/network/ReactFlowNetworkGraph";
 export type { ReactFlowNetworkGraphProps } from "./playground/network/ReactFlowNetworkGraph";
-export { NetworkPalette } from "./playground/network/NetworkPalette";
 export { NetworkInspector } from "./playground/network/NetworkInspector";
 export { NeuralNetworkPlayground } from "./playground/NeuralNetworkPlayground";
 export type { NeuralNetworkPlaygroundProps } from "./playground/NeuralNetworkPlayground";

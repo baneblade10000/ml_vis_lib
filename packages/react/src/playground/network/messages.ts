@@ -10,14 +10,6 @@ export type NetworkMessages = {
   epoch: string;
   testLoss: string;
   trainLoss: string;
-  blocks: string;
-  paletteDense: string;
-  paletteSum: string;
-  paletteOutput: string;
-  paletteDenseHint: string;
-  paletteSumHint: string;
-  paletteOutputHint: string;
-  paletteHint: string;
   arrangeLayout: string;
   network: string;
   hiddenLayers: string;
@@ -30,7 +22,6 @@ export type NetworkMessages = {
   dataset: string;
   datasetLabels: Record<TfDatasetId, string>;
   training: string;
-  architecture: string;
   learningRate: string;
   activation: string;
   discretize: string;
@@ -60,14 +51,6 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     epoch: "Epoch",
     testLoss: "Test loss",
     trainLoss: "Train loss",
-    blocks: "Blocks",
-    paletteDense: "Dense",
-    paletteSum: "Add",
-    paletteOutput: "Output",
-    paletteDenseHint: "Weighted sum + activation",
-    paletteSumHint: "Sum inputs (residual merge)",
-    paletteOutputHint: "Network output node",
-    paletteHint: "Drag onto canvas · Connect handles · Del to remove",
     arrangeLayout: "Arrange layout",
     network: "Network",
     hiddenLayers: "Hidden layers",
@@ -85,7 +68,6 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
       spiral: "Spiral",
     },
     training: "Training",
-    architecture: "Architecture",
     learningRate: "Learning rate",
     activation: "Activation",
     discretize: "Discretize boundary",
@@ -113,14 +95,6 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     epoch: "Эпоха",
     testLoss: "Loss (тест)",
     trainLoss: "Loss (обучение)",
-    blocks: "Блоки",
-    paletteDense: "Dense",
-    paletteSum: "Сумма",
-    paletteOutput: "Выход",
-    paletteDenseHint: "Взвешенная сумма + активация",
-    paletteSumHint: "Сумма входов (residual-связь)",
-    paletteOutputHint: "Выходной узел сети",
-    paletteHint: "Перетащите на холст · Соединяйте порты · Del — удалить",
     arrangeLayout: "Выровнять схему",
     network: "Сеть",
     hiddenLayers: "Скрытые слои",
@@ -138,7 +112,6 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
       spiral: "Спираль",
     },
     training: "Обучение",
-    architecture: "Архитектура",
     learningRate: "Скорость обучения",
     activation: "Активация",
     discretize: "Дискретная граница",
