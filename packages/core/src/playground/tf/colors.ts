@@ -1,11 +1,10 @@
-/** Diverging palette: purple (negative / class 0) → neutral → crimson (positive / class 1). */
+/** Diverging palette: dark violet (negative) → magenta (positive), no neutral midpoint. */
 
-export const PALETTE_LOW = { r: 79, g: 70, b: 229 }; // #4f46e5 purple
-export const PALETTE_MID = { r: 236, g: 237, b: 240 }; // #ecedf0
-export const PALETTE_HIGH = { r: 220, g: 38, b: 58 }; // #dc263a crimson
+export const PALETTE_LOW = { r: 58, g: 48, b: 168 }; // #3a30a8 — dark saturated violet
+export const PALETTE_HIGH = { r: 192, g: 38, b: 112 }; // #c02670 — saturated magenta
 
-export const CLASS_0_HEX = "#4f46e5";
-export const CLASS_1_HEX = "#dc263a";
+export const CLASS_0_HEX = "#3a30a8";
+export const CLASS_1_HEX = "#c02670";
 
 const NUM_SHADES = 30;
 
@@ -29,36 +28,16 @@ function interpolateColor(
   };
 }
 
-/** Maps a value in [-1, 1] to an RGB color. */
+/** Maps a value in [-1, 1] to an RGB color (direct violet → magenta). */
 export function valueToRgb(value: number): { r: number; g: number; b: number } {
-  const v = clamp(value, -1, 1);
-  const normalized = (v + 1) / 2;
-  if (normalized <= 0.5) {
-    const t = normalized / 0.5;
-    return interpolateColor(PALETTE_LOW, PALETTE_MID, t);
-  }
-  const t = (normalized - 0.5) / 0.5;
-  return interpolateColor(PALETTE_MID, PALETTE_HIGH, t);
+  const t = (clamp(value, -1, 1) + 1) / 2;
+  return interpolateColor(PALETTE_LOW, PALETTE_HIGH, t);
 }
 
-/** Maps a probability in [0, 1] to RGBA components. */
+/** Maps a probability in [0, 1] to RGBA components (class 0 → class 1). */
 export function probabilityToRgba(probability: number, alpha = 160): [number, number, number, number] {
-  const p = clamp(probability, 0, 1);
-  let r: number;
-  let g: number;
-  let b: number;
-  if (p <= 0.5) {
-    const t = p / 0.5;
-    r = PALETTE_LOW.r + (PALETTE_MID.r - PALETTE_LOW.r) * t;
-    g = PALETTE_LOW.g + (PALETTE_MID.g - PALETTE_LOW.g) * t;
-    b = PALETTE_LOW.b + (PALETTE_MID.b - PALETTE_LOW.b) * t;
-  } else {
-    const t = (p - 0.5) / 0.5;
-    r = PALETTE_MID.r + (PALETTE_HIGH.r - PALETTE_MID.r) * t;
-    g = PALETTE_MID.g + (PALETTE_HIGH.g - PALETTE_MID.g) * t;
-    b = PALETTE_MID.b + (PALETTE_HIGH.b - PALETTE_MID.b) * t;
-  }
-  return [Math.round(r), Math.round(g), Math.round(b), alpha];
+  const { r, g, b } = interpolateColor(PALETTE_LOW, PALETTE_HIGH, clamp(probability, 0, 1));
+  return [r, g, b, alpha];
 }
 
 /** CSS color string for a weight value in [-1, 1]. */
