@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.turbo/
+*.tsbuildinfo
+storybook-static/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Test & coverage
+coverage/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+
+# QA agent artifacts (reports, screenshots, metrics)
+qa_agent/runs/*
+!qa_agent/runs/.gitkeep
+
+# Nested git repo (not part of ml-vis-lib)
+agilab/
+
+# Cursor IDE (local rules, MCP config, hooks)
+.cursor/
+
+# OS & editors
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*~
+
+# Logs & caches
+*.log
+.cache/
+.vite/
