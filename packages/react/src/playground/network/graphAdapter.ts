@@ -1,15 +1,22 @@
 import type { Edge, Node } from "@xyflow/react";
+import { MarkerType } from "@xyflow/react";
 import {
   INPUTS,
+  MLP_NODE_SIZE,
+  MLP_OUTPUT_NODE_SIZE,
   weightColor,
+  weightMagnitude,
+  weightValueNormalized,
   type ComputationalGraph,
   type GraphNodeKind,
 } from "@ml-vis/core";
 
-export const NODE_WIDTH = 52;
-export const NODE_HEIGHT = 52;
-export const OUTPUT_NODE_WIDTH = 168;
-export const OUTPUT_NODE_HEIGHT = 168;
+// Single source of truth lives in @ml-vis/core (mlp-layout.ts); these re-export
+// the canonical values so layout geometry and rendered node sizes can never drift.
+export const NODE_WIDTH = MLP_NODE_SIZE;
+export const NODE_HEIGHT = MLP_NODE_SIZE;
+export const OUTPUT_NODE_WIDTH = MLP_OUTPUT_NODE_SIZE;
+export const OUTPUT_NODE_HEIGHT = MLP_OUTPUT_NODE_SIZE;
 
 export type DataPoint = { x: number; y: number; label: number };
 
@@ -96,6 +103,11 @@ export function graphToFlow(
   for (const link of graph.getAllLinks()) {
     const sourceActive =
       link.source.id in options.enabledFeatures ? options.enabledFeatures[link.source.id] : true;
+    // One normalized scale (tanh) drives color, width and opacity together so a
+    // large weight saturates all three at the same point instead of clamping at
+    // different thresholds.
+    const mag = weightMagnitude(link.weight);
+    const stroke = weightColor(weightValueNormalized(link.weight));
     edges.push({
       id: link.id,
       source: link.source.id,
@@ -103,13 +115,29 @@ export function graphToFlow(
       type: "weight",
       selected: options.selectedEdgeId === link.id,
       data: { weight: link.weight, active: sourceActive },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 16,
+        height: 16,
+        // Color the marker to match the edge stroke; react-flow keys the
+        // marker by the color string, so this is cheap.
+        color: sourceActive ? stroke : "rgba(148,163,184,0.25)",
+      },
       style: {
-        stroke: weightColor(link.weight),
-        strokeWidth: Math.max(2, Math.min(8, 2 + (Math.abs(link.weight) / 5) * 6)),
-        strokeOpacity: sourceActive ? Math.max(0.45, Math.min(1, 0.45 + Math.abs(link.weight) * 0.55)) : 0.12,
+        stroke,
+        // 2px floor for faint weights, ~7.5px ceiling once |tanh(w)| → 1.
+        strokeWidth: 2 + mag * 5.5,
+        strokeOpacity: sourceActive ? 0.45 + mag * 0.55 : 0.12,
       },
     });
   }
 
   return { nodes, edges };
 }
+
+export function flowKindFromDrag(kind: string): GraphNodeKind | null {
+  if (kind === "dense") return kind;
+  return null;
+}
+
+export const PALETTE_DRAG_TYPE = "application/reactflow-network";

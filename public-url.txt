@@ -1,0 +1,5 @@
+# Home server (192.168.0.149)
+https://dietary-occupational-magnetic-default.trycloudflare.com
+
+# LAN
+http://192.168.0.149:8080

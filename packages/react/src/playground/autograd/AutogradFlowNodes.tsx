@@ -27,7 +27,9 @@ function NodeBody({ data }: { data: AutogradNodeData }) {
         <span className="ag-node-label">{data.label}</span>
       </div>
       <div className="ag-node-stats">
-        <span className="ag-node-value" title="value">{fmt(data.value)}</span>
+        {(data.isLeaf || data.showValues) && (
+          <span className="ag-node-value" title="value">{fmt(data.value)}</span>
+        )}
         {data.showGrad && (
           <span className="ag-node-grad" style={{ color: gradColor(data.grad) }} title="grad">
             ∂ {fmt(data.grad)}

@@ -15,6 +15,8 @@ export type AutogradNodeData = {
   isLeaf: boolean;
   isOutput: boolean;
   showGrad: boolean;
+  /** Whether computed op-node values are revealed. Leaves always show theirs. */
+  showValues: boolean;
   selected: boolean;
 };
 
@@ -34,7 +36,12 @@ export function gradColor(grad: number): string {
 
 export function autogradToFlow(
   graph: AutogradGraph,
-  options: { selectedNodeId: string | null; selectedEdgeId: string | null; showGrad: boolean },
+  options: {
+    selectedNodeId: string | null;
+    selectedEdgeId: string | null;
+    showGrad: boolean;
+    showValues: boolean;
+  },
 ): { nodes: Node<AutogradNodeData>[]; edges: Edge<AutogradEdgeData>[] } {
   const nodes: Node<AutogradNodeData>[] = [];
   const edges: Edge<AutogradEdgeData>[] = [];
@@ -60,6 +67,7 @@ export function autogradToFlow(
         isLeaf: node.isLeaf,
         isOutput,
         showGrad: options.showGrad,
+        showValues: options.showValues,
         selected: options.selectedNodeId === node.id,
       },
     });

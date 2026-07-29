@@ -10,6 +10,10 @@ export type NetworkMessages = {
   epoch: string;
   testLoss: string;
   trainLoss: string;
+  blocks: string;
+  paletteDense: string;
+  paletteDenseHint: string;
+  paletteHint: string;
   arrangeLayout: string;
   network: string;
   hiddenLayers: string;
@@ -51,6 +55,10 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     epoch: "Epoch",
     testLoss: "Test loss",
     trainLoss: "Train loss",
+    blocks: "Blocks",
+    paletteDense: "Dense",
+    paletteDenseHint: "Weighted sum + activation",
+    paletteHint: "Drag onto canvas · Connect handles · Del to remove",
     arrangeLayout: "Arrange layout",
     network: "Network",
     hiddenLayers: "Hidden layers",
@@ -95,6 +103,10 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     epoch: "Эпоха",
     testLoss: "Loss (тест)",
     trainLoss: "Loss (обучение)",
+    blocks: "Блоки",
+    paletteDense: "Dense",
+    paletteDenseHint: "Взвешенная сумма + активация",
+    paletteHint: "Перетащите на холст · Соединяйте порты · Del — удалить",
     arrangeLayout: "Выровнять схему",
     network: "Сеть",
     hiddenLayers: "Скрытые слои",

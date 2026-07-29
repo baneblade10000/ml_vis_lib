@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   AUTOGRAD_PRESETS,
   CompGraphEngine,
+  type AutogradOp,
   type AutogradPresetId,
   type CompGraphConfig,
 } from "@ml-vis/core";
@@ -41,15 +42,34 @@ export function ComputationalGraphPlayground({
   // Gradients are revealed only after the user runs the backward pass; any edit
   // or a fresh forward pass invalidates them until Backward is pressed again.
   const [gradsVisible, setGradsVisible] = useState(false);
+  // Computed op-node values are revealed only after the user runs a pass; on
+  // initial load, reset, or preset change the graph shows leaf values alone.
+  const [valuesVisible, setValuesVisible] = useState(false);
+  const addSlotRef = useRef(0);
 
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
-  // A structural/value edit keeps values fresh (forward) but stales gradients.
+  const nextDropPosition = useCallback(() => {
+    const n = addSlotRef.current++;
+    return { x: 60 + (n % 4) * 130, y: 40 + Math.floor(n / 4) * 90 };
+  }, []);
+
+  // A structural/value edit keeps leaf scalars in place but stales the computed
+  // op-node values and gradients — both stay hidden until the next pass.
   const afterEdit = useCallback(() => {
     engine.recompute();
+    setValuesVisible(false);
     setGradsVisible(false);
     bump();
   }, [engine, bump]);
+
+  const onAddOp = useCallback(
+    (op: AutogradOp) => {
+      engine.addPaletteNode(op, nextDropPosition());
+      afterEdit();
+    },
+    [engine, afterEdit, nextDropPosition],
+  );
 
   const onConnect = useCallback((s: string, tId: string) => {
     engine.connectNodes(s, tId);
@@ -57,6 +77,7 @@ export function ComputationalGraphPlayground({
   }, [engine, afterEdit]);
 
   const onDropNode = useCallback((kind: string, position: { x: number; y: number }) => {
+    addSlotRef.current += 1;
     engine.addPaletteNode(kind as never, position);
     afterEdit();
   }, [engine, afterEdit]);
@@ -89,19 +110,22 @@ export function ComputationalGraphPlayground({
 
   const onForward = useCallback(() => {
     engine.runForward();
+    setValuesVisible(true);
     setGradsVisible(false);
     bump();
   }, [engine, bump]);
 
   const onBackward = useCallback(() => {
     engine.runBackward();
+    setValuesVisible(true);
     setGradsVisible(true);
     bump();
   }, [engine, bump]);
 
   const onReset = useCallback(() => {
     engine.reset();
-    engine.runForward();
+    addSlotRef.current = 0;
+    setValuesVisible(false);
     setGradsVisible(false);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
@@ -111,8 +135,9 @@ export function ComputationalGraphPlayground({
 
   const onPresetChange = useCallback((next: AutogradPresetId) => {
     engine.loadPreset(next);
-    engine.runForward();
+    addSlotRef.current = 0;
     setPreset(next);
+    setValuesVisible(false);
     setGradsVisible(false);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
@@ -160,7 +185,9 @@ export function ComputationalGraphPlayground({
         <div className="tf-toolbar-group tf-toolbar-group--params">
           <div className="tf-toolbar-stat">
             <span className="label">{t.value}</span>
-            <span className="value">{outputNode ? fmt(outputNode.value) : "—"}</span>
+            <span className="value">
+              {valuesVisible && outputNode ? fmt(outputNode.value) : "—"}
+            </span>
           </div>
           {toolbarEnd}
         </div>
@@ -171,6 +198,7 @@ export function ComputationalGraphPlayground({
           graph={engine.graph}
           version={version}
           showGrad={gradsVisible}
+          showValues={valuesVisible}
           fitViewKey={`${preset}:${fitKey}`}
           selectedNodeId={selectedNodeId}
           selectedEdgeId={selectedEdgeId}
@@ -183,11 +211,12 @@ export function ComputationalGraphPlayground({
           onRemoveEdge={onRemoveEdge}
         >
           <aside className="tf-flow-dock tf-flow-dock--left">
-            <AutogradPalette />
+            <AutogradPalette onAddOp={onAddOp} />
             <AutogradInspector
               graph={engine.graph}
               version={version}
               showGrad={gradsVisible}
+              showValues={valuesVisible}
               selectedNodeId={selectedNodeId}
               selectedEdgeId={selectedEdgeId}
               onSetNodeValue={onSetNodeValue}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type
 import {
   Background,
   Controls,
+  Panel,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
@@ -16,9 +17,11 @@ import {
   type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { ComputationalGraph } from "@ml-vis/core";
+import type { ComputationalGraph, GraphNodeKind } from "@ml-vis/core";
 import {
+  flowKindFromDrag,
   graphToFlow,
+  PALETTE_DRAG_TYPE,
   type NetworkNodeData,
   type WeightEdgeData,
 } from "./graphAdapter";
@@ -41,6 +44,7 @@ export interface ReactFlowNetworkGraphProps {
   onSelectEdge: (edgeId: string | null) => void;
   onToggleFeature: (featureId: string) => void;
   onConnect: (sourceId: string, targetId: string) => void;
+  onDropNode?: (kind: GraphNodeKind, position: { x: number; y: number }) => void;
   onMoveNode: (nodeId: string, position: { x: number; y: number }) => void;
   onRemoveNode: (nodeId: string) => void;
   onRemoveEdge: (sourceId: string, targetId: string) => void;
@@ -103,6 +107,12 @@ function viewportForNodes(
   };
 }
 
+/** Color of an edge marker, or "" when it has none (string markers carry no color). */
+function edgeMarkerColor(marker: Edge["markerEnd"] | Edge["markerStart"]): string {
+  if (!marker || typeof marker === "string") return "";
+  return marker.color ?? "";
+}
+
 function ReactFlowNetworkGraphInner({
   graph,
   enabledFeatures,
@@ -119,6 +129,7 @@ function ReactFlowNetworkGraphInner({
   onSelectEdge,
   onToggleFeature,
   onConnect,
+  onDropNode,
   onMoveNode,
   onRemoveNode,
   onRemoveEdge,
@@ -129,13 +140,25 @@ function ReactFlowNetworkGraphInner({
   paintGeneration = 0,
 }: ReactFlowNetworkGraphProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const rf = useReactFlow();
   const topologyKeyRef = useRef("");
   const fitViewKeyRef = useRef("");
   const refitViewKeyRef = useRef<string | number | undefined>(undefined);
   const draggingNodesRef = useRef(new Set<string>());
   const { setViewport } = useReactFlow();
   const [measuredHeight, setMeasuredHeight] = useState(height);
+  const [animateLayout, setAnimateLayout] = useState(false);
   const containerSizeRef = useRef({ width: 0, height: 0 });
+
+  // Briefly enable a CSS transition on node positions whenever the canonical
+  // grid is re-applied ("Arrange layout"), so nodes glide into place instead of
+  // jumping. The transition is disabled during normal drag/updates.
+  useEffect(() => {
+    if (refitViewKey === undefined) return;
+    setAnimateLayout(true);
+    const t = window.setTimeout(() => setAnimateLayout(false), 360);
+    return () => window.clearTimeout(t);
+  }, [refitViewKey]);
 
   useEffect(() => {
     if (!reactFlowWrapper.current) return;
@@ -247,12 +270,13 @@ function ReactFlowNetworkGraphInner({
         const sameStyle =
           edge.style?.stroke === next.style?.stroke &&
           edge.style?.strokeWidth === next.style?.strokeWidth &&
-          edge.style?.strokeOpacity === next.style?.strokeOpacity;
+          edge.style?.strokeOpacity === next.style?.strokeOpacity &&
+          edgeMarkerColor(edge.markerEnd) === edgeMarkerColor(next.markerEnd);
         const sameData =
           edge.data?.weight === next.data?.weight && edge.data?.active === next.data?.active;
         if (sameStyle && sameData && edge.selected === selected) return edge;
         changed = true;
-        return { ...edge, data: next.data, style: next.style, selected };
+        return { ...edge, data: next.data, style: next.style, markerEnd: next.markerEnd, selected };
       });
       return changed ? nextEdges : current;
     });
@@ -309,6 +333,26 @@ function ReactFlowNetworkGraphInner({
       }
     },
     [onConnect],
+  );
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    if (!onDropNode) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, [onDropNode]);
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      if (!onDropNode) return;
+      event.preventDefault();
+      const raw =
+        event.dataTransfer.getData(PALETTE_DRAG_TYPE) || event.dataTransfer.getData("text/plain");
+      const kind = flowKindFromDrag(raw);
+      if (!kind) return;
+      const position = rf.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      onDropNode(kind, position);
+    },
+    [onDropNode, rf],
   );
 
   const onNodeClick = useCallback(
@@ -369,7 +413,7 @@ function ReactFlowNetworkGraphInner({
       style={fillHeight ? undefined : { height: canvasHeight }}
     >
       <div
-        className="tf-flow-canvas"
+        className={`tf-flow-canvas${animateLayout ? " tf-flow-canvas--animate" : ""}`}
         style={{ width: "100%", height: fillHeight ? measuredHeight : canvasHeight }}
       >
       <ReactFlow
@@ -382,6 +426,8 @@ function ReactFlowNetworkGraphInner({
         onNodeDragStop={onNodeDragStop}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
+        onDrop={onDropNode ? onDrop : undefined}
+        onDragOver={onDropNode ? onDragOver : undefined}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onEdgeClick={onEdgeClick}
@@ -398,6 +444,17 @@ function ReactFlowNetworkGraphInner({
       >
         <Background gap={20} size={1} color="var(--tf-border)" />
         <Controls showInteractive={false} position="bottom-right" />
+        <Panel position="bottom-left" className="tf-flow-panel-legend">
+          <div className="tf-weight-legend" role="img" aria-label="Weight color scale: negative violet, positive magenta">
+            <span className="tf-weight-legend__title">Weight</span>
+            <div className="tf-weight-legend__bar" />
+            <div className="tf-weight-legend__scale">
+              <span>− (neg)</span>
+              <span>0</span>
+              <span>+ (pos)</span>
+            </div>
+          </div>
+        </Panel>
       </ReactFlow>
       </div>
 

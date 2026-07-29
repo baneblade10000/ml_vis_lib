@@ -10,6 +10,7 @@ export function AutogradInspector({
   graph,
   version,
   showGrad,
+  showValues,
   selectedNodeId,
   selectedEdgeId,
   onSetNodeValue,
@@ -20,6 +21,7 @@ export function AutogradInspector({
   graph: AutogradGraph;
   version: number;
   showGrad: boolean;
+  showValues: boolean;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
   onSetNodeValue: (id: string, value: number) => void;
@@ -89,10 +91,12 @@ export function AutogradInspector({
           />
         </label>
       ) : (
-        <div className="tf-network-inspector-row">
-          <span className="label">{t.value}</span>
-          <span className="value">{fmt(node.value)}</span>
-        </div>
+        showValues && (
+          <div className="tf-network-inspector-row">
+            <span className="label">{t.value}</span>
+            <span className="value">{fmt(node.value)}</span>
+          </div>
+        )
       )}
 
       {showGrad && (

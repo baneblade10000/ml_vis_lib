@@ -41,6 +41,8 @@ export {
   valueToRgb,
   weightColor,
   weightColorQuantized,
+  weightMagnitude,
+  weightValueNormalized,
 } from "./colors";
 
 export { boundaryToGridPoints, computeBoundaries, examplesToSamples } from "./boundary";
@@ -70,6 +72,11 @@ export {
   forwardPropGraph,
   forEachGraphNode,
   GraphNode,
+  layoutMlpFromLayers,
+  MLP_COL_SPACING,
+  MLP_NODE_SIZE,
+  MLP_OUTPUT_NODE_SIZE,
+  normalizeGraphLayout,
   PALETTE_NODE_KINDS,
   presetLabel,
   updateWeightsGraph,

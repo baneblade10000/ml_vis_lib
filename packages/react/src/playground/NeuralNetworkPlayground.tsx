@@ -10,6 +10,7 @@ import {
 } from "@ml-vis/core";
 import { NetworkInspector } from "./network/NetworkInspector";
 import { NetworkArchitecturePanel } from "./network/NetworkArchitecturePanel";
+import { NetworkPalette } from "./network/NetworkPalette";
 import { NetworkTrainingPanel } from "./network/NetworkTrainingPanel";
 import { ReactFlowNetworkGraph } from "./network/ReactFlowNetworkGraph";
 import { paintAllBoundaries, paintAllBoundariesAfterCommit, paintBoundaryNode } from "./network/boundaryPaint";
@@ -92,6 +93,7 @@ type GraphPaneProps = {
   onSelectEdge: (edgeId: string | null) => void;
   onToggleFeature: (id: string) => void;
   onConnect: (sourceId: string, targetId: string) => void;
+  onDropNode: (kind: Parameters<PlaygroundEngine["addPaletteNode"]>[0], position: { x: number; y: number }) => void;
   onMoveNode: (nodeId: string, position: { x: number; y: number }) => void;
   onRemoveNode: (nodeId: string) => void;
   onRemoveEdge: (sourceId: string, targetId: string) => void;
@@ -126,6 +128,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
   onSelectEdge,
   onToggleFeature,
   onConnect,
+  onDropNode,
   onMoveNode,
   onRemoveNode,
   onRemoveEdge,
@@ -168,6 +171,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
       onSelectEdge={onSelectEdge}
       onToggleFeature={onToggleFeature}
       onConnect={onConnect}
+      onDropNode={onDropNode}
       onMoveNode={onMoveNode}
       onRemoveNode={onRemoveNode}
       onRemoveEdge={onRemoveEdge}
@@ -177,6 +181,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
       discretize={cfg.discretize}
     >
       <aside className="tf-flow-dock tf-flow-dock--left">
+        <NetworkPalette />
         <NetworkArchitecturePanel
           numHiddenLayers={cfg.numHiddenLayers}
           networkShape={cfg.networkShape}
@@ -434,6 +439,13 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     bump();
   }, [bump, requestPaint, syncRuntimeRefs]);
 
+  const onDropNode = useCallback((kind: Parameters<PlaygroundEngine["addPaletteNode"]>[0], position: { x: number; y: number }) => {
+    engineRef.current.addPaletteNode(kind, position);
+    syncRuntimeRefs();
+    requestPaint();
+    bump();
+  }, [bump, requestPaint, syncRuntimeRefs]);
+
   const onMoveNode = useCallback((nodeId: string, position: { x: number; y: number }) => {
     engineRef.current.setNodePosition(nodeId, position);
   }, []);
@@ -573,6 +585,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           onSelectEdge={setSelectedEdgeId}
           onToggleFeature={onToggleFeature}
           onConnect={onConnect}
+          onDropNode={onDropNode}
           onMoveNode={onMoveNode}
           onRemoveNode={onRemoveNode}
           onRemoveEdge={onRemoveEdge}

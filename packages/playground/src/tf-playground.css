@@ -1057,175 +1057,6 @@
   box-shadow: var(--tf-shadow-glow);
 }
 
-/* ─── Network graph ─────────────────────────────────────────────────────────── */
-
-.tf-network {
-  position: relative;
-  overflow: visible;
-}
-
-.tf-network-canvases {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 3;
-  pointer-events: none;
-}
-
-.tf-network-canvases .canvas-wrap {
-  pointer-events: auto;
-}
-
-.tf-network-svg {
-  position: relative;
-  z-index: 2;
-  pointer-events: none;
-  overflow: visible;
-}
-
-.canvas-wrap {
-  position: absolute;
-  cursor: pointer;
-  transition: transform 0.15s ease;
-}
-
-.canvas-wrap:hover {
-  transform: scale(1.08);
-  z-index: 10;
-}
-
-.canvas-wrap canvas {
-  display: block;
-  border-radius: var(--tf-radius-sm);
-  transition:
-    box-shadow var(--tf-transition),
-    opacity var(--tf-transition),
-    border-color var(--tf-transition);
-}
-
-/* Feature input nodes */
-.canvas-wrap--feature canvas {
-  border: 2px solid var(--tf-accent);
-  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2);
-}
-
-.canvas-wrap--feature.inactive canvas {
-  opacity: 0.5;
-  border: 1.5px dashed var(--tf-border-strong);
-  box-shadow: none;
-}
-
-.canvas-wrap--feature.inactive:hover canvas {
-  opacity: 0.75;
-  border-style: solid;
-  border-color: var(--tf-accent);
-}
-
-.canvas-wrap--feature.hovered canvas,
-.canvas-wrap--feature.active.hovered canvas {
-  box-shadow:
-    0 0 0 3px var(--tf-accent-soft),
-    0 4px 12px rgba(79, 70, 229, 0.25);
-}
-
-/* Hidden neuron nodes */
-.canvas-wrap--neuron canvas {
-  border: 1.5px solid var(--tf-border-strong);
-  box-shadow: var(--tf-shadow-sm);
-  background: var(--tf-surface);
-}
-
-.canvas-wrap--neuron.hovered canvas {
-  border-color: var(--tf-accent);
-  box-shadow:
-    0 0 0 3px var(--tf-accent-soft),
-    var(--tf-shadow-md);
-}
-
-/* Output node */
-.canvas-wrap--output canvas {
-  border: 2px solid var(--tf-crimson);
-  box-shadow: 0 4px 14px rgba(220, 38, 58, 0.2);
-  border-radius: var(--tf-radius-md);
-}
-
-.canvas-wrap--output.hovered canvas {
-  box-shadow:
-    0 0 0 3px rgba(220, 38, 58, 0.15),
-    0 6px 20px rgba(220, 38, 58, 0.25);
-}
-
-.tf-network-svg .link {
-  fill: none;
-  stroke-linecap: round;
-  transition: stroke-opacity 0.2s ease;
-}
-
-.tf-network-svg .main-label {
-  font-family: var(--tf-font);
-  font-size: 10px;
-  font-weight: 600;
-  fill: var(--tf-text-secondary);
-}
-
-.tf-network-svg .node.inactive .main-label {
-  opacity: 0.4;
-  fill: var(--tf-text-muted);
-}
-
-.tf-network-svg .node.active .main-label {
-  fill: var(--tf-accent);
-}
-
-/* Neuron layer controls */
-.tf-neuron-controls {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.375rem;
-  background: var(--tf-surface);
-  border: 1px solid var(--tf-border);
-  border-radius: var(--tf-radius-full);
-  box-shadow: var(--tf-shadow-sm);
-  z-index: 100;
-  transform: translateX(-50%);
-}
-
-.tf-neuron-count {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  color: var(--tf-text-secondary);
-  min-width: 1rem;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Legacy selectors kept for compat */
-.tf-main-part { display: contents; }
-.column { display: contents; }
-.hidden-layers { display: none; }
-.bracket { display: none; }
-.metrics { display: contents; }
-.output-stats { display: contents; }
-.discretize-row { display: none; }
-.slider { display: contents; }
-.tf-top-controls { display: contents; }
-.control { display: contents; }
-.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  font-size: 1.125rem;
-  color: var(--tf-text-secondary);
-  background: var(--tf-surface-muted);
-  border: 1px solid var(--tf-border);
-  border-radius: var(--tf-radius-sm);
-  cursor: pointer;
-}
-
 /* ─── Responsive ────────────────────────────────────────────────────────────── */
 
 @media (max-width: 1100px) {
@@ -1327,6 +1158,14 @@
   transition: box-shadow 0.15s ease;
 }
 
+/* When "Arrange layout" re-grids the nodes, glide them into place. The
+   transition targets react-flow's own positioning wrapper (.react-flow__node
+   is translated via CSS transform), and is only enabled for the brief window
+   after a layout normalization so normal drag stays 1:1 with the cursor. */
+.tf-flow-canvas--animate .react-flow__node {
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .tf-flow-node--output {
   border-width: 2px;
   border-color: #334155;
@@ -1411,14 +1250,25 @@
   transform: translateY(50%);
 }
 
+/* Bias indicator: a small square tucked into the neuron's bottom-right
+   corner. A white rounded border keeps it legible over any heatmap color; the
+   fill color encodes the bias via the diverging palette (violet negative /
+   magenta positive), saturating as |bias| grows. */
 .tf-flow-bias {
   position: absolute;
-  left: -6px;
-  bottom: -2px;
-  width: 5px;
-  height: 5px;
-  border-radius: 1px;
-  background: #6366f1;
+  right: 4px;
+  bottom: 4px;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  border: 1.5px solid rgba(255, 255, 255, 0.92);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* The output node is large and its heatmap is self-explanatory; hide the square. */
+.tf-flow-node--output .tf-flow-bias {
+  display: none;
 }
 
 .tf-flow-sum-icon {
@@ -1448,6 +1298,68 @@
 
 .tf-flow-edge.selected .react-flow__edge-path {
   stroke-width: 3px !important;
+}
+
+/* Weight value tooltip shown on edge hover / selection. */
+.tf-edge-label {
+  position: absolute;
+  padding: 1px 5px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  box-shadow: var(--tf-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.12));
+  user-select: none;
+  z-index: 5;
+}
+
+.tf-edge-label[data-selected] {
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25), var(--tf-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.12));
+}
+
+/* Diverging weight-color legend, pinned to the flow canvas via <Panel>. */
+.tf-weight-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.625rem;
+  background: var(--tf-surface-muted, rgba(255, 255, 255, 0.82));
+  border: 1px solid var(--tf-border, #e2e8f0);
+  border-radius: var(--tf-radius-md, 8px);
+  box-shadow: var(--tf-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.12));
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  font-size: 0.625rem;
+  color: var(--tf-text-muted, #64748b);
+}
+
+.tf-weight-legend__title {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tf-weight-legend__bar {
+  width: 9rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #3a30a8 0%,
+    #c02670 100%
+  );
+  border: 1px solid var(--tf-border, #e2e8f0);
+}
+
+.tf-weight-legend__scale {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
 }
 
 .tf-network-palette {
@@ -1934,6 +1846,13 @@
 }
 
 /* ── Computational graph (autograd) layout ─────────────────────────────── */
+.ag-palette {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.96);
+}
+
 .ag-palette-items {
   display: grid;
   grid-template-columns: 1fr 1fr;

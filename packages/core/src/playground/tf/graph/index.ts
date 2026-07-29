@@ -37,4 +37,13 @@ export {
   updateGraphOutputBoundary,
 } from "./boundary";
 
-export { layoutMlpFromLayers, normalizeGraphLayout } from "./mlp-layout";
+export {
+  layoutMlpFromLayers,
+  normalizeGraphLayout,
+  MLP_COL_SPACING,
+  MLP_ROW_SPACING,
+  MLP_ORIGIN_X,
+  MLP_ORIGIN_Y,
+  MLP_NODE_SIZE,
+  MLP_OUTPUT_NODE_SIZE,
+} from "./mlp-layout";

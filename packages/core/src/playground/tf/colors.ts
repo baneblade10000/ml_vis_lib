@@ -46,6 +46,21 @@ export function weightColor(value: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+/**
+ * Smoothly normalized weight magnitude in [0, 1]. `tanh` keeps small weights
+ * legible while saturating gracefully for large ones, so that color, stroke
+ * width and opacity all derive from the *same* scale instead of clamping at
+ * different thresholds.
+ */
+export function weightMagnitude(weight: number): number {
+  return Math.tanh(Math.abs(weight));
+}
+
+/** Sign-aware normalized weight in (-1, 1), for diverging color lookup. */
+export function weightValueNormalized(weight: number): number {
+  return Math.sign(weight) * weightMagnitude(weight);
+}
+
 /** Quantized heatmap palette (30 shades). */
 export function weightColorQuantized(value: number): string {
   const v = clamp(value, -1, 1);

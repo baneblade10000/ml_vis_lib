@@ -28,6 +28,7 @@ export interface AutogradFlowGraphProps {
   graph: AutogradGraph;
   version: number;
   showGrad: boolean;
+  showValues: boolean;
   children?: ReactNode;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
@@ -81,6 +82,7 @@ function AutogradFlowGraphInner({
   graph,
   version,
   showGrad,
+  showValues,
   children,
   selectedNodeId,
   selectedEdgeId,
@@ -99,10 +101,10 @@ function AutogradFlowGraphInner({
   const draggingRef = useRef(new Set<string>());
 
   const { nodes: computedNodes, edges: computedEdges } = useMemo(
-    () => autogradToFlow(graph, { selectedNodeId, selectedEdgeId, showGrad }),
+    () => autogradToFlow(graph, { selectedNodeId, selectedEdgeId, showGrad, showValues }),
     // version bumps whenever the engine mutates the graph.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [graph, version, selectedNodeId, selectedEdgeId, showGrad],
+    [graph, version, selectedNodeId, selectedEdgeId, showGrad, showValues],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(computedNodes);
@@ -166,7 +168,9 @@ function AutogradFlowGraphInner({
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
-      const kind = autogradKindFromDrag(event.dataTransfer.getData(AUTOGRAD_DRAG_TYPE));
+      const raw =
+        event.dataTransfer.getData(AUTOGRAD_DRAG_TYPE) || event.dataTransfer.getData("text/plain");
+      const kind = autogradKindFromDrag(raw);
       if (!kind) return;
       const position = rf.screenToFlowPosition({ x: event.clientX, y: event.clientY });
       onDropNode(kind, position);

@@ -1,6 +1,7 @@
-import { useCallback, useContext, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   BaseEdge,
+  EdgeLabelRenderer,
   getBezierPath,
   Handle,
   Position,
@@ -16,6 +17,8 @@ import {
   PLAY_DISPLAY_DENSITY,
   reduceMatrix,
   renderValueMatrix,
+  weightColor,
+  weightValueNormalized,
 } from "@ml-vis/core";
 import type { DataPoint, NetworkNodeData, WeightEdgeData } from "./graphAdapter";
 import { NODE_WIDTH, OUTPUT_NODE_WIDTH } from "./graphAdapter";
@@ -206,6 +209,21 @@ function NodeHeatmap({
   );
 }
 
+function BiasIndicator({ bias }: { bias: number }) {
+  // The bias square sits in the neuron's bottom-right corner. Its fill color
+  // encodes the bias via the diverging palette: violet for negative, magenta
+  // for positive, with the hue saturating toward the palette extremes as |bias|
+  // grows (tanh-normalized, so small biases stay readable).
+  return (
+    <span
+      className="tf-flow-bias"
+      data-sign={bias >= 0 ? "pos" : "neg"}
+      aria-hidden
+      style={{ background: weightColor(weightValueNormalized(bias)) }}
+    />
+  );
+}
+
 function BaseNetworkNode({
   data,
   children,
@@ -228,6 +246,7 @@ function BaseNetworkNode({
     >
       {!hideTarget && <Handle type="target" position={Position.Left} className="tf-flow-handle" />}
       {children}
+      {typeof data.bias === "number" && <BiasIndicator bias={data.bias} />}
       {!hideSource && <Handle type="source" position={Position.Right} className="tf-flow-handle" />}
     </div>
   );
@@ -271,7 +290,6 @@ export function DenseFlowNode({
         coarseTo={NODE_BOUNDARY_DENSITY}
         paintGeneration={data.paintGeneration}
       />
-      <span className="tf-flow-node-label">{data.label}</span>
     </BaseNetworkNode>
   );
 }
@@ -291,7 +309,6 @@ export function SumFlowNode({
         coarseTo={NODE_BOUNDARY_DENSITY}
         paintGeneration={data.paintGeneration}
       />
-      <span className="tf-flow-node-label">{data.label}</span>
     </BaseNetworkNode>
   );
 }
@@ -341,7 +358,6 @@ export function OutputFlowNode({
         paintGeneration={data.paintGeneration}
       />
       <div className="tf-flow-output-meta">
-        <span className="tf-flow-node-label tf-flow-node-label--output">{data.label}</span>
         <span ref={lossLabelRef} className="tf-flow-output-loss">
           {data.lossTest !== undefined && data.lossTrain !== undefined
             ? `${data.lossTest.toFixed(3)} / ${data.lossTrain.toFixed(3)}`
@@ -368,9 +384,11 @@ export const WeightFlowEdge = function WeightFlowEdge({
   sourcePosition,
   targetPosition,
   selected,
+  data,
   style,
 }: EdgeProps<Edge<WeightEdgeData>>) {
-  const [path] = getBezierPath({
+  const [hovered, setHovered] = useState(false);
+  const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     targetX,
@@ -379,16 +397,48 @@ export const WeightFlowEdge = function WeightFlowEdge({
     targetPosition,
   });
 
+  const weight = data?.weight;
+  const showLabel = (hovered || selected) && typeof weight === "number";
+
   return (
-    <BaseEdge
-      id={id}
-      path={path}
-      style={{
-        ...style,
-        strokeWidth: selected ? 3 : style?.strokeWidth,
-        strokeOpacity: selected ? 1 : style?.strokeOpacity,
-      }}
-    />
+    <>
+      <BaseEdge
+        id={id}
+        path={path}
+        style={{
+          ...style,
+          strokeWidth: selected ? Math.max(3.5, (style?.strokeWidth as number) ?? 3) : style?.strokeWidth,
+          strokeOpacity: selected ? 1 : style?.strokeOpacity,
+        }}
+      />
+      {/* Wide invisible hit area so the edge is easy to hover for the label.
+          A raw <path> forwards mouse events (BaseEdge does not). */}
+      <path
+        d={path}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={14}
+        style={{ pointerEvents: "stroke" }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      />
+      {showLabel && (
+        <EdgeLabelRenderer>
+          <div
+            className="tf-edge-label"
+            data-selected={selected ? "" : undefined}
+            style={{
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              borderColor: style?.stroke as string | undefined,
+              color: style?.stroke as string | undefined,
+            }}
+          >
+            {weight! >= 0 ? "+" : ""}
+            {weight!.toFixed(2)}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
   );
 };
 
