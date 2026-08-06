@@ -41,11 +41,13 @@ Health check: `curl http://localhost:8080/health`
 
 ## GitHub Pages
 
-Push to `master` (or run **Deploy GitHub Pages** manually) publishes the playground to:
+Push to `master` (or run **Deploy GitHub Pages** manually) publishes the playground to the `gh-pages` branch:
 
 https://baneblade10000.github.io/ml_vis_lib/
 
-In the repo: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+In the repo: **Settings → Pages → Build and deployment → Source: Deploy from a branch** → `gh-pages` / `/ (root)`.
+
+If a deploy stays queued forever, open **Settings → Environments → github-pages**, delete stuck in-progress deployments, then re-run the workflow.
 
 Local build with the same base path:
 
