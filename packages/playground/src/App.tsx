@@ -4,6 +4,9 @@ import { CatalogPage } from "./pages/CatalogPage";
 import { VizPage } from "./pages/VizPage";
 import "./tf-playground.css";
 
+/** Vite BASE_URL always ends with `/`; React Router basename must not. */
+const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || undefined;
+
 function AppContent() {
   const location = useLocation();
   const isCatalog = location.pathname === "/";
@@ -23,7 +26,7 @@ function AppContent() {
 export function App() {
   return (
     <I18nProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={basename}>
         <AppContent />
       </BrowserRouter>
     </I18nProvider>
