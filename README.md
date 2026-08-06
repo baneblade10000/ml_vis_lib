@@ -10,7 +10,7 @@ Interactive demos for exploring machine learning concepts. Canvas 2D renderer wi
 - **@ml-vis/react** — thin React wrappers + Storybook
 - **@ml-vis/playground** — demo app
 - **Docker** + **nginx** + **cloudflared** for deployment
-- **GitHub Pages** for the playground demo
+- Static playground publish via **`gh-pages` + jsDelivr** (GitHub Pages queue is unreliable for this repo)
 
 ## Quick start (local)
 
@@ -39,20 +39,17 @@ docker compose --profile tunnel up -d --build
 
 Health check: `curl http://localhost:8080/health`
 
-## GitHub Pages
+## Public demo (jsDelivr)
 
-Push to `master` (or run **Deploy GitHub Pages** manually) publishes the playground to:
+Push to `master` publishes `packages/playground/dist` to the `gh-pages` branch.
+Open the demo here (no GitHub Pages deploy queue):
 
-https://baneblade10000.github.io/ml_vis_lib/
-
-Setup once: https://github.com/baneblade10000/ml_vis_lib/settings/pages → Source: **GitHub Actions**.
+https://cdn.jsdelivr.net/gh/baneblade10000/ml_vis_lib@gh-pages/index.html
 
 Workflow: https://github.com/baneblade10000/ml_vis_lib/actions/workflows/pages.yml
 
-Local build with the same base path:
-
 ```bash
-BASE_PATH=/ml_vis_lib/ pnpm build
+BASE_PATH=./ pnpm build
 pnpm --filter @ml-vis/playground preview
 ```
 
