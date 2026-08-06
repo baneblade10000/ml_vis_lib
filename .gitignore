@@ -37,6 +37,9 @@ agilab/
 # Cursor IDE (local rules, MCP config, hooks)
 .cursor/
 
+# ZCode agent (local plans, session artifacts)
+.zcode/
+
 # OS & editors
 .DS_Store
 Thumbs.db

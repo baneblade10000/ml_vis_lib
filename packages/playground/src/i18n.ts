@@ -10,6 +10,8 @@ export type PlaygroundMessages = {
   vizComputationalGraphDescription: string;
   vizNeuralNetworkTitle: string;
   vizNeuralNetworkDescription: string;
+  vizConvolutionalNetworkTitle: string;
+  vizConvolutionalNetworkDescription: string;
 };
 
 export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
@@ -26,6 +28,9 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizNeuralNetworkTitle: "Neural Network",
     vizNeuralNetworkDescription:
       "Train a feedforward network on two-dimensional classification tasks; visualize the decision boundary, loss, and layer activations during optimization.",
+    vizConvolutionalNetworkTitle: "Convolutional Network",
+    vizConvolutionalNetworkDescription:
+      "Train a CNN end-to-end (learnable kernels, pooling, dense head) on small image and 1-D signal datasets. Watch feature maps form layer-by-layer as loss falls and accuracy climbs.",
   },
   ru: {
     language: "Язык",
@@ -39,6 +44,9 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizNeuralNetworkTitle: "Нейронная сеть",
     vizNeuralNetworkDescription:
       "Обучение полносвязной сети на двумерных задачах классификации; визуализация границы решений, функции потерь и активаций в процессе оптимизации.",
+    vizConvolutionalNetworkTitle: "Свёрточная сеть",
+    vizConvolutionalNetworkDescription:
+      "Полное обучение CNN (обучаемые ядра, пулинг, полносвязная голова) на маленьких изображениях и 1-D сигналах. Наблюдайте, как послойно формируются карты признаков, а loss падает и точность растёт.",
   },
 };
 

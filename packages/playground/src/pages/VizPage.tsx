@@ -1,8 +1,19 @@
 import { Link, Navigate, useParams } from "react-router-dom";
-import { ComputationalGraphPlayground, NeuralNetworkPlayground, useI18n } from "@ml-vis/react";
+import {
+  ComputationalGraphPlayground,
+  ConvolutionalNetworkPlayground,
+  NeuralNetworkPlayground,
+  useI18n,
+} from "@ml-vis/react";
 import { LocaleSwitcher } from "../LocaleSwitcher";
 import { usePlaygroundT } from "../i18n";
 import { getVisualizationById } from "../visualizations";
+
+const IMMERSIVE_COMPONENTS = {
+  "computational-graph": ComputationalGraphPlayground,
+  "neural-network": NeuralNetworkPlayground,
+  "convolutional-network": ConvolutionalNetworkPlayground,
+} as const;
 
 export function VizPage() {
   const { id } = useParams<{ id: string }>();
@@ -14,16 +25,15 @@ export function VizPage() {
     return <Navigate to="/" replace />;
   }
 
-  const immersive = viz.id === "neural-network" || viz.id === "computational-graph";
+  const ImmersiveComponent = IMMERSIVE_COMPONENTS[viz.id as keyof typeof IMMERSIVE_COMPONENTS];
+  const immersive = ImmersiveComponent !== undefined;
   const backLink = (
     <Link to="/" className="catalog-back catalog-back--toolbar">
       ← {t("backToCatalog")}
     </Link>
   );
 
-  if (immersive) {
-    const ImmersiveComponent =
-      viz.id === "computational-graph" ? ComputationalGraphPlayground : NeuralNetworkPlayground;
+  if (immersive && ImmersiveComponent) {
     return (
       <div className="viz-page viz-page--immersive">
         <ImmersiveComponent toolbarStart={backLink} toolbarEnd={<LocaleSwitcher />} />

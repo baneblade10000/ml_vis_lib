@@ -31,6 +31,15 @@ export {
   makeDataset,
   resetLiveTraining,
   configSignature,
+  CnnEngine,
+  DEFAULT_CNN_CONFIG,
+  DEFAULT_CNN_CONFIG_2D,
+  DEFAULT_CNN_CONFIG_1D,
+  CNN_DATASET_IDS_2D,
+  CNN_DATASET_IDS_1D,
+  CNN_ACTIVATION_IDS,
+  IMAGE_SIZE,
+  SIGNAL_LENGTH,
 } from "./playground";
 export type {
   ActivationId,
@@ -44,6 +53,22 @@ export type {
   PlaygroundConfig,
   PlaygroundPayload,
   Sample,
+  CnnMode,
+  LayerSpec,
+  CnnConfig,
+  CnnTrainingStats,
+  FeatureMapSnapshot,
+  ImageExample,
+  SignalExample,
+  CnnDatasetId,
+  CnnDatasetId2D,
+  CnnDatasetId1D,
+  CnnActivationId,
+  LayerKind,
+  LayerShape,
+  Map2D,
+  Volume,
+  CnnSignal,
 } from "./playground";
 
 export { DecisionBoundaryPlot } from "./charts/decision-boundary-plot";

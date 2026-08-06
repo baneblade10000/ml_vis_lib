@@ -14,6 +14,8 @@ export { NeuralNetworkPlayground } from "./playground/NeuralNetworkPlayground";
 export type { NeuralNetworkPlaygroundProps } from "./playground/NeuralNetworkPlayground";
 export { ComputationalGraphPlayground } from "./playground/autograd/ComputationalGraphPlayground";
 export type { ComputationalGraphPlaygroundProps } from "./playground/autograd/ComputationalGraphPlayground";
+export { ConvolutionalNetworkPlayground } from "./playground/cnn/ConvolutionalNetworkPlayground";
+export type { ConvolutionalNetworkPlaygroundProps } from "./playground/cnn/ConvolutionalNetworkPlayground";
 
 export {
   I18nProvider,
