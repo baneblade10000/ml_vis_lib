@@ -37,13 +37,18 @@ function shapeLabel(shape: LayerShape): string {
 
 function specKindLabel(kind: string, t: ReturnType<typeof useCnnMessages>): string {
   switch (kind) {
-    case "conv2d": return `${t.paletteConv}2D`;
-    case "conv1d": return `${t.paletteConv}1D`;
-    case "pool2d": return `${t.palettePool}2D`;
-    case "pool1d": return `${t.palettePool}1D`;
-    case "flatten": return t.network;
-    case "dense": return t.paletteDense;
-    default: return kind;
+    case "conv2d":
+    case "conv1d":
+      return t.paletteConv;
+    case "pool2d":
+    case "pool1d":
+      return t.palettePool;
+    case "flatten":
+      return t.flatten;
+    case "dense":
+      return t.paletteDense;
+    default:
+      return kind;
   }
 }
 
@@ -402,21 +407,20 @@ export function ConvolutionalNetworkPlayground({
           <button type="button" className="tf-btn tf-btn--secondary" onClick={step}>
             {t.step}
           </button>
-          <div className="tf-toolbar-field cnn-mode-field">
-            <span className="tf-training-label">{t.mode}</span>
+          <div className="tf-flat-switch" role="group" aria-label={t.mode}>
             <button
               type="button"
-              className={`cnn-mode-btn${mode === "2d" ? " selected" : ""}`}
-              onClick={() => onModeChange("2d")}
-            >
-              {t.mode2D}
-            </button>
-            <button
-              type="button"
-              className={`cnn-mode-btn${mode === "1d" ? " selected" : ""}`}
+              className={`tf-flat-switch__btn${mode === "1d" ? " selected" : ""}`}
               onClick={() => onModeChange("1d")}
             >
               {t.mode1D}
+            </button>
+            <button
+              type="button"
+              className={`tf-flat-switch__btn${mode === "2d" ? " selected" : ""}`}
+              onClick={() => onModeChange("2d")}
+            >
+              {t.mode2D}
             </button>
           </div>
         </div>
@@ -456,7 +460,7 @@ export function ConvolutionalNetworkPlayground({
           probability={probability}
           fillHeight
         >
-          <aside className="tf-flow-dock tf-flow-dock--left">
+          <aside className="tf-flow-dock tf-flow-dock--left tf-flow-dock--wide">
             <CnnPalette />
             <CnnArchitecturePanel
               layers={engine.config.layers}
@@ -472,13 +476,15 @@ export function ConvolutionalNetworkPlayground({
               onSetUnits={onSetUnits}
               onSetPoolKind={onSetPoolKind}
             />
-            <button
-              type="button"
-              className="tf-btn tf-btn--secondary tf-reset-weights"
-              onClick={resetWeights}
-            >
-              {t.resetWeights}
-            </button>
+            <div className="tf-flow-dock-section">
+              <button
+                type="button"
+                className="tf-btn tf-btn--secondary tf-reset-weights"
+                onClick={resetWeights}
+              >
+                {t.resetWeights}
+              </button>
+            </div>
           </aside>
           <aside className="tf-flow-dock tf-flow-dock--right">
             <CnnTrainingPanel

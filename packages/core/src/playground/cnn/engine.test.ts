@@ -147,7 +147,7 @@ describe("CNN output layer", () => {
 });
 
 describe("CnnEngine (2D)", () => {
-  it("trains and reduces loss on the disc-ring dataset", () => {
+  it("trains and reduces loss on the digits dataset", () => {
     const engine = new CnnEngine({ ...DEFAULT_CNN_CONFIG_2D, noise: 0.02 });
     const initialLoss = engine.lossTrain;
     for (let i = 0; i < 60; i++) engine.trainEpoch();

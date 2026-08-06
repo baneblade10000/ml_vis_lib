@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   Background,
   Controls,
   Panel,
   ReactFlow,
   ReactFlowProvider,
+  useNodesInitialized,
   useReactFlow,
   type Node,
 } from "@xyflow/react";
@@ -56,7 +57,10 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
   } = props;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const rf = useReactFlow();
+  const nodesInitialized = useNodesInitialized();
   const [measuredHeight, setMeasuredHeight] = useState(height);
+  /** Measured vertical offsets so every node center sits on one axis. */
+  const [centerYs, setCenterYs] = useState<Record<string, number>>({});
 
   const mapped = useMemo(
     () =>
@@ -69,6 +73,8 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
       }),
     [engine, selectedNodeId, paintGeneration, featureMaps, loss, probability],
   );
+
+  const nodeKey = mapped.nodes.map((n) => n.id).join(",");
 
   // Track measured container height for fill mode.
   useEffect(() => {
@@ -88,9 +94,44 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
     return () => ro.disconnect();
   }, [fillHeight]);
 
+  // After React Flow measures real node boxes, re-center on a shared midline.
+  useLayoutEffect(() => {
+    if (!nodesInitialized) return;
+    const align = () => {
+      const live = rf.getNodes();
+      if (!live.length) return;
+      const heights = live.map((n) => n.measured?.height ?? n.height ?? 0);
+      const maxH = Math.max(0, ...heights);
+      if (maxH < 1) return;
+      const next: Record<string, number> = {};
+      for (const n of live) {
+        const h = n.measured?.height ?? n.height ?? 0;
+        next[n.id] = (maxH - h) / 2;
+      }
+      setCenterYs((prev) => {
+        const same =
+          Object.keys(next).length === Object.keys(prev).length &&
+          Object.entries(next).every(([id, y]) => Math.abs((prev[id] ?? NaN) - y) < 0.5);
+        return same ? prev : next;
+      });
+    };
+    align();
+    const t = window.setTimeout(align, 60);
+    return () => window.clearTimeout(t);
+    // Remeasure when topology or feature-map content size may change node boxes.
+  }, [nodesInitialized, nodeKey, featureMaps, rf]);
+
+  const nodes = useMemo(
+    () =>
+      mapped.nodes.map((n) => ({
+        ...n,
+        position: { x: n.position.x, y: centerYs[n.id] ?? n.position.y },
+      })),
+    [mapped.nodes, centerYs],
+  );
+
   // Refit the view to show all layers whenever topology changes or on demand.
   const prevNodeKey = useRef("");
-  const nodeKey = mapped.nodes.map((n) => n.id).join(",");
   useEffect(() => {
     if (prevNodeKey.current === nodeKey && refitViewKey === undefined) return;
     prevNodeKey.current = nodeKey;
@@ -113,7 +154,7 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
     >
       <div className="tf-flow-canvas" style={{ width: "100%", height: fillHeight ? measuredHeight : canvasHeight }}>
         <ReactFlow
-          nodes={mapped.nodes}
+          nodes={nodes}
           edges={mapped.edges}
           nodeTypes={cnnNodeTypes}
           edgeTypes={cnnEdgeTypes}
@@ -130,7 +171,7 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
         >
           <Background gap={20} size={1} color="var(--tf-border)" />
           <Controls showInteractive={false} position="bottom-right" />
-          <Panel position="bottom-left" className="tf-flow-panel-legend">
+          <Panel position="bottom-right" className="tf-flow-panel-legend">
             <div className="tf-weight-legend" role="img" aria-label="Weight magnitude: violet (neg), magenta (pos)">
               <span className="tf-weight-legend__title">Weights</span>
               <div className="tf-weight-legend__bar" />

@@ -14,6 +14,59 @@ export const CNN_COL_SPACING = 240;
 export const CNN_ORIGIN_X = 80;
 export const CNN_NODE_WIDTH = 150;
 
+const MAP_PX = 44;
+const MAP_GAP = 3;
+const MAP_GRID_MAX_W = 140;
+const NODE_CHROME = 38; // label + padding + gaps
+
+/** Circle stack size shared by Flatten / Dense weight columns. */
+function unitStackSize(length: number, columns = 1): { width: number; height: number } {
+  const n = Math.max(1, length);
+  const gap = 1.5;
+  const gapX = 3;
+  const d = Math.max(5.25, Math.min(10.5, (520 / n) * 1.5));
+  return {
+    width: Math.round(columns * d + gapX * Math.max(0, columns - 1)),
+    height: Math.round(n * d + gap * Math.max(0, n - 1)),
+  };
+}
+
+function estimateNodeSize(
+  kind: LayerKind,
+  shape: LayerShape | undefined,
+  mode: CnnMode,
+  /** Incoming vector length for dense weight columns. */
+  inputLength = 64,
+): { width: number; height: number } {
+  if (kind === "flatten") {
+    const n = shape?.kind === "1d" ? shape.length : 32;
+    const stack = unitStackSize(n, 1);
+    return { width: Math.max(48, stack.width + 28), height: NODE_CHROME + stack.height };
+  }
+  if (kind === "dense") {
+    const units = shape?.kind === "1d" ? shape.length : 1;
+    const stack = unitStackSize(Math.max(1, inputLength), Math.max(1, units));
+    return {
+      width: Math.max(64, stack.width + 24),
+      height: NODE_CHROME + stack.height + 14,
+    };
+  }
+  if (kind === "output") {
+    return { width: CNN_NODE_WIDTH, height: 132 };
+  }
+
+  const channels = Math.max(1, Math.min(16, shape?.channels ?? 1));
+  if (mode === "1d" || shape?.kind === "1d") {
+    const rows = channels;
+    const gridH = rows * 8 + Math.max(0, rows - 1) * MAP_GAP;
+    return { width: CNN_NODE_WIDTH, height: NODE_CHROME + gridH };
+  }
+  const perRow = Math.max(1, Math.floor((MAP_GRID_MAX_W + MAP_GAP) / (MAP_PX + MAP_GAP)));
+  const gridRows = Math.ceil(channels / perRow);
+  const gridH = gridRows * MAP_PX + Math.max(0, gridRows - 1) * MAP_GAP;
+  return { width: CNN_NODE_WIDTH, height: NODE_CHROME + gridH };
+}
+
 /** Reactive payload carried by each React Flow node. */
 export type CnnNodeData = {
   layerId: string;
@@ -86,23 +139,38 @@ export function cnnPipelineToFlow(
   const layers = engine.layers;
   const nodes: Node<CnnNodeData>[] = [];
   const edges: Edge<CnnEdgeData>[] = [];
+  const mode = engine.config.mode;
+
+  const sizes = layers.map((layer, idx) => {
+    const shape = shapes[idx];
+    const prev = shapes[idx - 1];
+    const inputLength =
+      prev?.kind === "1d" ? prev.length : prev?.kind === "2d" ? prev.rows * prev.cols * prev.channels : 64;
+    return estimateNodeSize(layer.kind, shape, mode, inputLength);
+  });
+  const maxH = Math.max(1, ...sizes.map((s) => s.height));
 
   layers.forEach((layer, idx) => {
     const shape = shapes[idx];
     const type = flowTypeFor(layer.kind);
     const isOutput = layer.kind === "output";
     const wMag = edgeWeightMag(engine, layer.id);
+    const { width, height } = sizes[idx]!;
     nodes.push({
       id: layer.id,
       type,
-      position: { x: CNN_ORIGIN_X + idx * CNN_COL_SPACING, y: 0 },
-      width: CNN_NODE_WIDTH,
-      height: isOutput ? 132 : 150,
+      position: {
+        x: CNN_ORIGIN_X + idx * CNN_COL_SPACING,
+        // Center every block on a shared horizontal axis.
+        y: (maxH - height) / 2,
+      },
+      width,
+      height,
       data: {
         layerId: layer.id,
         kind: layer.kind,
         label: layer.label(),
-        mode: engine.config.mode,
+        mode,
         channels: channelCount(shape),
         rows: shape?.kind === "2d" ? shape.rows : undefined,
         cols: shape?.kind === "2d" ? shape.cols : undefined,
@@ -120,7 +188,7 @@ export function cnnPipelineToFlow(
       const mag = wMag ?? 0;
       const norm = mag; // already in [-1,1] via tanh
       const stroke = weightColor(norm);
-      const width = 2 + Math.abs(mag) * 5.5;
+      const strokeW = 2 + Math.abs(mag) * 5.5;
       edges.push({
         id: `${prev.id}->${layer.id}`,
         source: prev.id,
@@ -128,7 +196,7 @@ export function cnnPipelineToFlow(
         type: "cnnWeight",
         data: { weightMag: mag, active: true },
         markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: stroke },
-        style: { stroke, strokeWidth: width, strokeOpacity: 0.45 + Math.abs(mag) * 0.55 },
+        style: { stroke, strokeWidth: strokeW, strokeOpacity: 0.45 + Math.abs(mag) * 0.55 },
       });
     }
   });

@@ -50,7 +50,7 @@ export interface CnnConfig {
 
 export const DEFAULT_CNN_CONFIG_2D: CnnConfig = {
   mode: "2d",
-  dataset: "disc-ring",
+  dataset: "digits",
   layers: [
     { kind: "conv2d", filters: 4, kernelSize: 3, activation: "relu" },
     { kind: "pool2d", poolKind: "max" },
@@ -68,7 +68,7 @@ export const DEFAULT_CNN_CONFIG_2D: CnnConfig = {
 
 export const DEFAULT_CNN_CONFIG_1D: CnnConfig = {
   mode: "1d",
-  dataset: "sine-pulse",
+  dataset: "heartbeat",
   layers: [
     { kind: "conv1d", filters: 4, kernelSize: 5, activation: "relu" },
     { kind: "pool1d", poolKind: "max" },
@@ -105,6 +105,8 @@ export interface FeatureMapSnapshot {
   maps2d?: number[][][];
   /** For 1-D layers: one row per channel. */
   signals?: number[][];
+  /** Dense weight matrix `W[out][in]` for matrix visualization. */
+  matrix?: number[][];
 }
 
 /**
@@ -424,7 +426,14 @@ export class CnnEngine {
       return { layerId: layer.id, maps2d };
     }
     const sig = (layer.output as Signal) ?? [];
-    return { layerId: layer.id, signals: sig.map((row) => row.slice()) };
+    const snap: FeatureMapSnapshot = {
+      layerId: layer.id,
+      signals: sig.map((row) => row.slice()),
+    };
+    if (layer instanceof DenseLayer && layer.weights.length > 0) {
+      snap.matrix = layer.weights.map((row) => row.slice());
+    }
+    return snap;
   }
 
   /** Per-layer display kernels for conv layers (sum over input channels). */

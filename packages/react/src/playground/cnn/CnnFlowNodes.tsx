@@ -1,7 +1,7 @@
 import { useCallback, useContext, useLayoutEffect, useRef, type ReactNode } from "react";
 import {
   BaseEdge,
-  getBezierPath,
+  getStraightPath,
   Handle,
   Position,
   type Edge,
@@ -14,6 +14,7 @@ import {
   CLASS_1_HEX,
   renderValueMatrix,
   reduceMatrix,
+  valueToRgb,
   type FeatureMapSnapshot,
 } from "@ml-vis/core";
 import type { CnnNodeData, CnnEdgeData } from "./cnnAdapter";
@@ -61,7 +62,7 @@ function Map2DCanvas({
       while (factor > 1 && map.length % factor !== 0) factor -= 1;
       if (factor > 1) grid = reduceMatrix(map, factor);
     }
-    renderValueMatrix(heat, grid);
+    renderValueMatrix(heat, grid, { layout: "row-major", palette: "gray" });
     const dpr = window.devicePixelRatio || 1;
     const w = px;
     if (canvas.width !== w * dpr || canvas.height !== w * dpr) {
@@ -101,7 +102,7 @@ function Signal1DCanvas({ values, px }: { values: number[]; px: number }) {
     if (!canvas || !heat || !values.length) return;
     // Wrap as a 1-row matrix and rasterize, then draw stretched to height.
     const mat = [values.slice()];
-    renderValueMatrix(heat, mat);
+    renderValueMatrix(heat, mat, { layout: "row-major", palette: "gray" });
     const h = 8;
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== px * dpr || canvas.height !== h * dpr) {
@@ -125,6 +126,80 @@ function Signal1DCanvas({ values, px }: { values: number[]; px: number }) {
   return (
     <div className="cnn-feature-cell cnn-feature-cell--signal" style={{ width: px, height: 8 }}>
       <canvas ref={heatRef} width={1} height={1} hidden aria-hidden />
+      <canvas ref={canvasRef} className="cnn-feature-canvas" />
+    </div>
+  );
+}
+
+/** Unit diameter / gap for Flatten + Dense circle stacks. */
+function unitCircleMetrics(count: number, columns = 1) {
+  const n = Math.max(1, count);
+  const gap = 1.5;
+  const gapX = 3;
+  const d = Math.max(5.25, Math.min(10.5, (520 / n) * 1.5));
+  return {
+    d,
+    r: d / 2,
+    gap,
+    gapX,
+    width: columns * d + gapX * Math.max(0, columns - 1),
+    height: n * d + gap * Math.max(0, n - 1),
+  };
+}
+
+/** Flattened vector as a vertical stack of squares. */
+function VectorColumnCanvas({ values }: { values: number[] }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const paint = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !values.length) return;
+
+    const n = values.length;
+    const { d, gap, width, height } = unitCircleMetrics(n);
+    const radius = Math.min(1.25, d * 0.25);
+
+    const dpr = window.devicePixelRatio || 1;
+    if (canvas.width !== Math.ceil(width * dpr) || canvas.height !== Math.ceil(height * dpr)) {
+      canvas.width = Math.ceil(width * dpr);
+      canvas.height = Math.ceil(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    let min = Infinity;
+    let max = -Infinity;
+    for (const v of values) {
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    if (!Number.isFinite(min) || max - min < 1e-9) {
+      min -= 0.5;
+      max += 0.5;
+    }
+    const span = max - min;
+
+    for (let i = 0; i < n; i++) {
+      const t = Math.min(1, Math.max(0, (values[i]! - min) / span));
+      const g8 = Math.round(Math.pow(t, 0.85) * 255);
+      const y = i * (d + gap);
+      ctx.fillStyle = `rgb(${g8},${g8},${g8})`;
+      ctx.beginPath();
+      ctx.roundRect(0, y, d, d, radius);
+      ctx.fill();
+    }
+  }, [values]);
+
+  const paintRef = useRef(paint);
+  paintRef.current = paint;
+  useLayoutEffect(() => paintRef.current(), [paint]);
+
+  return (
+    <div className="cnn-feature-cell cnn-feature-cell--vector" title={`${values.length} units`}>
       <canvas ref={canvasRef} className="cnn-feature-canvas" />
     </div>
   );
@@ -197,11 +272,6 @@ function BaseCnnNode({
         <span className="cnn-node-label">{data.label}</span>
       </div>
       {children}
-      <div className="cnn-node-foot">
-        <span className="cnn-node-params">
-          {data.params > 0 ? `${data.params}p` : "—"}
-        </span>
-      </div>
       {!hideSource && <Handle type="source" position={Position.Right} className="cnn-handle" />}
     </div>
   );
@@ -231,18 +301,90 @@ export function CnnPoolNode({ data }: NodeProps<Node<CnnNodeData>>) {
   );
 }
 
+function FlattenVector({ layerId, length }: { layerId: string; length?: number }) {
+  const snapshot = useLayerSnapshot(layerId);
+  const paintGeneration = useContext(PaintGenerationContext);
+  void paintGeneration;
+  const values = snapshot?.signals?.[0] ?? [];
+  const n = values.length || length || 32;
+  return <VectorColumnCanvas values={values.length ? values : new Array(n).fill(0)} />;
+}
+
 export function CnnFlattenNode({ data }: NodeProps<Node<CnnNodeData>>) {
   return (
     <BaseCnnNode data={data} className="cnn-node--flatten">
-      <FeatureGrid layerId={data.layerId} channels={1} mode="1d" />
+      <FlattenVector layerId={data.layerId} length={data.length} />
     </BaseCnnNode>
+  );
+}
+
+/**
+ * All dense weights W[out][in] as circles, colored like NN edges
+ * (violet = negative, magenta = positive).
+ */
+function DenseWeightMatrix({ layerId, units }: { layerId: string; units: number }) {
+  const snapshot = useLayerSnapshot(layerId);
+  const paintGeneration = useContext(PaintGenerationContext);
+  void paintGeneration;
+
+  const matrix = snapshot?.matrix;
+  const rows = matrix?.length || Math.max(1, units);
+  const cols = matrix?.[0]?.length || 0;
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const paint = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !matrix || rows === 0 || cols === 0) return;
+
+    // One vertical stack of circles per output unit (inputs top→bottom).
+    const { d, r, gap, gapX, width, height } = unitCircleMetrics(cols, rows);
+    const dpr = window.devicePixelRatio || 1;
+    if (canvas.width !== Math.ceil(width * dpr) || canvas.height !== Math.ceil(height * dpr)) {
+      canvas.width = Math.ceil(width * dpr);
+      canvas.height = Math.ceil(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    for (let out = 0; out < rows; out++) {
+      for (let inn = 0; inn < cols; inn++) {
+        const w = matrix[out]![inn]!;
+        const { r: cr, g: cg, b: cb } = valueToRgb(Math.tanh(w * 2));
+        const cx = out * (d + gapX) + r;
+        const cy = inn * (d + gap) + r;
+        ctx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }, [matrix, rows, cols]);
+
+  const paintRef = useRef(paint);
+  paintRef.current = paint;
+  useLayoutEffect(() => paintRef.current(), [paint]);
+
+  if (!matrix || cols === 0) {
+    return <div className="cnn-feature-empty" title="Weights initialize on first forward" />;
+  }
+
+  return (
+    <div className="cnn-dense-weights" title={`W: ${rows}×${cols}`}>
+      <canvas ref={canvasRef} className="cnn-feature-canvas" />
+      <span className="cnn-dense-weights__meta">{rows}×{cols}</span>
+    </div>
   );
 }
 
 export function CnnDenseNode({ data }: NodeProps<Node<CnnNodeData>>) {
   return (
     <BaseCnnNode data={data} className="cnn-node--dense">
-      <FeatureGrid layerId={data.layerId} channels={data.channels} mode="1d" />
+      <DenseWeightMatrix layerId={data.layerId} units={data.length || 1} />
     </BaseCnnNode>
   );
 }
@@ -307,9 +449,11 @@ export const CnnWeightEdge = function CnnWeightEdge({
   data,
   style,
 }: EdgeProps<Edge<CnnEdgeData>>) {
-  const [path] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
   void id;
   void data;
+  void sourcePosition;
+  void targetPosition;
+  const [path] = getStraightPath({ sourceX, sourceY, targetX, targetY });
   return (
     <BaseEdge
       path={path}

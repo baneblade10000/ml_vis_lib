@@ -1,5 +1,6 @@
+import type { ReactNode } from "react";
 import type { LayerSpec } from "@ml-vis/core";
-import { useCnnMessages } from "./messages";
+import { useCnnMessages, type CnnMessages } from "./messages";
 
 export interface CnnArchitecturePanelProps {
   layers: LayerSpec[];
@@ -18,24 +19,84 @@ const KERNEL_OPTIONS_2D = [3, 5];
 const KERNEL_OPTIONS_1D = [3, 5, 7];
 const UNIT_OPTIONS = [1, 2, 4, 8];
 
-function layerTitle(spec: LayerSpec, t: ReturnType<typeof useCnnMessages>): string {
+function layerTitle(spec: LayerSpec, t: CnnMessages): string {
   switch (spec.kind) {
     case "conv2d":
-      return `${t.paletteConv}2D`;
     case "conv1d":
-      return `${t.paletteConv}1D`;
+      return t.paletteConv;
     case "pool2d":
-      return `${t.palettePool}2D`;
     case "pool1d":
-      return `${t.palettePool}1D`;
+      return t.palettePool;
     case "flatten":
-      return t.network;
+      return t.flatten;
     case "dense":
       return t.paletteDense;
   }
 }
 
-/** Per-layer editor: shows controls for filters / kernel / units / pooling. */
+function stepOption(options: number[], current: number, delta: -1 | 1): number {
+  const i = Math.max(0, options.indexOf(current));
+  return options[Math.max(0, Math.min(options.length - 1, i + delta))]!;
+}
+
+function ParamGroup({
+  label,
+  children,
+}: {
+  label?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="cnn-arch-param" onClick={(e) => e.stopPropagation()}>
+      <span className={`cnn-arch-param__label${label ? "" : " cnn-arch-param__label--empty"}`}>
+        {label ?? "\u00a0"}
+      </span>
+      <div className="cnn-arch-param__control">{children}</div>
+    </div>
+  );
+}
+
+function MiniStepper({
+  value,
+  options,
+  onChange,
+  ariaDec,
+  ariaInc,
+}: {
+  value: number;
+  options: number[];
+  onChange: (v: number) => void;
+  ariaDec: string;
+  ariaInc: string;
+}) {
+  const atMin = value === options[0];
+  const atMax = value === options[options.length - 1];
+  return (
+    <div className="tf-arch-stepper">
+      <button
+        type="button"
+        className="tf-icon-btn tf-icon-btn--sm"
+        disabled={atMin}
+        onClick={() => onChange(stepOption(options, value, -1))}
+        aria-label={ariaDec}
+      >
+        −
+      </button>
+      <span className="tf-arch-value">{value}</span>
+      <button
+        type="button"
+        className="tf-icon-btn tf-icon-btn--sm"
+        disabled={atMax}
+        onClick={() => onChange(stepOption(options, value, 1))}
+        aria-label={ariaInc}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+/** Compact layer editor: label left, named params with steppers right. */
 export function CnnArchitecturePanel({
   layers,
   selectedIndex,
@@ -50,8 +111,9 @@ export function CnnArchitecturePanel({
   const t = useCnnMessages();
 
   return (
-    <div className="cnn-arch-panel">
+    <div className="tf-arch-panel cnn-arch-panel">
       <h4 className="tf-flow-dock-title">{t.network}</h4>
+
       <div className="tf-arch-stack">
         {layers.map((spec, idx) => {
           const isConv = spec.kind === "conv2d" || spec.kind === "conv1d";
@@ -59,81 +121,104 @@ export function CnnArchitecturePanel({
           const isDense = spec.kind === "dense";
           const kernelOptions = spec.kind === "conv2d" ? KERNEL_OPTIONS_2D : KERNEL_OPTIONS_1D;
           const selected = selectedIndex === idx;
+
           return (
             <div
               key={idx}
-              className={`tf-arch-row${selected ? " selected" : ""}`}
+              className={`tf-arch-row cnn-arch-row${selected ? " selected" : ""}`}
               onClick={() => onSelectLayer(idx)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectLayer(idx);
+                }
+              }}
               role="button"
               tabIndex={0}
+              aria-pressed={selected}
             >
               <span className="tf-arch-row-label">{layerTitle(spec, t)}</span>
-              <div className="cnn-arch-controls">
+
+              <div className="cnn-arch-row__controls">
                 {isConv && (
                   <>
-                    <label className="cnn-arch-field">
-                      <span>{t.filters}</span>
-                      <select value={spec.filters ?? 4} onChange={(e) => onSetFilters(idx, Number(e.target.value))}>
-                        {FILTER_OPTIONS.map((n) => (
-                          <option key={n} value={n}>{n}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="cnn-arch-field">
-                      <span>{t.kernelSize}</span>
-                      <select value={spec.kernelSize ?? 3} onChange={(e) => onSetKernelSize(idx, Number(e.target.value))}>
-                        {kernelOptions.map((n) => (
-                          <option key={n} value={n}>{n}</option>
-                        ))}
-                      </select>
-                    </label>
+                    <ParamGroup label={t.filters}>
+                      <MiniStepper
+                        value={spec.filters ?? 4}
+                        options={FILTER_OPTIONS}
+                        onChange={(v) => onSetFilters(idx, v)}
+                        ariaDec={`${t.filters} −`}
+                        ariaInc={`${t.filters} +`}
+                      />
+                    </ParamGroup>
+                    <ParamGroup label={t.kernelSize}>
+                      <MiniStepper
+                        value={spec.kernelSize ?? 3}
+                        options={kernelOptions}
+                        onChange={(v) => onSetKernelSize(idx, v)}
+                        ariaDec={`${t.kernelSize} −`}
+                        ariaInc={`${t.kernelSize} +`}
+                      />
+                    </ParamGroup>
                   </>
                 )}
+
                 {isPool && (
-                  <label className="cnn-arch-field">
-                    <span>{t.poolKind}</span>
-                    <select
-                      value={spec.poolKind ?? "max"}
-                      onChange={(e) => onSetPoolKind(idx, e.target.value as "max" | "avg")}
-                    >
-                      <option value="max">{t.poolMax}</option>
-                      <option value="avg">{t.poolAvg}</option>
-                    </select>
-                  </label>
+                  <ParamGroup>
+                    <div className="tf-flat-switch" role="group" aria-label={t.poolKind}>
+                      <button
+                        type="button"
+                        className={`tf-flat-switch__btn${(spec.poolKind ?? "max") === "max" ? " selected" : ""}`}
+                        onClick={() => onSetPoolKind(idx, "max")}
+                      >
+                        {t.poolMax}
+                      </button>
+                      <button
+                        type="button"
+                        className={`tf-flat-switch__btn${spec.poolKind === "avg" ? " selected" : ""}`}
+                        onClick={() => onSetPoolKind(idx, "avg")}
+                      >
+                        {t.poolAvg}
+                      </button>
+                    </div>
+                  </ParamGroup>
                 )}
+
                 {isDense && (
-                  <label className="cnn-arch-field">
-                    <span>{t.units}</span>
-                    <select value={spec.units ?? 1} onChange={(e) => onSetUnits(idx, Number(e.target.value))}>
-                      {UNIT_OPTIONS.map((n) => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                  </label>
+                  <ParamGroup label={t.units}>
+                    <MiniStepper
+                      value={spec.units ?? 1}
+                      options={UNIT_OPTIONS}
+                      onChange={(v) => onSetUnits(idx, v)}
+                      ariaDec={`${t.units} −`}
+                      ariaInc={`${t.units} +`}
+                    />
+                  </ParamGroup>
                 )}
-                <button
-                  type="button"
-                  className="tf-icon-btn tf-icon-btn--sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveLayer(idx);
-                  }}
-                  aria-label={t.removeLayer}
-                >
-                  −
-                </button>
+
+                <ParamGroup>
+                  <button
+                    type="button"
+                    className="tf-icon-btn tf-icon-btn--sm"
+                    onClick={() => onRemoveLayer(idx)}
+                    aria-label={t.removeLayer}
+                  >
+                    −
+                  </button>
+                </ParamGroup>
               </div>
             </div>
           );
         })}
-        <div className="cnn-arch-add">
-          <button type="button" className="tf-btn tf-btn--secondary tf-btn--sm" onClick={() => onAddLayer("conv")}>
+
+        <div className="cnn-arch-add" role="group" aria-label={t.addLayer}>
+          <button type="button" className="cnn-arch-add__btn" onClick={() => onAddLayer("conv")}>
             + {t.paletteConv}
           </button>
-          <button type="button" className="tf-btn tf-btn--secondary tf-btn--sm" onClick={() => onAddLayer("pool")}>
+          <button type="button" className="cnn-arch-add__btn" onClick={() => onAddLayer("pool")}>
             + {t.palettePool}
           </button>
-          <button type="button" className="tf-btn tf-btn--secondary tf-btn--sm" onClick={() => onAddLayer("dense")}>
+          <button type="button" className="cnn-arch-add__btn" onClick={() => onAddLayer("dense")}>
             + {t.paletteDense}
           </button>
         </div>

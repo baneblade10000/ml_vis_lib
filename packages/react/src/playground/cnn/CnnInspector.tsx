@@ -15,20 +15,22 @@ export interface CnnInspectorProps {
   } | null;
 }
 
-function KernelThumb({ map, size }: { map: number[]; size: number }) {
+function KernelThumb({ map, size }: { map: number[][]; size: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heatRef = useRef<HTMLCanvasElement>(null);
   if (canvasRef.current && heatRef.current) {
-    renderValueMatrix(heatRef.current, [map]);
+    renderValueMatrix(heatRef.current, map, { layout: "row-major", palette: "gray" });
     const ctx = canvasRef.current.getContext("2d");
     if (ctx) {
       ctx.clearRect(0, 0, size, size);
       ctx.drawImage(heatRef.current, 0, 0, size, size);
     }
   }
+  const cols = map[0]?.length ?? 1;
+  const rows = map.length;
   return (
     <div className="cnn-kernel-thumb" style={{ width: size, height: size }}>
-      <canvas ref={heatRef} width={map.length} height={1} hidden aria-hidden />
+      <canvas ref={heatRef} width={cols} height={rows} hidden aria-hidden />
       <canvas ref={canvasRef} width={size} height={size} className="cnn-feature-canvas" />
     </div>
   );
@@ -38,7 +40,7 @@ function KernelGrid2D({ maps }: { maps: number[][][] }) {
   return (
     <div className="cnn-kernel-grid">
       {maps.map((m, i) => (
-        <KernelThumb key={i} map={m.flat()} size={36} />
+        <KernelThumb key={i} map={m} size={36} />
       ))}
     </div>
   );
@@ -48,7 +50,7 @@ function KernelGrid1D({ vectors }: { vectors: number[][] }) {
   return (
     <div className="cnn-kernel-grid cnn-kernel-grid--1d">
       {vectors.map((v, i) => (
-        <KernelThumb key={i} map={v} size={72} />
+        <KernelThumb key={i} map={[v]} size={72} />
       ))}
     </div>
   );

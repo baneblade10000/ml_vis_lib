@@ -24,7 +24,10 @@ function ImageThumb({ example, prediction, selected, onClick }: {
   const heatRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   if (heatRef.current && canvasRef.current) {
-    renderValueMatrix(heatRef.current, example.pixels);
+    renderValueMatrix(heatRef.current, example.pixels, {
+      layout: "row-major",
+      palette: "gray",
+    });
     const ctx = canvasRef.current.getContext("2d");
     if (ctx) {
       ctx.clearRect(0, 0, 28, 28);
@@ -55,7 +58,10 @@ function SignalThumb({ example, prediction, selected, onClick }: {
   const heatRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   if (heatRef.current && canvasRef.current) {
-    renderValueMatrix(heatRef.current, [example.values]);
+    renderValueMatrix(heatRef.current, [example.values], {
+      layout: "row-major",
+      palette: "gray",
+    });
     const ctx = canvasRef.current.getContext("2d");
     if (ctx) {
       ctx.clearRect(0, 0, 56, 12);
@@ -95,12 +101,12 @@ export function CnnGallery({
   return (
     <div className="cnn-gallery-panel">
       <h4 className="tf-flow-dock-title">{t.dataset}</h4>
-      <div className="cnn-dataset-list">
+      <div className="tf-flat-switch tf-flat-switch--stack" role="group" aria-label={t.dataset}>
         {datasetIds.map((id) => (
           <button
             key={id}
             type="button"
-            className={`cnn-dataset-pill${id === datasetId ? " selected" : ""}`}
+            className={`tf-flat-switch__btn${id === datasetId ? " selected" : ""}`}
             onClick={() => onSelectDataset(id)}
           >
             {datasetLabels[id] ?? id}

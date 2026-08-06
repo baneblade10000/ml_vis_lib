@@ -27,6 +27,7 @@ export interface CnnMessages {
   paletteDense: string;
   paletteDenseHint: string;
   paletteHint: string;
+  flatten: string;
   network: string;
   layer: string;
   filters: string;
@@ -73,9 +74,9 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     trainLoss: "Train loss",
     testAcc: "Test acc",
     trainAcc: "Train acc",
-    mode: "Mode",
-    mode2D: "2D — images",
-    mode1D: "1D — signals",
+    mode: "Data",
+    mode2D: "2D",
+    mode1D: "1D",
     blocks: "Blocks",
     paletteConv: "Conv",
     paletteConvHint: "Convolution (learnable kernel)",
@@ -84,6 +85,7 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     paletteDense: "Dense",
     paletteDenseHint: "Fully-connected layer",
     paletteHint: "Drag onto canvas · select a layer to edit it",
+    flatten: "Flatten",
     network: "Network",
     layer: "Layer",
     filters: "Filters",
@@ -96,14 +98,14 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     addLayer: "Add layer",
     dataset: "Dataset",
     datasetLabels2D: {
-      "disc-ring": "Disc / Ring",
-      "cross-square": "Cross / Square",
-      "blob-gradient": "Blob / Gradient",
+      digits: "Digits 0 / 1",
+      "circles-squares": "Circles / Squares",
+      bars: "H-bars / V-bars",
     },
     datasetLabels1D: {
-      "sine-pulse": "Sine pulse",
-      step: "Step / Square",
-      ramp: "Ramp / Plateau",
+      heartbeat: "Heartbeat",
+      tones: "High / Low tone",
+      pulses: "One / Two pulses",
     },
     training: "Training",
     learningRate: "Learning rate",
@@ -136,9 +138,9 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     trainLoss: "Loss (обучение)",
     testAcc: "Точность (тест)",
     trainAcc: "Точность (обучение)",
-    mode: "Режим",
-    mode2D: "2D — изображения",
-    mode1D: "1D — сигналы",
+    mode: "Данные",
+    mode2D: "2D",
+    mode1D: "1D",
     blocks: "Блоки",
     paletteConv: "Свёртка",
     paletteConvHint: "Свёртка (обучаемое ядро)",
@@ -147,6 +149,7 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     paletteDense: "Полносвязный",
     paletteDenseHint: "Полносвязный слой",
     paletteHint: "Перетащите на холст · выберите слой для редактирования",
+    flatten: "Flatten",
     network: "Сеть",
     layer: "Слой",
     filters: "Фильтры",
@@ -159,14 +162,14 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     addLayer: "Добавить слой",
     dataset: "Данные",
     datasetLabels2D: {
-      "disc-ring": "Диск / Кольцо",
-      "cross-square": "Крест / Квадрат",
-      "blob-gradient": "Блоб / Градиент",
+      digits: "Цифры 0 / 1",
+      "circles-squares": "Круги / Квадраты",
+      bars: "Гор. / Верт. полосы",
     },
     datasetLabels1D: {
-      "sine-pulse": "Синус-импульс",
-      step: "Ступень / Меандр",
-      ramp: "Наклон / Плато",
+      heartbeat: "Пульс",
+      tones: "Высокий / Низкий тон",
+      pulses: "Один / Два импульса",
     },
     training: "Обучение",
     learningRate: "Скорость обучения",
