@@ -45,7 +45,9 @@ Push to `master` (or run **Deploy GitHub Pages** manually) publishes the playgro
 
 https://baneblade10000.github.io/ml_vis_lib/
 
-Setup once: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+Setup once: https://github.com/baneblade10000/ml_vis_lib/settings/pages → Source: **GitHub Actions**.
+
+Workflow: https://github.com/baneblade10000/ml_vis_lib/actions/workflows/pages.yml
 
 Local build with the same base path:
 
