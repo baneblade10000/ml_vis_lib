@@ -1322,6 +1322,12 @@
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25), var(--tf-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.12));
 }
 
+/* Sit to the left of the zoom Controls (also bottom-right). */
+.tf-flow-panel-legend {
+  margin-right: 3.25rem !important;
+  margin-bottom: 0.25rem !important;
+}
+
 /* Diverging weight-color legend, pinned to the flow canvas via <Panel>. */
 .tf-weight-legend {
   display: flex;
@@ -1528,6 +1534,27 @@
   flex-shrink: 0;
 }
 
+.tf-inspired-by {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--tf-text-muted);
+  text-align: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tf-inspired-by a {
+  color: var(--tf-accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.tf-inspired-by a:hover {
+  color: var(--tf-accent-hover);
+  text-decoration: underline;
+}
+
 .tf-immersive-body {
   flex: 1;
   min-height: 0;
@@ -1591,6 +1618,10 @@
   top: 0.75rem;
   left: 0.75rem;
   width: 16rem;
+}
+
+.tf-flow-dock--left.tf-flow-dock--wide {
+  width: 20.5rem;
 }
 
 .tf-flow-dock--right {
@@ -1830,6 +1861,10 @@
     max-height: 40%;
   }
 
+  .tf-flow-dock--left.tf-flow-dock--wide {
+    width: min(20.5rem, calc(100% - 1.5rem));
+  }
+
   .tf-flow-dock--right {
     width: 14rem;
     top: auto;
@@ -1995,34 +2030,91 @@
 /* Convolutional-network playground (`cnn-*` namespace)                      */
 /* ════════════════════════════════════════════════════════════════════════ */
 
-/* Mode switcher in the toolbar */
-.cnn-mode-field {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
+/* Flat text segment switch (2D/1D, classification/regression, CNN datasets) */
+.tf-flat-switch {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0.625rem;
+  font-family: var(--tf-font);
 }
 
-.cnn-mode-btn {
-  padding: 0.25rem 0.5rem;
-  border: 1px solid var(--tf-border);
-  border-radius: 6px;
-  background: #fff;
+.tf-flat-switch__btn {
+  position: relative;
+  margin: 0;
+  padding: 0.2rem 0.2rem 0.35rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--tf-text-muted);
-  font-size: 0.6875rem;
+  font-family: inherit;
+  font-size: 0.75rem;
   font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
   cursor: pointer;
-  transition: all 0.12s ease;
+  box-shadow: none;
+  transition: color 0.12s ease;
 }
 
-.cnn-mode-btn:hover {
-  border-color: #6366f1;
+/* Short vertical rule — inset so it never meets the underline. */
+.tf-flat-switch__btn + .tf-flat-switch__btn::before {
+  content: "";
+  position: absolute;
+  left: -0.3125rem;
+  top: 0.2rem;
+  bottom: 0.4rem;
+  width: 1px;
+  background: var(--tf-border);
+}
+
+.tf-flat-switch__btn:hover {
   color: var(--tf-text);
 }
 
-.cnn-mode-btn.selected {
-  background: #6366f1;
-  border-color: #6366f1;
-  color: #fff;
+.tf-flat-switch__btn.selected {
+  color: var(--tf-text);
+  background: transparent;
+}
+
+.tf-flat-switch__btn.selected::after {
+  content: "";
+  position: absolute;
+  left: 0.1rem;
+  right: 0.1rem;
+  bottom: 0;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.tf-flat-switch__btn:focus-visible {
+  outline: 2px solid var(--tf-accent, #6366f1);
+  outline-offset: 2px;
+}
+
+/* Vertical stack of flat options (CNN dataset list). */
+.tf-flat-switch--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.125rem;
+  width: 100%;
+}
+
+.tf-flat-switch--stack .tf-flat-switch__btn {
+  width: 100%;
+  text-align: left;
+  padding: 0.3rem 0.15rem 0.35rem;
+  font-size: 0.6875rem;
+}
+
+.tf-flat-switch--stack .tf-flat-switch__btn + .tf-flat-switch__btn::before {
+  display: none;
+}
+
+.tf-flat-switch--stack .tf-flat-switch__btn.selected::after {
+  left: 0;
+  right: auto;
+  width: 100%;
 }
 
 /* Layer nodes (each renders its feature maps as a tile grid) */
@@ -2038,6 +2130,7 @@
   flex-direction: column;
   align-items: center;
   gap: 0.25rem;
+  font-family: var(--tf-font);
 }
 
 .cnn-node.selected {
@@ -2048,8 +2141,40 @@
 .cnn-node--input { border-color: #94a3b8; }
 .cnn-node--conv { border-color: #6366f1; }
 .cnn-node--pool { border-color: #0ea5e9; }
-.cnn-node--flatten { border-color: #f59e0b; }
-.cnn-node--dense { border-color: #10b981; }
+.cnn-node--flatten {
+  width: auto;
+  min-width: 48px;
+  border-color: #f59e0b;
+  border-width: 2.5px;
+  padding: 0.5rem 0.3rem;
+  gap: 0.375rem;
+}
+
+.cnn-node--flatten .cnn-node-label {
+  font-size: 0.6875rem;
+  color: var(--tf-text-secondary);
+}
+.cnn-node--dense {
+  width: auto;
+  min-width: 72px;
+  border-color: #10b981;
+  padding: 0.4rem 0.35rem;
+  gap: 0.3rem;
+}
+
+.cnn-dense-weights {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.cnn-dense-weights__meta {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  color: var(--tf-text-muted);
+  font-variant-numeric: tabular-nums;
+}
 .cnn-node--readout {
   border-color: #1e293b;
   border-width: 3px;
@@ -2062,25 +2187,15 @@
 }
 
 .cnn-node-label {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  color: var(--tf-text);
-  line-height: 1.1;
-}
-
-.cnn-node-label--hidden { display: none; }
-
-.cnn-node-foot {
-  width: 100%;
-  text-align: center;
-}
-
-.cnn-node-params {
+  font-family: var(--tf-font);
   font-size: 0.625rem;
   font-weight: 600;
   color: var(--tf-text-muted);
-  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
 }
+
+.cnn-node-label--hidden { display: none; }
 
 .cnn-handle {
   width: 8px;
@@ -2115,10 +2230,15 @@
   height: 8px;
 }
 
+.cnn-feature-cell--vector {
+  border: none;
+  background: transparent;
+  overflow: visible;
+  line-height: 0;
+}
+
 .cnn-feature-canvas {
   display: block;
-  width: 100%;
-  height: 100%;
 }
 
 .cnn-feature-more {
@@ -2211,64 +2331,168 @@
 .cnn-palette-icon--pool { background: #0ea5e9; }
 .cnn-palette-icon--dense { background: #10b981; }
 
+.cnn-palette,
+.cnn-arch-panel,
+.cnn-gallery-panel,
+.cnn-inspector {
+  font-family: var(--tf-font);
+}
+
 .cnn-palette-label {
+  font-family: var(--tf-font);
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--tf-text);
 }
 
 .cnn-palette-hint {
+  font-family: var(--tf-font);
   font-size: 0.625rem;
   color: var(--tf-text-muted);
   margin: 0;
 }
 
-/* Architecture panel (per-layer editors) */
+/* Architecture panel — one compact row per layer (same as NN) */
 .cnn-arch-panel {
+  gap: 0.5rem;
+}
+
+.cnn-arch-row {
+  align-items: center;
+  padding: 0.35rem 0.4rem;
+  margin: 0;
+  border: 1px dashed var(--tf-border-strong);
+  border-radius: var(--tf-radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--tf-transition),
+    border-color var(--tf-transition);
+}
+
+.cnn-arch-row:hover {
+  background: var(--tf-surface-muted);
+  border-color: var(--tf-text-muted);
+}
+
+.cnn-arch-row.selected {
+  background: var(--tf-accent-soft);
+  border-color: rgba(79, 70, 229, 0.45);
+  border-style: dashed;
+}
+
+.cnn-arch-row__controls {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.cnn-arch-param {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  align-items: center;
+  gap: 0.125rem;
+  min-width: 0;
 }
 
-.cnn-arch-controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-.cnn-arch-field {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.625rem;
+.cnn-arch-param__label {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--tf-text-muted);
-}
-
-.cnn-arch-field span {
+  line-height: 1;
   white-space: nowrap;
 }
 
-.cnn-arch-field select {
-  padding: 0.0625rem 0.1875rem;
-  border: 1px solid var(--tf-border);
-  border-radius: 4px;
-  font-size: 0.625rem;
-  background: #fff;
+.cnn-arch-param__label--empty {
+  visibility: hidden;
 }
 
-.tf-arch-row.selected {
-  background: rgba(99, 102, 241, 0.08);
-  border-color: #6366f1;
-  cursor: pointer;
+.cnn-arch-param__control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.625rem;
+}
+
+/* Vertical rule between adjacent param groups. */
+.cnn-arch-row__controls > * + * {
+  position: relative;
+}
+
+.cnn-arch-row__controls > * + *::before {
+  content: "";
+  position: absolute;
+  left: -0.3125rem;
+  top: 0.85rem;
+  bottom: 0.15rem;
+  width: 1px;
+  background: var(--tf-border);
+}
+
+.cnn-arch-row .tf-flat-switch {
+  gap: 0.5rem;
+}
+
+.cnn-arch-row .tf-flat-switch__btn {
+  font-size: 0.6875rem;
+  padding: 0.1rem 0.1rem 0.3rem;
+}
+
+.cnn-arch-row .tf-arch-value {
+  min-width: 1rem;
+  font-size: 0.75rem;
 }
 
 .cnn-arch-add {
   display: flex;
-  gap: 0.25rem;
-  flex-wrap: wrap;
-  padding-top: 0.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
   border-top: 1px solid var(--tf-border);
+}
+
+.cnn-arch-add__btn {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0.25rem 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--tf-text-muted);
+  font-family: var(--tf-font);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  text-align: center;
+  transition: color 0.12s ease;
+}
+
+.cnn-arch-add__btn + .cnn-arch-add__btn::before {
+  content: "";
+  position: absolute;
+  left: -0.3125rem;
+  top: 0.2rem;
+  bottom: 0.2rem;
+  width: 1px;
+  background: var(--tf-border);
+}
+
+.cnn-arch-add__btn:hover {
+  color: var(--tf-text);
+}
+
+.cnn-arch-add__btn:focus-visible {
+  outline: 2px solid var(--tf-accent, #6366f1);
+  outline-offset: 2px;
 }
 
 /* Input gallery */
@@ -2276,36 +2500,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
-}
-
-.cnn-dataset-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.cnn-dataset-pill {
-  padding: 0.1875rem 0.375rem;
-  border: 1px solid var(--tf-border);
-  border-radius: 999px;
-  background: #fff;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--tf-text-muted);
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.12s ease;
-}
-
-.cnn-dataset-pill:hover {
-  border-color: #6366f1;
-  color: var(--tf-text);
-}
-
-.cnn-dataset-pill.selected {
-  background: #6366f1;
-  border-color: #6366f1;
-  color: #fff;
 }
 
 .cnn-gallery-grid {

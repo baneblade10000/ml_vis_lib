@@ -17,7 +17,7 @@ import {
   type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { ComputationalGraph, GraphNodeKind } from "@ml-vis/core";
+import type { ComputationalGraph, GraphNodeKind, TfDataMode, TfProblemType } from "@ml-vis/core";
 import {
   flowKindFromDrag,
   graphToFlow,
@@ -26,12 +26,23 @@ import {
   type WeightEdgeData,
 } from "./graphAdapter";
 import { networkEdgeTypes, networkNodeTypes } from "./NetworkFlowNodes";
-import { NetworkBoundaryRefContext, TrainingLiveRefContext, TrainingStatsRefContext, BoundaryPaintGenerationContext } from "./NetworkBoundaryContext";
+import {
+  BoundaryPaintGenerationContext,
+  NetworkBoundaryRefContext,
+  NetworkCurveRefContext,
+  NetworkTargetCurveRefContext,
+  NetworkVizModeContext,
+  TrainingLiveRefContext,
+  TrainingStatsRefContext,
+  type CurveStore,
+} from "./NetworkBoundaryContext";
 
 export interface ReactFlowNetworkGraphProps {
   graph: ComputationalGraph;
   enabledFeatures: Record<string, boolean>;
   discretize?: boolean;
+  dataMode?: TfDataMode;
+  problemType?: TfProblemType;
   trainData?: { x: number; y: number; label: number }[];
   lossTest?: number;
   lossTrain?: number;
@@ -55,6 +66,8 @@ export interface ReactFlowNetworkGraphProps {
   trainingLiveRef?: RefObject<boolean>;
   paintGeneration?: number;
   boundaryRef: RefObject<Record<string, number[][]>>;
+  curvesRef?: RefObject<CurveStore>;
+  targetCurveRef?: RefObject<number[] | null>;
   statsRef: RefObject<{ epoch: number; lossTrain: number; lossTest: number }>;
 }
 
@@ -444,7 +457,7 @@ function ReactFlowNetworkGraphInner({
       >
         <Background gap={20} size={1} color="var(--tf-border)" />
         <Controls showInteractive={false} position="bottom-right" />
-        <Panel position="bottom-left" className="tf-flow-panel-legend">
+        <Panel position="bottom-right" className="tf-flow-panel-legend">
           <div className="tf-weight-legend" role="img" aria-label="Weight color scale: negative violet, positive magenta">
             <span className="tf-weight-legend__title">Weight</span>
             <div className="tf-weight-legend__bar" />
@@ -464,18 +477,31 @@ function ReactFlowNetworkGraphInner({
 }
 
 export function ReactFlowNetworkGraph(props: ReactFlowNetworkGraphProps) {
+  const vizMode = {
+    dataMode: props.dataMode ?? "2d",
+    problemType: props.problemType ?? "classification",
+  } as const;
+  const emptyCurves = useMemo(() => ({ current: {} as CurveStore }), []);
+  const emptyTarget = useMemo(() => ({ current: null as number[] | null }), []);
+
   return (
-    <NetworkBoundaryRefContext.Provider value={props.boundaryRef}>
-      <TrainingStatsRefContext.Provider value={props.statsRef}>
-        <TrainingLiveRefContext.Provider value={props.trainingLiveRef ?? null}>
-          <BoundaryPaintGenerationContext.Provider value={props.paintGeneration ?? 0}>
-            <ReactFlowProvider>
-              <ReactFlowNetworkGraphInner {...props} />
-            </ReactFlowProvider>
-          </BoundaryPaintGenerationContext.Provider>
-        </TrainingLiveRefContext.Provider>
-      </TrainingStatsRefContext.Provider>
-    </NetworkBoundaryRefContext.Provider>
+    <NetworkVizModeContext.Provider value={vizMode}>
+      <NetworkBoundaryRefContext.Provider value={props.boundaryRef}>
+        <NetworkCurveRefContext.Provider value={props.curvesRef ?? emptyCurves}>
+          <NetworkTargetCurveRefContext.Provider value={props.targetCurveRef ?? emptyTarget}>
+            <TrainingStatsRefContext.Provider value={props.statsRef}>
+              <TrainingLiveRefContext.Provider value={props.trainingLiveRef ?? null}>
+                <BoundaryPaintGenerationContext.Provider value={props.paintGeneration ?? 0}>
+                  <ReactFlowProvider>
+                    <ReactFlowNetworkGraphInner {...props} />
+                  </ReactFlowProvider>
+                </BoundaryPaintGenerationContext.Provider>
+              </TrainingLiveRefContext.Provider>
+            </TrainingStatsRefContext.Provider>
+          </NetworkTargetCurveRefContext.Provider>
+        </NetworkCurveRefContext.Provider>
+      </NetworkBoundaryRefContext.Provider>
+    </NetworkVizModeContext.Provider>
   );
 }
 

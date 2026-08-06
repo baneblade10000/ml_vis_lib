@@ -15,7 +15,13 @@ import {
   CLASS_1_HEX,
   NODE_BOUNDARY_DENSITY,
   PLAY_DISPLAY_DENSITY,
+  X_DOMAIN,
+  curveStrokeFromValues,
+  inferYDomain,
   reduceMatrix,
+  renderCurve,
+  renderCurvePoints,
+  renderTargetCurve,
   renderValueMatrix,
   weightColor,
   weightValueNormalized,
@@ -25,6 +31,9 @@ import { NODE_WIDTH, OUTPUT_NODE_WIDTH } from "./graphAdapter";
 import {
   BoundaryPaintGenerationContext,
   NetworkBoundaryRefContext,
+  NetworkCurveRefContext,
+  NetworkTargetCurveRefContext,
+  NetworkVizModeContext,
   TrainingLiveRefContext,
   TrainingStatsRefContext,
 } from "./NetworkBoundaryContext";
@@ -209,6 +218,153 @@ function NodeHeatmap({
   );
 }
 
+function NodeCurve({
+  nodeId,
+  size,
+  dimmed,
+  trainData,
+  showTarget,
+}: {
+  nodeId: string;
+  size: number;
+  dimmed?: boolean;
+  trainData?: DataPoint[];
+  showTarget?: boolean;
+  paintGeneration?: number;
+}) {
+  const curvesRef = useContext(NetworkCurveRefContext);
+  const targetRef = useContext(NetworkTargetCurveRefContext);
+  const vizMode = useContext(NetworkVizModeContext);
+  const paintGeneration = useContext(BoundaryPaintGenerationContext);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const px = size - 6;
+
+  const paint = useCallback(() => {
+    const canvas = canvasRef.current;
+    const values = curvesRef?.current?.[nodeId];
+    if (!canvas || !values?.length) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.round(px * dpr);
+    const h = w;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+      canvas.style.width = `${px}px`;
+      canvas.style.height = `${px}px`;
+    }
+
+    const yDomainParts = [inferYDomain(values)];
+    if (showTarget && targetRef?.current?.length) {
+      yDomainParts.push(inferYDomain(targetRef.current));
+    }
+    if (trainData?.length) {
+      yDomainParts.push(inferYDomain(trainData.map((p) => p.y)));
+    }
+    const yMin = Math.min(...yDomainParts.map((d) => d[0]));
+    const yMax = Math.max(...yDomainParts.map((d) => d[1]));
+    const yDomain: [number, number] = [yMin, yMax];
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, w, h);
+
+    // Baseline first, then points (under), then prediction curve on top.
+    const zeroY = ((1 - (0 - yMin) / (yMax - yMin)) * h);
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.12)";
+    ctx.lineWidth = Math.max(1, dpr * 0.75);
+    ctx.beginPath();
+    ctx.moveTo(0, zeroY);
+    ctx.lineTo(w, zeroY);
+    ctx.stroke();
+
+    if (trainData?.length) {
+      renderCurvePoints(canvas, trainData, {
+        xDomain: X_DOMAIN,
+        yDomain,
+        colorByLabel: vizMode.problemType === "classification",
+      });
+    }
+
+    if (showTarget && targetRef?.current?.length) {
+      renderTargetCurve(canvas, targetRef.current, { yDomain });
+    }
+
+    renderCurve(canvas, values, {
+      yDomain,
+      stroke: curveStrokeFromValues(values),
+      fill: !dimmed,
+      clear: false,
+      baseline: false,
+    });
+  }, [curvesRef, targetRef, nodeId, px, dimmed, trainData, showTarget, vizMode.problemType]);
+
+  const paintRef = useRef(paint);
+  paintRef.current = paint;
+
+  useLayoutEffect(
+    () => registerBoundaryPainter(nodeId, () => paintRef.current()),
+    [nodeId],
+  );
+  useLayoutEffect(() => {
+    paintRef.current();
+  }, [paint, paintGeneration]);
+
+  return (
+    <div className="tf-flow-node-canvas-wrap" style={{ width: px, height: px }}>
+      <canvas
+        ref={canvasRef}
+        className={dimmed ? "tf-flow-node-canvas dimmed" : "tf-flow-node-canvas"}
+      />
+    </div>
+  );
+}
+
+function NodeViz({
+  nodeId,
+  discretize,
+  size,
+  dimmed,
+  trainData,
+  smooth = true,
+  coarseTo,
+  showTarget,
+}: {
+  nodeId: string;
+  discretize: boolean;
+  size: number;
+  dimmed?: boolean;
+  trainData?: DataPoint[];
+  smooth?: boolean;
+  coarseTo?: number;
+  showTarget?: boolean;
+  paintGeneration?: number;
+}) {
+  const { dataMode } = useContext(NetworkVizModeContext);
+  if (dataMode === "1d") {
+    return (
+      <NodeCurve
+        nodeId={nodeId}
+        size={size}
+        dimmed={dimmed}
+        trainData={trainData}
+        showTarget={showTarget}
+      />
+    );
+  }
+  return (
+    <NodeHeatmap
+      nodeId={nodeId}
+      discretize={discretize}
+      size={size}
+      dimmed={dimmed}
+      trainData={trainData}
+      smooth={smooth}
+      coarseTo={coarseTo}
+    />
+  );
+}
+
 function BiasIndicator({ bias }: { bias: number }) {
   // The bias square sits in the neuron's bottom-right corner. Its fill color
   // encodes the bias via the diverging palette: violet for negative, magenta
@@ -262,7 +418,7 @@ export function FeatureFlowNode({
       className={`tf-flow-node--feature${data.active === false ? " inactive" : " active"}`}
       hideTarget
     >
-      <NodeHeatmap
+      <NodeViz
         nodeId={id}
         discretize={data.discretize}
         size={NODE_WIDTH}
@@ -282,7 +438,7 @@ export function DenseFlowNode({
 }: NodeProps<Node<NetworkNodeData>>) {
   return (
     <BaseNetworkNode data={data} className="tf-flow-node--dense">
-      <NodeHeatmap
+      <NodeViz
         nodeId={id}
         discretize={data.discretize}
         size={NODE_WIDTH}
@@ -301,7 +457,7 @@ export function SumFlowNode({
   return (
     <BaseNetworkNode data={data} className="tf-flow-node--sum">
       <div className="tf-flow-sum-icon">+</div>
-      <NodeHeatmap
+      <NodeViz
         nodeId={id}
         discretize={data.discretize}
         size={NODE_WIDTH}
@@ -350,11 +506,12 @@ export function OutputFlowNode({
       hideSource
       size={OUTPUT_NODE_WIDTH}
     >
-      <NodeHeatmap
+      <NodeViz
         nodeId={id}
         discretize={data.discretize}
         size={OUTPUT_NODE_WIDTH}
         trainData={data.trainData}
+        showTarget
         paintGeneration={data.paintGeneration}
       />
       <div className="tf-flow-output-meta">

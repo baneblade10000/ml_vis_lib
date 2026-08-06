@@ -1,4 +1,11 @@
-import type { Locale, TfDatasetId } from "@ml-vis/core";
+import type {
+  Dataset1DId,
+  Locale,
+  TfDatasetId,
+  TfProblemType,
+  TfRegularizationId,
+  WeightInitId,
+} from "@ml-vis/core";
 import { useLocale } from "../../i18n";
 
 export type NetworkMessages = {
@@ -23,11 +30,22 @@ export type NetworkMessages = {
   removeHiddenLayer: string;
   addNeuron: string;
   removeNeuron: string;
+  mode: string;
+  mode2D: string;
+  mode1D: string;
+  problemType: string;
+  problemTypeLabels: Record<TfProblemType, string>;
   dataset: string;
   datasetLabels: Record<TfDatasetId, string>;
+  dataset1dLabels: Record<Dataset1DId, string>;
   training: string;
   learningRate: string;
   activation: string;
+  weightInit: string;
+  weightInitLabels: Record<WeightInitId, string>;
+  regularization: string;
+  regularizationLabels: Record<TfRegularizationId, string>;
+  regularizationRate: string;
   discretize: string;
   noise: string;
   trainRatio: string;
@@ -43,6 +61,8 @@ export type NetworkMessages = {
   inspectorBias: string;
   removeEdge: string;
   removeNode: string;
+  inspiredBy: string;
+  inspiredBySource: string;
 };
 
 export const networkMessages: Record<Locale, NetworkMessages> = {
@@ -68,6 +88,14 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     removeHiddenLayer: "Remove hidden layer",
     addNeuron: "Add neuron to layer",
     removeNeuron: "Remove neuron from layer",
+    mode: "Data",
+    mode2D: "2D",
+    mode1D: "1D",
+    problemType: "Problem",
+    problemTypeLabels: {
+      classification: "Classification",
+      regression: "Regression",
+    },
     dataset: "Dataset",
     datasetLabels: {
       circle: "Circle",
@@ -75,9 +103,33 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
       gauss: "Gaussian",
       spiral: "Spiral",
     },
+    dataset1dLabels: {
+      gauss1d: "Two Gaussians",
+      threshold: "Threshold",
+      twoClusters: "Four clusters",
+      sine: "Sine",
+      linear: "Linear",
+      cubic: "Cubic",
+      step: "Step",
+    },
     training: "Training",
     learningRate: "Learning rate",
     activation: "Activation",
+    weightInit: "Weight init",
+    weightInitLabels: {
+      uniform: "Uniform [-0.5, 0.5]",
+      xavier: "Xavier (Glorot)",
+      he: "He",
+      normal: "Normal (σ=0.1)",
+      zeros: "Zeros",
+    },
+    regularization: "Regularization",
+    regularizationLabels: {
+      none: "None",
+      L1: "L1",
+      L2: "L2",
+    },
+    regularizationRate: "Regularization rate",
     discretize: "Discretize boundary",
     noise: "Noise",
     trainRatio: "Train ratio",
@@ -93,6 +145,8 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     inspectorBias: "Bias",
     removeEdge: "Remove edge",
     removeNode: "Remove node",
+    inspiredBy: "Inspired by",
+    inspiredBySource: "TensorFlow Playground",
   },
   ru: {
     reset: "Сброс",
@@ -116,16 +170,48 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     removeHiddenLayer: "Удалить скрытый слой",
     addNeuron: "Добавить нейрон в слой",
     removeNeuron: "Удалить нейрон из слоя",
-    dataset: "Данные",
+    mode: "Данные",
+    mode2D: "2D",
+    mode1D: "1D",
+    problemType: "Задача",
+    problemTypeLabels: {
+      classification: "Классификация",
+      regression: "Регрессия",
+    },
+    dataset: "Датасет",
     datasetLabels: {
       circle: "Круг",
       xor: "XOR",
       gauss: "Гауссианы",
       spiral: "Спираль",
     },
+    dataset1dLabels: {
+      gauss1d: "Две гауссианы",
+      threshold: "Порог",
+      twoClusters: "Четыре кластера",
+      sine: "Синус",
+      linear: "Линейная",
+      cubic: "Кубическая",
+      step: "Ступенька",
+    },
     training: "Обучение",
     learningRate: "Скорость обучения",
     activation: "Активация",
+    weightInit: "Инициализация весов",
+    weightInitLabels: {
+      uniform: "Равномерная [-0.5, 0.5]",
+      xavier: "Xavier (Glorot)",
+      he: "He",
+      normal: "Нормальная (σ=0.1)",
+      zeros: "Нули",
+    },
+    regularization: "Регуляризация",
+    regularizationLabels: {
+      none: "Нет",
+      L1: "L1",
+      L2: "L2",
+    },
+    regularizationRate: "Сила регуляризации",
     discretize: "Дискретная граница",
     noise: "Шум",
     trainRatio: "Доля обучения",
@@ -141,6 +227,8 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     inspectorBias: "Смещение",
     removeEdge: "Удалить ребро",
     removeNode: "Удалить узел",
+    inspiredBy: "Вдохновлено",
+    inspiredBySource: "TensorFlow Playground",
   },
 };
 

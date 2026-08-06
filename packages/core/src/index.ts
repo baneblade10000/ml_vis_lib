@@ -75,6 +75,18 @@ export { DecisionBoundaryPlot } from "./charts/decision-boundary-plot";
 export type { DecisionBoundaryPayload } from "./charts/decision-boundary-plot";
 
 export { reduceMatrix, renderValueMatrix } from "./charts/mini-heatmap";
+export type {
+  RenderValueMatrixOptions,
+  ValueMatrixLayout,
+  ValueMatrixPalette,
+} from "./charts/mini-heatmap";
+export {
+  curveStrokeFromValues,
+  inferYDomain,
+  renderCurve,
+  renderCurvePoints,
+  renderTargetCurve,
+} from "./charts/mini-curve";
 
 export {
   Activations,
@@ -90,10 +102,20 @@ export {
   computeBoundaries,
   constructInput,
   constructInputIds,
+  CURVE_DENSITY,
   DATASETS as TF_DATASETS,
+  DATASETS_1D as TF_DATASETS_1D,
+  DATASETS_1D_CLASSIFICATION as TF_DATASETS_1D_CLASSIFICATION,
+  DATASETS_1D_REGRESSION as TF_DATASETS_1D_REGRESSION,
   DEFAULT_TF_CONFIG,
   DENSITY,
+  FEATURES_1D,
+  FEATURES_2D_ONLY,
+  isDataset1DId,
+  isDataset1DClassificationId,
+  isDataset1DRegressionId,
   NODE_BOUNDARY_DENSITY,
+  NODE_CURVE_DENSITY,
   PLAY_DISPLAY_DENSITY,
   Errors,
   examplesToSamples,
@@ -109,6 +131,9 @@ export {
   RegularizationFunction,
   shuffle,
   TF_ACTIVATIONS,
+  TF_REGULARIZATIONS,
+  TF_REGULARIZATION_RATES,
+  WEIGHT_INITS,
   updateWeights,
   valueToRgb,
   weightColor,
@@ -138,6 +163,9 @@ export {
 export type {
   ArchitecturePresetId,
   DataGenerator as TfDataGenerator,
+  Dataset1DClassificationId,
+  Dataset1DId,
+  Dataset1DRegressionId,
   DatasetId as TfDatasetId,
   Example2D,
   GraphEdgeDef,
@@ -148,7 +176,12 @@ export type {
   LossHistoryPoint,
   PaletteNodeKind,
   TfActivationId,
+  TfAnyDatasetId,
+  TfDataMode,
   TfPlaygroundConfig,
+  TfProblemType,
+  TfRegularizationId,
+  WeightInitId,
 } from "./playground/tf";
 
 export {

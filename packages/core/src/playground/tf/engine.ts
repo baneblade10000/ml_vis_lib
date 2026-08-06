@@ -21,13 +21,24 @@ import {
   type DatasetId,
   type Example2D,
 } from "./dataset";
+import {
+  DATASETS_1D,
+  DEFAULT_DATASET_1D_CLASSIFICATION,
+  DEFAULT_DATASET_1D_REGRESSION,
+  FEATURES_2D_ONLY,
+  isDataset1DId,
+  targetCurve1D,
+  type Dataset1DId,
+} from "./dataset-1d";
 import { computeBoundaries } from "./boundary";
 import { constructInput, constructInputIds } from "./inputs";
 import {
   Activations,
   Errors,
+  RegularizationFunction,
   type ActivationFunction,
   type Node,
+  type RegularizationFunction as RegFn,
 } from "./nn";
 import {
   applyArchitecturePreset,
@@ -37,18 +48,30 @@ import {
   forwardPropGraph,
   GraphNode,
   initGraphBoundaryStore,
+  initGraphCurveStore,
   updateGraphBoundaries,
+  updateGraphCurves,
   updateGraphHiddenBoundaries,
+  updateGraphHiddenCurves,
   updateGraphOutputBoundary,
+  updateGraphOutputCurve,
   updateWeightsGraph,
   type ArchitecturePresetId,
   type GraphNodeKind,
   type GraphPosition,
 } from "./graph";
 import { layoutMlpFromLayers, MLP_ROW_SPACING, normalizeGraphLayout } from "./graph/mlp-layout";
-import { PLAY_BOUNDARY_STRIDE } from "./constants";
+import { CURVE_DENSITY, PLAY_BOUNDARY_STRIDE, PLAY_CURVE_STRIDE } from "./constants";
+import { sampleBias, sampleWeight, type WeightInitId } from "./weight-init";
 
 export type TfActivationId = "relu" | "tanh" | "sigmoid" | "linear";
+export type TfRegularizationId = "none" | "L1" | "L2";
+export type TfDataMode = "2d" | "1d";
+export type TfProblemType = "classification" | "regression";
+export type TfAnyDatasetId = DatasetId | Dataset1DId;
+export type { WeightInitId } from "./weight-init";
+export type { Dataset1DId } from "./dataset-1d";
+export { WEIGHT_INITS } from "./weight-init";
 
 export const TF_ACTIVATIONS: Record<TfActivationId, ActivationFunction> = {
   relu: Activations.RELU,
@@ -57,17 +80,45 @@ export const TF_ACTIVATIONS: Record<TfActivationId, ActivationFunction> = {
   linear: Activations.LINEAR,
 };
 
+export const TF_REGULARIZATIONS: readonly TfRegularizationId[] = ["none", "L1", "L2"];
+
+export const TF_REGULARIZATION_RATES = [0, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10] as const;
+
+const DEFAULT_FEATURES_2D: Record<string, boolean> = {
+  x: true,
+  y: true,
+  xSquared: false,
+  ySquared: false,
+  xTimesY: false,
+  sinX: false,
+  sinY: false,
+};
+
+const DEFAULT_FEATURES_1D: Record<string, boolean> = {
+  x: true,
+  y: false,
+  xSquared: false,
+  ySquared: false,
+  xTimesY: false,
+  sinX: false,
+  sinY: false,
+};
+
 export interface TfPlaygroundConfig {
   learningRate: number;
   activation: TfActivationId;
+  weightInit: WeightInitId;
+  regularization: TfRegularizationId;
+  regularizationRate: number;
   batchSize: number;
   noise: number;
   percTrainData: number;
-  dataset: DatasetId;
+  dataMode: TfDataMode;
+  problemType: TfProblemType;
+  dataset: TfAnyDatasetId;
   networkShape: number[];
   numHiddenLayers: number;
   enabledFeatures: Record<string, boolean>;
-  regularizationRate?: number;
   discretize?: boolean;
   architecturePreset: ArchitecturePresetId;
 }
@@ -75,14 +126,18 @@ export interface TfPlaygroundConfig {
 export const DEFAULT_TF_CONFIG: TfPlaygroundConfig = {
   learningRate: 0.03,
   activation: "tanh",
+  weightInit: "uniform",
+  regularization: "none",
+  regularizationRate: 0,
   batchSize: 10,
   noise: 0,
   percTrainData: 50,
+  dataMode: "2d",
+  problemType: "classification",
   dataset: "circle",
   networkShape: [2],
   numHiddenLayers: 1,
-  enabledFeatures: { x: true, y: true, xSquared: false, ySquared: false, xTimesY: false, sinX: false, sinY: false },
-  regularizationRate: 0,
+  enabledFeatures: { ...DEFAULT_FEATURES_2D },
   discretize: false,
   architecturePreset: "mlp",
 };
@@ -97,6 +152,10 @@ export class PlaygroundEngine {
   config: TfPlaygroundConfig;
   graph: ComputationalGraph = new ComputationalGraph();
   boundary: Record<string, number[][]> = {};
+  /** 1D activation curves per node (used when dataMode === "1d"). */
+  curves: Record<string, number[]> = {};
+  /** Ideal regression target curve, if any. */
+  targetCurve: number[] | null = null;
   trainData: Example2D[] = [];
   testData: Example2D[] = [];
   lossTrain = 0;
@@ -167,9 +226,51 @@ export class PlaygroundEngine {
     this.lossHistory.push({ epoch: 0, train: this.lossTrain, test: this.lossTest });
   }
 
-  /** Restore config, data, and network exactly as on first page load. */
+  /**
+   * Restore architecture/hyperparameters from first page load, but keep the
+   * active data layout (2D/1D, problem type, dataset, features).
+   */
   resetToInitial(): void {
+    const dataMode = this.config.dataMode;
+    const problemType = this.config.problemType;
+    const dataset = this.config.dataset;
+    const enabledFeatures = { ...this.config.enabledFeatures };
+
     this.config = this.cloneConfig(this.initialConfig);
+    this.config.dataMode = dataMode;
+
+    if (dataMode === "1d") {
+      this.config.problemType = problemType;
+      this.config.dataset = isDataset1DId(dataset)
+        ? dataset
+        : problemType === "regression"
+          ? DEFAULT_DATASET_1D_REGRESSION
+          : DEFAULT_DATASET_1D_CLASSIFICATION;
+      this.config.enabledFeatures = {
+        ...DEFAULT_FEATURES_1D,
+        x: !!enabledFeatures.x,
+        xSquared: !!enabledFeatures.xSquared,
+        sinX: !!enabledFeatures.sinX,
+      };
+      if (
+        !this.config.enabledFeatures.x
+        && !this.config.enabledFeatures.xSquared
+        && !this.config.enabledFeatures.sinX
+      ) {
+        this.config.enabledFeatures.x = true;
+      }
+    } else {
+      this.config.problemType = "classification";
+      this.config.dataset = dataset in DATASETS ? (dataset as DatasetId) : "circle";
+      this.config.enabledFeatures =
+        dataset in DATASETS
+          ? { ...DEFAULT_FEATURES_2D, ...enabledFeatures }
+          : { ...DEFAULT_FEATURES_2D };
+      if (!Object.values(this.config.enabledFeatures).some(Boolean)) {
+        this.config.enabledFeatures = { ...DEFAULT_FEATURES_2D };
+      }
+    }
+
     this.bootstrap();
   }
 
@@ -186,13 +287,21 @@ export class PlaygroundEngine {
     this.lossHistory.push({ epoch: 0, train: this.lossTrain, test: this.lossTest });
   }
 
-  /** Fresh random weights / biases in place, keeping the topology. */
+  /** Fresh weights / biases in place using the selected init scheme. */
   private reinitializeWeights(): void {
+    const init = this.config.weightInit;
     for (const node of this.graph.nodes.values()) {
       if (node.kind === "input") continue;
-      node.bias = node.kind === "sum" ? 0 : 0.1;
+      node.bias = sampleBias(init, node.kind);
+      const fanIn = Math.max(node.inputLinks.length, 1);
+      const fanOut = Math.max(node.outputs.length, 1);
       for (const link of node.inputLinks) {
-        link.weight = Math.random() - 0.5;
+        // Residual skip edges into Add nodes are identity (weight = 1).
+        if (node.kind === "sum" && link.weight === 1) {
+          link.isDead = false;
+          continue;
+        }
+        link.weight = sampleWeight(init, fanIn, fanOut);
         link.isDead = false;
       }
     }
@@ -208,9 +317,14 @@ export class PlaygroundEngine {
   /** One training pass without boundary / test-loss refresh (for fast Play loop). */
   trainEpoch(updateTrainLoss = false): void {
     this.epoch++;
-    const { batchSize, learningRate, regularizationRate = 0 } = this.config;
+    const { batchSize, learningRate, regularizationRate } = this.config;
+    const yCoord = this.config.dataMode === "1d" ? 0 : undefined;
     this.trainData.forEach((point, i) => {
-      const input = constructInput(point.x, point.y, this.config.enabledFeatures);
+      const input = constructInput(
+        point.x,
+        yCoord === undefined ? point.y : yCoord,
+        this.config.enabledFeatures,
+      );
       forwardPropGraph(this.graph, input, i === 0);
       backPropGraph(this.graph, point.label, Errors.SQUARE);
       if ((i + 1) % batchSize === 0) {
@@ -227,15 +341,29 @@ export class PlaygroundEngine {
     this.lossTest = this.getLoss(this.testData);
   }
 
-  /** Full-quality boundary for all nodes. */
+  /** Full-quality boundary (2D) or curves (1D) for all nodes. */
   refreshBoundary(): void {
+    if (this.config.dataMode === "1d") {
+      this.refreshCurvesInternal(this.boundaryNeedsInputRefresh);
+      return;
+    }
     this.refreshBoundaryInternal(this.boundaryNeedsInputRefresh);
   }
 
-  /** Fast output-only boundary during Play (stride subsampling). */
+  /** Fast output-only boundary/curve during Play (stride subsampling). */
   refreshOutputBoundaryFast(stride = PLAY_BOUNDARY_STRIDE): void {
     const validation = this.graph.validate();
     if (!validation.valid) return;
+    if (this.config.dataMode === "1d") {
+      updateGraphOutputCurve(
+        this.graph,
+        this.config.enabledFeatures,
+        this.curves,
+        this.graph.outputId,
+        stride === PLAY_BOUNDARY_STRIDE ? PLAY_CURVE_STRIDE : stride,
+      );
+      return;
+    }
     updateGraphOutputBoundary(
       this.graph,
       this.config.enabledFeatures,
@@ -245,10 +373,19 @@ export class PlaygroundEngine {
     );
   }
 
-  /** Fast coarse refresh of hidden-node heatmaps during Play (10×10 grid). */
+  /** Fast coarse refresh of hidden-node heatmaps/curves during Play. */
   refreshHiddenBoundariesFast(): void {
     const validation = this.graph.validate();
     if (!validation.valid) return;
+    if (this.config.dataMode === "1d") {
+      updateGraphHiddenCurves(
+        this.graph,
+        this.config.enabledFeatures,
+        this.curves,
+        this.graph.outputId,
+      );
+      return;
+    }
     updateGraphHiddenBoundaries(
       this.graph,
       this.config.enabledFeatures,
@@ -260,8 +397,13 @@ export class PlaygroundEngine {
   getLoss(dataPoints: Example2D[] = this.trainData): number {
     if (!dataPoints.length) return 0;
     let loss = 0;
+    const yCoord = this.config.dataMode === "1d" ? 0 : undefined;
     for (const dataPoint of dataPoints) {
-      const input = constructInput(dataPoint.x, dataPoint.y, this.config.enabledFeatures);
+      const input = constructInput(
+        dataPoint.x,
+        yCoord === undefined ? dataPoint.y : yCoord,
+        this.config.enabledFeatures,
+      );
       const output = forwardPropGraph(this.graph, input);
       loss += Errors.SQUARE.error(output, dataPoint.label);
     }
@@ -283,9 +425,14 @@ export class PlaygroundEngine {
       networkShape: this.config.networkShape,
       numHiddenLayers: this.config.numHiddenLayers,
       activation: TF_ACTIVATIONS[this.config.activation],
-      outputActivation: Activations.TANH,
+      outputActivation: this.outputActivation(),
       enabledFeatures: this.config.enabledFeatures,
     });
+    // Apply the selected scheme (Link defaults are uniform); keep residual
+    // identity skips (weight === 1 into sum nodes) intact.
+    this.reinitializeWeights();
+    this.applyRegularizationToLinks();
+    this.syncOutputActivation();
   }
 
   setArchitecturePreset(preset: ArchitecturePresetId): void {
@@ -304,7 +451,7 @@ export class PlaygroundEngine {
     this.markCustomArchitecture();
 
     const activation =
-      kind === "output" ? Activations.TANH
+      kind === "output" ? this.outputActivation()
       : kind === "sum" ? Activations.RELU
       : TF_ACTIVATIONS[this.config.activation];
 
@@ -328,6 +475,10 @@ export class PlaygroundEngine {
   connectNodes(sourceId: string, targetId: string): boolean {
     const link = this.graph.connect(sourceId, targetId);
     if (!link) return false;
+    const dest = link.dest as GraphNode;
+    const fanIn = Math.max(dest.inputLinks.length, 1);
+    const fanOut = Math.max(dest.outputs.length, 1);
+    link.weight = sampleWeight(this.config.weightInit, fanIn, fanOut);
     this.markCustomArchitecture();
     this.reinitAfterTopologyChange();
     return true;
@@ -409,6 +560,9 @@ export class PlaygroundEngine {
 
   toggleFeature(featureId: string): void {
     if (!(featureId in this.config.enabledFeatures)) return;
+    if (this.config.dataMode === "1d" && (FEATURES_2D_ONLY as readonly string[]).includes(featureId)) {
+      return;
+    }
     const next = !this.config.enabledFeatures[featureId];
     const enabledCount = Object.values(this.config.enabledFeatures).filter(Boolean).length;
     if (!next && enabledCount <= 1) return;
@@ -417,8 +571,37 @@ export class PlaygroundEngine {
     this.reset();
   }
 
-  setDataset(dataset: DatasetId): void {
+  setDataset(dataset: TfAnyDatasetId): void {
     this.config.dataset = dataset;
+    this.reset();
+  }
+
+  /** Switch between 2D heatmaps and 1D curves (rebuilds data + features). */
+  setDataMode(dataMode: TfDataMode): void {
+    if (this.config.dataMode === dataMode) return;
+    this.config.dataMode = dataMode;
+    if (dataMode === "1d") {
+      this.config.problemType = "classification";
+      this.config.dataset = DEFAULT_DATASET_1D_CLASSIFICATION;
+      this.config.enabledFeatures = { ...DEFAULT_FEATURES_1D };
+    } else {
+      this.config.problemType = "classification";
+      this.config.dataset = "circle";
+      this.config.enabledFeatures = { ...DEFAULT_FEATURES_2D };
+    }
+    this.reset();
+  }
+
+  /** Classification vs regression (1D only; 2D stays classification). */
+  setProblemType(problemType: TfProblemType): void {
+    if (this.config.dataMode !== "1d") return;
+    if (this.config.problemType === problemType) return;
+    this.config.problemType = problemType;
+    this.config.dataset =
+      problemType === "regression"
+        ? DEFAULT_DATASET_1D_REGRESSION
+        : DEFAULT_DATASET_1D_CLASSIFICATION;
+    this.syncOutputActivation();
     this.reset();
   }
 
@@ -437,19 +620,91 @@ export class PlaygroundEngine {
     this.refreshBoundary();
   }
 
+  /** Change weight init scheme and re-sample weights (epoch resets). */
+  setWeightInit(weightInit: WeightInitId): void {
+    this.config.weightInit = weightInit;
+    this.resetWeights();
+  }
+
+  /** Swap L1/L2/none on existing links without resetting weights. */
+  setRegularization(regularization: TfRegularizationId): void {
+    this.config.regularization = regularization;
+    this.applyRegularizationToLinks();
+  }
+
   /** Regenerate data with current settings, keeping network and progress. */
   updateDataParams(patch: Partial<Pick<TfPlaygroundConfig, "noise" | "percTrainData">>): void {
     Object.assign(this.config, patch);
     this.regenerateData();
   }
 
+  private resolveRegularization(): RegFn | null {
+    switch (this.config.regularization) {
+      case "L1":
+        return RegularizationFunction.L1;
+      case "L2":
+        return RegularizationFunction.L2;
+      default:
+        return null;
+    }
+  }
+
+  /** Keep graph.regularization and every link in sync with config. */
+  private applyRegularizationToLinks(): void {
+    const fn = this.resolveRegularization();
+    this.graph.regularization = fn;
+    for (const link of this.graph.getAllLinks()) {
+      link.regularization = fn;
+      // L1 can mark weights dead; revive them when leaving L1.
+      if (fn !== RegularizationFunction.L1) {
+        link.isDead = false;
+      }
+    }
+  }
+
+  private outputActivation(): ActivationFunction {
+    return this.config.dataMode === "1d" && this.config.problemType === "regression"
+      ? Activations.LINEAR
+      : Activations.TANH;
+  }
+
+  private syncOutputActivation(): void {
+    const fn = this.outputActivation();
+    for (const node of this.graph.nodes.values()) {
+      if (node.kind === "output") node.activation = fn;
+    }
+  }
+
   private rebuildBoundaryStore(): void {
+    if (this.config.dataMode === "1d") {
+      const validation = this.graph.validate();
+      this.curves = validation.valid
+        ? initGraphCurveStore(this.graph)
+        : {};
+      this.refreshTargetCurve();
+      this.boundary = {};
+      return;
+    }
+    this.curves = {};
+    this.targetCurve = null;
     const validation = this.graph.validate();
     if (!validation.valid) {
       this.boundary = computeBoundaries(this.network, this.config.enabledFeatures);
       return;
     }
     this.boundary = initGraphBoundaryStore(this.graph);
+  }
+
+  private refreshTargetCurve(): void {
+    if (this.config.dataMode !== "1d" || this.config.problemType !== "regression") {
+      this.targetCurve = null;
+      return;
+    }
+    if (!isDataset1DId(this.config.dataset)) {
+      this.targetCurve = null;
+      return;
+    }
+    this.targetCurve = targetCurve1D(this.config.dataset, CURVE_DENSITY);
   }
 
   private refreshBoundaryInternal(refreshInputFeatures: boolean): void {
@@ -462,6 +717,22 @@ export class PlaygroundEngine {
     updateGraphBoundaries(this.graph, this.config.enabledFeatures, this.boundary, {
       refreshInputFeatures: refreshInputFeatures || this.boundaryNeedsInputRefresh,
     });
+    this.boundaryNeedsInputRefresh = false;
+  }
+
+  private refreshCurvesInternal(refreshInputFeatures: boolean): void {
+    const validation = this.graph.validate();
+    if (!validation.valid) {
+      this.boundaryNeedsInputRefresh = false;
+      return;
+    }
+    if (!Object.keys(this.curves).length) {
+      this.curves = initGraphCurveStore(this.graph);
+    }
+    updateGraphCurves(this.graph, this.config.enabledFeatures, this.curves, {
+      refreshInputFeatures: refreshInputFeatures || this.boundaryNeedsInputRefresh,
+    });
+    this.refreshTargetCurve();
     this.boundaryNeedsInputRefresh = false;
   }
 
@@ -499,7 +770,7 @@ export class PlaygroundEngine {
     this.graph = buildMlpGraph(
       shape,
       TF_ACTIVATIONS[this.config.activation],
-      Activations.TANH,
+      this.outputActivation(),
       inputIds,
     );
 
@@ -537,6 +808,8 @@ export class PlaygroundEngine {
     }
 
     // The network is rebuilt with fresh weights, so training starts over.
+    this.reinitializeWeights();
+    this.applyRegularizationToLinks();
     this.epoch = 0;
     this.lossHistory = [];
     this.lossTrain = this.getLoss(this.trainData);
@@ -559,9 +832,25 @@ export class PlaygroundEngine {
   }
 
   private generateData(): void {
-    const generator: DataGenerator = DATASETS[this.config.dataset];
-    const noise = this.config.noise / 100;
-    const data = generator(NUM_SAMPLES, noise);
+    if (this.config.dataMode === "1d") {
+      const dataset = isDataset1DId(this.config.dataset)
+        ? this.config.dataset
+        : DEFAULT_DATASET_1D_CLASSIFICATION;
+      this.config.dataset = dataset;
+      const generator = DATASETS_1D[dataset];
+      const data = generator(NUM_SAMPLES, this.config.noise / 100);
+      shuffle(data);
+      const splitIndex = Math.floor((data.length * this.config.percTrainData) / 100);
+      this.trainData = data.slice(0, splitIndex);
+      this.testData = data.slice(splitIndex);
+      return;
+    }
+    const dataset = (this.config.dataset in DATASETS
+      ? this.config.dataset
+      : "circle") as DatasetId;
+    this.config.dataset = dataset;
+    const generator: DataGenerator = DATASETS[dataset];
+    const data = generator(NUM_SAMPLES, this.config.noise / 100);
     shuffle(data);
     const splitIndex = Math.floor((data.length * this.config.percTrainData) / 100);
     this.trainData = data.slice(0, splitIndex);

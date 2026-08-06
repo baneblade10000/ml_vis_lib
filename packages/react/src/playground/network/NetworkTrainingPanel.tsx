@@ -1,5 +1,13 @@
 import type { CSSProperties } from "react";
-import { TF_ACTIVATIONS, type TfActivationId } from "@ml-vis/core";
+import {
+  TF_ACTIVATIONS,
+  TF_REGULARIZATION_RATES,
+  TF_REGULARIZATIONS,
+  WEIGHT_INITS,
+  type TfActivationId,
+  type TfRegularizationId,
+  type WeightInitId,
+} from "@ml-vis/core";
 import { useNetworkMessages } from "./messages";
 
 const LEARNING_RATES = [0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10];
@@ -7,12 +15,18 @@ const LEARNING_RATES = [0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 
 export interface NetworkTrainingPanelProps {
   learningRate: number;
   activation: TfActivationId;
+  weightInit: WeightInitId;
+  regularization: TfRegularizationId;
+  regularizationRate: number;
   batchSize: number;
   noise: number;
   percTrainData: number;
   discretize: boolean;
   onLearningRateChange: (rate: number) => void;
   onActivationChange: (activation: TfActivationId) => void;
+  onWeightInitChange: (init: WeightInitId) => void;
+  onRegularizationChange: (regularization: TfRegularizationId) => void;
+  onRegularizationRateChange: (rate: number) => void;
   onBatchSizeChange: (size: number) => void;
   onNoiseChange: (noise: number) => void;
   onTrainRatioChange: (ratio: number) => void;
@@ -23,12 +37,18 @@ export interface NetworkTrainingPanelProps {
 export function NetworkTrainingPanel({
   learningRate,
   activation,
+  weightInit,
+  regularization,
+  regularizationRate,
   batchSize,
   noise,
   percTrainData,
   discretize,
   onLearningRateChange,
   onActivationChange,
+  onWeightInitChange,
+  onRegularizationChange,
+  onRegularizationRateChange,
   onBatchSizeChange,
   onNoiseChange,
   onTrainRatioChange,
@@ -67,6 +87,52 @@ export function NetworkTrainingPanel({
             {Object.keys(TF_ACTIVATIONS).map((id) => (
               <option key={id} value={id}>
                 {id}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="tf-training-field">
+          <span className="tf-training-label">{t.weightInit}</span>
+          <select
+            className="tf-select tf-select--dock"
+            value={weightInit}
+            onChange={(e) => onWeightInitChange(e.target.value as WeightInitId)}
+          >
+            {WEIGHT_INITS.map((id) => (
+              <option key={id} value={id}>
+                {t.weightInitLabels[id]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="tf-training-field">
+          <span className="tf-training-label">{t.regularization}</span>
+          <select
+            className="tf-select tf-select--dock"
+            value={regularization}
+            onChange={(e) => onRegularizationChange(e.target.value as TfRegularizationId)}
+          >
+            {TF_REGULARIZATIONS.map((id) => (
+              <option key={id} value={id}>
+                {t.regularizationLabels[id]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="tf-training-field">
+          <span className="tf-training-label">{t.regularizationRate}</span>
+          <select
+            className="tf-select tf-select--dock"
+            value={regularizationRate}
+            disabled={regularization === "none"}
+            onChange={(e) => onRegularizationRateChange(Number(e.target.value))}
+          >
+            {TF_REGULARIZATION_RATES.map((v) => (
+              <option key={v} value={v}>
+                {v}
               </option>
             ))}
           </select>

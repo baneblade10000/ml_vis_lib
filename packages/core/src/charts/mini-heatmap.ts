@@ -47,41 +47,124 @@ const imageDataCache = new WeakMap<
   { w: number; h: number; image: ImageData }
 >();
 
+export type ValueMatrixLayout = "col-major" | "row-major";
+/** `diverging` = TF Playground violet→magenta; `gray` = bright black→white. */
+export type ValueMatrixPalette = "diverging" | "gray";
+
+export interface RenderValueMatrixOptions {
+  discretize?: boolean;
+  alpha?: number;
+  layout?: ValueMatrixLayout;
+  palette?: ValueMatrixPalette;
+  /**
+   * Stretch the matrix into the full palette range using its own min/max.
+   * Defaults to true for `gray`, false for `diverging`.
+   */
+  autoscale?: boolean;
+}
+
+function sample(
+  matrix: number[][],
+  x: number,
+  y: number,
+  layout: ValueMatrixLayout,
+): number {
+  return layout === "row-major" ? matrix[y]![x]! : matrix[x]![y]!;
+}
+
+function matrixRange(
+  matrix: number[][],
+  width: number,
+  height: number,
+  layout: ValueMatrixLayout,
+): { min: number; max: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const v = sample(matrix, x, y, layout);
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return { min: 0, max: 1 };
+  if (max - min < 1e-9) return { min: min - 0.5, max: max + 0.5 };
+  return { min, max };
+}
+
 /**
- * Render a value matrix in [-1, 1] to a canvas using ImageData (TF Playground style).
- * Matrix is indexed as matrix[col][row].
+ * Render a value matrix to a canvas using ImageData.
+ *
+ * Positional form (TF Playground): `(canvas, matrix, discretize?, alpha?, layout?)`
+ * Options form: `(canvas, matrix, { layout: "row-major", palette: "gray" })`
  */
 export function renderValueMatrix(
   canvas: HTMLCanvasElement,
   matrix: number[][],
-  discretize = false,
-  alpha = 160,
+  discretizeOrOptions: boolean | RenderValueMatrixOptions = false,
+  alphaArg = 160,
+  layoutArg: ValueMatrixLayout = "col-major",
 ): void {
-  const dx = matrix.length;
-  const dy = matrix[0]?.length ?? 0;
-  if (!dx || dy !== dx) return;
+  const opts: RenderValueMatrixOptions =
+    typeof discretizeOrOptions === "object" && discretizeOrOptions !== null
+      ? discretizeOrOptions
+      : {
+          discretize: discretizeOrOptions,
+          alpha: alphaArg,
+          layout: layoutArg,
+        };
 
-  if (canvas.width !== dx || canvas.height !== dy) {
-    canvas.width = dx;
-    canvas.height = dy;
+  const layout = opts.layout ?? "col-major";
+  const palette = opts.palette ?? "diverging";
+  const discretize = opts.discretize ?? false;
+  const alpha = opts.alpha ?? (palette === "gray" ? 255 : 160);
+  const autoscale = opts.autoscale ?? palette === "gray";
+
+  const outer = matrix.length;
+  const inner = matrix[0]?.length ?? 0;
+  if (!outer || !inner) return;
+
+  const width = layout === "row-major" ? inner : outer;
+  const height = layout === "row-major" ? outer : inner;
+  if (layout === "col-major" && width !== height) return;
+
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
     imageDataCache.delete(canvas);
   }
   const context = canvas.getContext("2d");
   if (!context) return;
 
   let cached = imageDataCache.get(canvas);
-  if (!cached || cached.w !== dx || cached.h !== dy) {
-    cached = { w: dx, h: dy, image: context.createImageData(dx, dy) };
+  if (!cached || cached.w !== width || cached.h !== height) {
+    cached = { w: width, h: height, image: context.createImageData(width, height) };
     imageDataCache.set(canvas, cached);
   }
   const image = cached.image;
-  for (let y = 0, p = -1; y < dy; y++) {
-    for (let x = 0; x < dx; x++) {
-      let value = matrix[x][y];
+  const range = autoscale ? matrixRange(matrix, width, height, layout) : { min: -1, max: 1 };
+  const span = range.max - range.min;
+
+  for (let y = 0, p = -1; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let value = sample(matrix, x, y, layout);
       if (discretize) {
         value = value >= 0 ? 1 : -1;
       }
-      const { r, g, b } = valueToRgb(value);
+
+      let r: number;
+      let g: number;
+      let b: number;
+      if (palette === "gray") {
+        const t = Math.min(1, Math.max(0, (value - range.min) / span));
+        // Slight gamma so mid-tones stay punchy on small upscaled tiles.
+        const g8 = Math.round(Math.pow(t, 0.85) * 255);
+        r = g = b = g8;
+      } else {
+        const mapped = autoscale ? ((value - range.min) / span) * 2 - 1 : value;
+        ({ r, g, b } = valueToRgb(mapped));
+      }
+
       image.data[++p] = r;
       image.data[++p] = g;
       image.data[++p] = b;

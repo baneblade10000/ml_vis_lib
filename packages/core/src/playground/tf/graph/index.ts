@@ -38,6 +38,13 @@ export {
 } from "./boundary";
 
 export {
+  initGraphCurveStore,
+  updateGraphCurves,
+  updateGraphHiddenCurves,
+  updateGraphOutputCurve,
+} from "./curves";
+
+export {
   layoutMlpFromLayers,
   normalizeGraphLayout,
   MLP_COL_SPACING,

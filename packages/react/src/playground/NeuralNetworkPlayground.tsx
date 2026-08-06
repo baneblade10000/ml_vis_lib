@@ -5,8 +5,14 @@ import {
   DEFAULT_TF_CONFIG,
   PlaygroundEngine,
   TF_DATASETS,
+  TF_DATASETS_1D_CLASSIFICATION,
+  TF_DATASETS_1D_REGRESSION,
+  type Dataset1DId,
+  type TfAnyDatasetId,
+  type TfDataMode,
   type TfDatasetId,
   type TfPlaygroundConfig,
+  type TfProblemType,
 } from "@ml-vis/core";
 import { NetworkInspector } from "./network/NetworkInspector";
 import { NetworkArchitecturePanel } from "./network/NetworkArchitecturePanel";
@@ -14,19 +20,27 @@ import { NetworkPalette } from "./network/NetworkPalette";
 import { NetworkTrainingPanel } from "./network/NetworkTrainingPanel";
 import { ReactFlowNetworkGraph } from "./network/ReactFlowNetworkGraph";
 import { paintAllBoundaries, paintAllBoundariesAfterCommit, paintBoundaryNode } from "./network/boundaryPaint";
-import type { TrainingStats } from "./network/NetworkBoundaryContext";
+import type { CurveStore, TrainingStats } from "./network/NetworkBoundaryContext";
 import { useNetworkMessages } from "./network/messages";
+
+const DATASETS_2D: TfDatasetId[] = ["circle", "xor", "gauss", "spiral"];
+const DATASETS_1D_CLASSIFICATION: Dataset1DId[] = ["gauss1d", "threshold", "twoClusters"];
+const DATASETS_1D_REGRESSION: Dataset1DId[] = ["sine", "linear", "cubic", "step"];
 
 function DatasetThumbnail({
   datasetId,
   label,
   selected,
   onSelect,
+  mode,
+  problemType = "classification",
 }: {
-  datasetId: TfDatasetId;
+  datasetId: TfAnyDatasetId;
   label: string;
   selected: boolean;
   onSelect: () => void;
+  mode: TfDataMode;
+  problemType?: TfProblemType;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -44,7 +58,55 @@ function DatasetThumbnail({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, size, size);
-    const points = TF_DATASETS[datasetId](120, 0);
+
+    if (mode === "1d") {
+      const gen =
+        datasetId in TF_DATASETS_1D_CLASSIFICATION
+          ? TF_DATASETS_1D_CLASSIFICATION[datasetId as keyof typeof TF_DATASETS_1D_CLASSIFICATION]
+          : TF_DATASETS_1D_REGRESSION[datasetId as keyof typeof TF_DATASETS_1D_REGRESSION];
+      if (!gen) return;
+      const points = gen(80, 0);
+      // Fit Y to the actual series — a fixed [-1.5, 1.5] clips linear/cubic hard.
+      let yMin = Infinity;
+      let yMax = -Infinity;
+      for (const p of points) {
+        if (p.y < yMin) yMin = p.y;
+        if (p.y > yMax) yMax = p.y;
+      }
+      if (!Number.isFinite(yMin) || !Number.isFinite(yMax) || yMin === yMax) {
+        yMin = -1.2;
+        yMax = 1.2;
+      } else {
+        const pad = (yMax - yMin) * 0.12;
+        yMin -= pad;
+        yMax += pad;
+      }
+      // Keep zero in view when the series crosses / sits near it.
+      yMin = Math.min(yMin, -0.15);
+      yMax = Math.max(yMax, 0.15);
+      const mapY = (y: number) => ((yMax - y) / (yMax - yMin)) * size;
+      const isRegression = problemType === "regression";
+
+      ctx.strokeStyle = "rgba(0,0,0,0.12)";
+      ctx.beginPath();
+      ctx.moveTo(0, mapY(0));
+      ctx.lineTo(size, mapY(0));
+      ctx.stroke();
+      for (const p of points) {
+        const px = ((p.x + 6) / 12) * size;
+        const py = mapY(p.y);
+        ctx.beginPath();
+        ctx.arc(px, py, 2.4, 0, Math.PI * 2);
+        // Regression has no classes — one neutral color. Classification keeps ±1 hues.
+        ctx.fillStyle = isRegression
+          ? "rgb(100, 116, 139)"
+          : p.label > 0 ? CLASS_1_HEX : CLASS_0_HEX;
+        ctx.fill();
+      }
+      return;
+    }
+
+    const points = TF_DATASETS[datasetId as TfDatasetId](120, 0);
     for (const p of points) {
       const px = ((p.x + 6) / 12) * size;
       const py = ((6 - p.y) / 12) * size;
@@ -53,7 +115,7 @@ function DatasetThumbnail({
       ctx.fillStyle = p.label > 0 ? CLASS_1_HEX : CLASS_0_HEX;
       ctx.fill();
     }
-  }, [datasetId]);
+  }, [datasetId, mode, problemType]);
 
   return (
     <div className={`dataset ${selected ? "selected" : ""}`}>
@@ -81,6 +143,8 @@ export interface NeuralNetworkPlaygroundProps {
 type GraphPaneProps = {
   engineRef: RefObject<PlaygroundEngine | null>;
   boundaryRef: RefObject<Record<string, number[][]>>;
+  curvesRef: RefObject<CurveStore>;
+  targetCurveRef: RefObject<number[] | null>;
   statsRef: RefObject<TrainingStats>;
   trainingLiveRef: RefObject<boolean>;
   paintGeneration: number;
@@ -104,18 +168,24 @@ type GraphPaneProps = {
   onNormalizeLayout: () => void;
   onLearningRateChange: (learningRate: number) => void;
   onActivationChange: (activation: TfPlaygroundConfig["activation"]) => void;
+  onWeightInitChange: (weightInit: TfPlaygroundConfig["weightInit"]) => void;
+  onRegularizationChange: (regularization: TfPlaygroundConfig["regularization"]) => void;
+  onRegularizationRateChange: (regularizationRate: number) => void;
   onBatchSizeChange: (batchSize: number) => void;
   onNoiseChange: (noise: number) => void;
   onTrainRatioChange: (percTrainData: number) => void;
   onDiscretizeChange: (discretize: boolean) => void;
   onRegenerateData: () => void;
-  onDatasetChange: (dataset: TfDatasetId) => void;
+  onDatasetChange: (dataset: TfAnyDatasetId) => void;
+  onProblemTypeChange: (problemType: TfProblemType) => void;
   onResetWeights: () => void;
 };
 
 const NetworkGraphPane = memo(function NetworkGraphPane({
   engineRef,
   boundaryRef,
+  curvesRef,
+  targetCurveRef,
   statsRef,
   trainingLiveRef,
   paintGeneration,
@@ -139,23 +209,31 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
   onNormalizeLayout,
   onLearningRateChange,
   onActivationChange,
+  onWeightInitChange,
+  onRegularizationChange,
+  onRegularizationRateChange,
   onBatchSizeChange,
   onNoiseChange,
   onTrainRatioChange,
   onDiscretizeChange,
   onRegenerateData,
   onDatasetChange,
+  onProblemTypeChange,
   onResetWeights,
 }: GraphPaneProps) {
   const engine = engineRef.current!;
   const cfg = engine.config;
   const t = useNetworkMessages();
   const fitViewKey = engine.graph.inputIds.join(",");
+  const datasets1d =
+    cfg.problemType === "regression" ? DATASETS_1D_REGRESSION : DATASETS_1D_CLASSIFICATION;
 
   return (
     <ReactFlowNetworkGraph
       graph={engine.graph}
       enabledFeatures={cfg.enabledFeatures}
+      dataMode={cfg.dataMode}
+      problemType={cfg.problemType}
       trainData={engine.trainData}
       lossTest={engine.lossTest}
       lossTrain={engine.lossTrain}
@@ -164,6 +242,8 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
       trainingLiveRef={trainingLiveRef}
       paintGeneration={paintGeneration}
       boundaryRef={boundaryRef}
+      curvesRef={curvesRef}
+      targetCurveRef={targetCurveRef}
       statsRef={statsRef}
       selectedNodeId={selectedNodeId}
       selectedEdgeId={selectedEdgeId}
@@ -199,16 +279,39 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
             {t.arrangeLayout}
           </button>
         </div>
+        {cfg.dataMode === "1d" && (
+          <div className="tf-flow-dock-section">
+            <h4 className="tf-flow-dock-title">{t.problemType}</h4>
+            <div className="tf-flat-switch" role="group" aria-label={t.problemType}>
+              {(["classification", "regression"] as TfProblemType[]).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`tf-flat-switch__btn${cfg.problemType === id ? " selected" : ""}`}
+                  onClick={() => onProblemTypeChange(id)}
+                >
+                  {t.problemTypeLabels[id]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="tf-flow-dock-section">
           <h4 className="tf-flow-dock-title">{t.dataset}</h4>
           <div className="dataset-list dataset-list--compact">
-            {(["circle", "xor", "gauss", "spiral"] as TfDatasetId[]).map((id) => (
+            {(cfg.dataMode === "1d" ? datasets1d : DATASETS_2D).map((id) => (
               <DatasetThumbnail
                 key={id}
                 datasetId={id}
-                label={t.datasetLabels[id]}
+                label={
+                  cfg.dataMode === "1d"
+                    ? t.dataset1dLabels[id as Dataset1DId]
+                    : t.datasetLabels[id as TfDatasetId]
+                }
                 selected={cfg.dataset === id}
                 onSelect={() => onDatasetChange(id)}
+                mode={cfg.dataMode}
+                problemType={cfg.problemType}
               />
             ))}
           </div>
@@ -228,12 +331,18 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
         <NetworkTrainingPanel
           learningRate={cfg.learningRate}
           activation={cfg.activation}
+          weightInit={cfg.weightInit}
+          regularization={cfg.regularization}
+          regularizationRate={cfg.regularizationRate}
           batchSize={cfg.batchSize}
           noise={cfg.noise}
           percTrainData={cfg.percTrainData}
           discretize={cfg.discretize ?? false}
           onLearningRateChange={onLearningRateChange}
           onActivationChange={onActivationChange}
+          onWeightInitChange={onWeightInitChange}
+          onRegularizationChange={onRegularizationChange}
+          onRegularizationRateChange={onRegularizationRateChange}
           onBatchSizeChange={onBatchSizeChange}
           onNoiseChange={onNoiseChange}
           onTrainRatioChange={onTrainRatioChange}
@@ -254,6 +363,8 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   }
   const t = useNetworkMessages();
   const boundaryRef = useRef(engineRef.current.boundary);
+  const curvesRef = useRef<CurveStore>(engineRef.current.curves);
+  const targetCurveRef = useRef<number[] | null>(engineRef.current.targetCurve);
   const statsRef = useRef<TrainingStats>({
     epoch: engineRef.current.epoch,
     lossTrain: engineRef.current.lossTrain,
@@ -285,6 +396,8 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   const syncRuntimeRefs = useCallback(() => {
     const engine = engineRef.current;
     boundaryRef.current = engine.boundary;
+    curvesRef.current = engine.curves;
+    targetCurveRef.current = engine.targetCurve;
     const next = { epoch: engine.epoch, lossTrain: engine.lossTrain, lossTest: engine.lossTest };
     statsRef.current = next;
     setStats(next);
@@ -295,6 +408,8 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     const engine = engineRef.current;
     engine.refreshOutputBoundaryFast();
     boundaryRef.current = engine.boundary;
+    curvesRef.current = engine.curves;
+    targetCurveRef.current = engine.targetCurve;
     paintAllBoundaries();
   }, [playing]);
 
@@ -325,6 +440,8 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           engine.refreshOutputBoundaryFast();
           engine.refreshHiddenBoundariesFast();
           boundaryRef.current = engine.boundary;
+          curvesRef.current = engine.curves;
+          targetCurveRef.current = engine.targetCurve;
           // Imperative paint only — requestPaint() during Play re-renders React Flow and wipes canvases.
           paintBoundaryNode(engine.outputNodeId);
           paintAllBoundaries();
@@ -417,8 +534,44 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     bump();
   }, [bump, requestPaint, syncRuntimeRefs]);
 
-  const onDatasetChange = useCallback((dataset: TfDatasetId) => {
+  const onWeightInitChange = useCallback((weightInit: TfPlaygroundConfig["weightInit"]) => {
+    engineRef.current.setWeightInit(weightInit);
+    setPlaying(false);
+    syncRuntimeRefs();
+    requestPaint();
+    bump();
+  }, [bump, requestPaint, syncRuntimeRefs]);
+
+  const onRegularizationChange = useCallback((regularization: TfPlaygroundConfig["regularization"]) => {
+    engineRef.current.setRegularization(regularization);
+    bump();
+  }, [bump]);
+
+  const onRegularizationRateChange = useCallback((regularizationRate: number) => {
+    engineRef.current.config.regularizationRate = regularizationRate;
+    bump();
+  }, [bump]);
+
+  const onDatasetChange = useCallback((dataset: TfAnyDatasetId) => {
     engineRef.current.setDataset(dataset);
+    setPlaying(false);
+    syncRuntimeRefs();
+    requestPaint();
+    bump();
+  }, [bump, requestPaint, syncRuntimeRefs]);
+
+  const onDataModeChange = useCallback((dataMode: TfDataMode) => {
+    engineRef.current.setDataMode(dataMode);
+    setPlaying(false);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    syncRuntimeRefs();
+    requestPaint();
+    bump();
+  }, [bump, requestPaint, syncRuntimeRefs]);
+
+  const onProblemTypeChange = useCallback((problemType: TfProblemType) => {
+    engineRef.current.setProblemType(problemType);
     setPlaying(false);
     syncRuntimeRefs();
     requestPaint();
@@ -546,7 +699,34 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           <button type="button" className="tf-btn tf-btn--secondary" onClick={step}>
             {t.step}
           </button>
+          <div className="tf-flat-switch" role="group" aria-label={t.mode}>
+            <button
+              type="button"
+              className={`tf-flat-switch__btn${engineRef.current.config.dataMode === "1d" ? " selected" : ""}`}
+              onClick={() => onDataModeChange("1d")}
+            >
+              {t.mode1D}
+            </button>
+            <button
+              type="button"
+              className={`tf-flat-switch__btn${engineRef.current.config.dataMode === "2d" ? " selected" : ""}`}
+              onClick={() => onDataModeChange("2d")}
+            >
+              {t.mode2D}
+            </button>
+          </div>
         </div>
+
+        <p className="tf-inspired-by">
+          {t.inspiredBy}{" "}
+          <a
+            href="https://playground.tensorflow.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t.inspiredBySource}
+          </a>
+        </p>
 
         <div className="tf-toolbar-group tf-toolbar-group--params">
           <div className="tf-toolbar-stat">
@@ -573,6 +753,8 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
         <NetworkGraphPane
           engineRef={engineRef}
           boundaryRef={boundaryRef}
+          curvesRef={curvesRef}
+          targetCurveRef={targetCurveRef}
           statsRef={statsRef}
           trainingLiveRef={trainingLiveRef}
           paintGeneration={paintGeneration}
@@ -596,12 +778,16 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           onNormalizeLayout={onNormalizeLayout}
           onLearningRateChange={onLearningRateChange}
           onActivationChange={onActivationChange}
+          onWeightInitChange={onWeightInitChange}
+          onRegularizationChange={onRegularizationChange}
+          onRegularizationRateChange={onRegularizationRateChange}
           onBatchSizeChange={onBatchSizeChange}
           onNoiseChange={onNoiseChange}
           onTrainRatioChange={onTrainRatioChange}
           onDiscretizeChange={onDiscretizeChange}
           onRegenerateData={onRegenerateData}
           onDatasetChange={onDatasetChange}
+          onProblemTypeChange={onProblemTypeChange}
           onResetWeights={resetWeights}
         />
       </div>
