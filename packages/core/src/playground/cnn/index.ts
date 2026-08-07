@@ -20,7 +20,7 @@ export type {
 
 export { CNN_ACTIVATIONS, CNN_ACTIVATION_IDS, activationById, Activations } from "./activations";
 export type { CnnActivationId } from "./activations";
-export type { ActivationFunction } from "../tf/nn";
+export type { ActivationFunction } from "../network/nn";
 
 export { Losses } from "./loss";
 export type { LossFunction } from "./loss";

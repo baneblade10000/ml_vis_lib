@@ -27,7 +27,7 @@ function scaleLinear(domain: [number, number], range: [number, number], value: n
 /**
  * Given a neural network, computes the output of every node on a square grid.
  * Returns a map where each key is the node ID and the value is a square matrix
- * indexed as matrix[col][row] (TF Playground convention).
+ * indexed as matrix[col][row] (column-major heatmap convention).
  */
 export function computeBoundaries(
   network: Node[][],
@@ -73,7 +73,7 @@ export function computeBoundaries(
   return boundary;
 }
 
-/** Convert TF boundary matrix to GridPoint[] for DecisionBoundaryPlot. */
+/** Convert boundary matrix to GridPoint[] for DecisionBoundaryPlot. */
 export function boundaryToGridPoints(
   matrix: number[][],
   xDomain: [number, number] = [-6, 6],

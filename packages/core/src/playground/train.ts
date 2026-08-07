@@ -2,6 +2,7 @@ import { gridPoints, makeDataset } from "./datasets";
 import { applyNormalization, featureMatrix, normalizeFeatures } from "./features";
 import {
   accuracy,
+  applyFlatGradMeans,
   createMLP,
   crossEntropyLoss,
   flattenWeights,
@@ -156,6 +157,43 @@ function trainOneEpoch(state: LiveTrainingState): void {
     const labels = indices.map((index) => split.trainLabels[index]);
     trainBatch(mlp, batch, labels);
   }
+}
+
+/**
+ * One epoch with an external batch trainer (data-parallel coordinator).
+ * `applyBatch(indices)` must update `state.mlp` weights for that mini-batch.
+ */
+export async function trainOneEpochWith(
+  state: LiveTrainingState,
+  applyBatch: (indices: number[]) => void | Promise<void>,
+): Promise<void> {
+  const { config, split } = state;
+  const batchSize = Math.max(4, Math.min(config.batchSize, split.trainFeatures.length));
+  const order = shuffleIndices(split.trainFeatures.length, createRng(config.seed + state.epoch + 101));
+  for (let start = 0; start < split.trainFeatures.length; start += batchSize) {
+    const indices = order.slice(start, start + batchSize);
+    await applyBatch(indices);
+  }
+}
+
+/** Apply flat grad sums (from shards) as a mean update on the live MLP. */
+export function applyMlpGradSums(mlp: MLP, gradSums: Float64Array, count: number): void {
+  const n = Math.max(1, count);
+  const means = new Float64Array(gradSums.length);
+  for (let i = 0; i < gradSums.length; i++) means[i] = gradSums[i]! / n;
+  applyFlatGradMeans(mlp, means);
+}
+
+export function finishEpochBookkeeping(state: LiveTrainingState): LiveTrainingState {
+  const next = { ...state, history: [...state.history], snapshots: [...state.snapshots] };
+  next.epoch += 1;
+  appendHistoryRow(next.history, next.mlp, next.split, next.epoch);
+  const snapshotEpochs = boundarySnapshotEpochs(next.config.epochs);
+  if (snapshotEpochs.has(next.epoch)) {
+    next.snapshots.push({ epoch: next.epoch, weights: flattenWeights(next.mlp) });
+  }
+  if (next.epoch >= next.config.epochs) next.playing = false;
+  return next;
 }
 
 export function advanceLiveTraining(state: LiveTrainingState, epochs = 1): LiveTrainingState {

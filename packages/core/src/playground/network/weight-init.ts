@@ -33,7 +33,7 @@ export function sampleWeight(init: WeightInitId, fanIn: number, fanOut: number):
     }
     case "uniform":
     default:
-      // TensorFlow Playground default: U[-0.5, 0.5).
+      // Classic playground default: U[-0.5, 0.5).
       return Math.random() - 0.5;
   }
 }
@@ -41,7 +41,7 @@ export function sampleWeight(init: WeightInitId, fanIn: number, fanOut: number):
 /** Bias for a non-input node under the selected scheme. */
 export function sampleBias(init: WeightInitId, kind: string): number {
   if (kind === "sum") return 0;
-  // Match classic TF Playground: small positive bias for uniform init.
+  // Match classic playground: small positive bias for uniform init.
   if (init === "uniform") return 0.1;
   return 0;
 }

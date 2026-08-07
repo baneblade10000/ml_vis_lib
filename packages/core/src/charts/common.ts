@@ -16,7 +16,7 @@ export function setupCanvas(canvas: HTMLCanvasElement, width: number, height: nu
   return ctx;
 }
 
-export { probabilityColorRgb, probabilityToRgba, mixProbabilityColor } from "../playground/tf/colors";
+export { probabilityColorRgb, probabilityToRgba, mixProbabilityColor } from "../playground/network/colors";
 export function bilinearSample(
   values: Float64Array,
   cols: number,

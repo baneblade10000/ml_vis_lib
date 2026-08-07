@@ -81,12 +81,12 @@ export {
 export { boundaryToGridPoints, computeBoundaries, examplesToSamples } from "./boundary";
 
 export {
-  DEFAULT_TF_CONFIG,
+  DEFAULT_NETWORK_CONFIG,
   PlaygroundEngine,
   PLAYGROUND_OPTIMIZERS,
-  TF_ACTIVATIONS,
-  TF_REGULARIZATIONS,
-  TF_REGULARIZATION_RATES,
+  NETWORK_ACTIVATIONS,
+  NETWORK_REGULARIZATIONS,
+  NETWORK_REGULARIZATION_RATES,
   WEIGHT_INITS,
 } from "./engine";
 export type {
@@ -95,12 +95,12 @@ export type {
   GraphPosition,
   LossHistoryPoint,
   PlaygroundOptimizerId,
-  TfActivationId,
-  TfAnyDatasetId,
-  TfDataMode,
-  TfPlaygroundConfig,
-  TfProblemType,
-  TfRegularizationId,
+  NetworkActivationId,
+  NetworkAnyDatasetId,
+  NetworkDataMode,
+  NetworkPlaygroundConfig,
+  NetworkProblemType,
+  NetworkRegularizationId,
   WeightInitId,
 } from "./engine";
 

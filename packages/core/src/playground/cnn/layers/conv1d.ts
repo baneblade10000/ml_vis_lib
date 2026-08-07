@@ -252,6 +252,50 @@ export class Conv1DLayer extends Layer {
     for (const s of this.optBiases) resetOptState(s);
   }
 
+  override writeParams(dst: Float64Array, offset: number): number {
+    let o = offset;
+    for (let f = 0; f < this.filters; f++) {
+      for (let i = 0; i < this.kernels[f]!.length; i++) {
+        for (let kk = 0; kk < this.kernelSize; kk++) dst[o++] = this.kernels[f]![i]![kk]!;
+      }
+    }
+    for (let f = 0; f < this.filters; f++) dst[o++] = this.biases[f]!;
+    return o;
+  }
+
+  override readParams(src: Float64Array, offset: number): number {
+    let o = offset;
+    for (let f = 0; f < this.filters; f++) {
+      for (let i = 0; i < this.kernels[f]!.length; i++) {
+        for (let kk = 0; kk < this.kernelSize; kk++) this.kernels[f]![i]![kk] = src[o++]!;
+      }
+    }
+    for (let f = 0; f < this.filters; f++) this.biases[f] = src[o++]!;
+    return o;
+  }
+
+  override writeGrads(dst: Float64Array, offset: number): number {
+    let o = offset;
+    for (let f = 0; f < this.filters; f++) {
+      for (let i = 0; i < this.gradKernels[f]!.length; i++) {
+        for (let kk = 0; kk < this.kernelSize; kk++) dst[o++] = this.gradKernels[f]![i]![kk]!;
+      }
+    }
+    for (let f = 0; f < this.filters; f++) dst[o++] = this.gradBiases[f]!;
+    return o;
+  }
+
+  override readGrads(src: Float64Array, offset: number): number {
+    let o = offset;
+    for (let f = 0; f < this.filters; f++) {
+      for (let i = 0; i < this.gradKernels[f]!.length; i++) {
+        for (let kk = 0; kk < this.kernelSize; kk++) this.gradKernels[f]![i]![kk] = src[o++]!;
+      }
+    }
+    for (let f = 0; f < this.filters; f++) this.gradBiases[f] = src[o++]!;
+    return o;
+  }
+
   paramCount(): number {
     if (this.kernels.length === 0) return 0;
     return this.filters * this.kernels[0].length * this.kernelSize + this.filters;

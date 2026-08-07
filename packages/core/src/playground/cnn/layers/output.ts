@@ -136,6 +136,34 @@ export class OutputLayer extends Layer {
     this.gradWeights.fill(0);
   }
 
+  override writeParams(dst: Float64Array, offset: number): number {
+    let o = offset;
+    for (let i = 0; i < this.inUnits; i++) dst[o++] = this.weights[i]!;
+    dst[o++] = this.bias;
+    return o;
+  }
+
+  override readParams(src: Float64Array, offset: number): number {
+    let o = offset;
+    for (let i = 0; i < this.inUnits; i++) this.weights[i] = src[o++]!;
+    this.bias = src[o++]!;
+    return o;
+  }
+
+  override writeGrads(dst: Float64Array, offset: number): number {
+    let o = offset;
+    for (let i = 0; i < this.inUnits; i++) dst[o++] = this.gradWeights[i]!;
+    dst[o++] = this.gradBias;
+    return o;
+  }
+
+  override readGrads(src: Float64Array, offset: number): number {
+    let o = offset;
+    for (let i = 0; i < this.inUnits; i++) this.gradWeights[i] = src[o++]!;
+    this.gradBias = src[o++]!;
+    return o;
+  }
+
   clearOptimizerState(): void {
     for (const s of this.optWeights) resetOptState(s);
     resetOptState(this.optBias);

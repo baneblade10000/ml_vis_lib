@@ -1,6 +1,7 @@
-import type { ActivationFunction } from "../nn";
-
 export type GraphNodeKind = "input" | "dense" | "sum" | "output";
+
+/** Serializable activation id (GraphSnapshot crosses the worker boundary). */
+export type GraphActivationId = "relu" | "tanh" | "sigmoid" | "linear";
 
 export interface GraphPosition {
   x: number;
@@ -10,7 +11,7 @@ export interface GraphPosition {
 export interface GraphNodeDef {
   id: string;
   kind: GraphNodeKind;
-  activation: ActivationFunction;
+  activation: GraphActivationId;
   bias: number;
   label?: string;
 }
@@ -20,6 +21,8 @@ export interface GraphEdgeDef {
   source: string;
   target: string;
   weight: number;
+  /** Optional display snapshot of ∂E/∂w (not required for rebuild). */
+  lastGradient?: number;
 }
 
 export interface GraphSnapshot {

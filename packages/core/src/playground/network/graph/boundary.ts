@@ -34,7 +34,7 @@ export function initGraphBoundaryStore(
 
 /**
  * Update boundary matrices in place with a single forward-prop sweep per grid cell
- * (same strategy as the original TF Playground).
+ * (same strategy as the original interactive playground).
  */
 export function updateGraphBoundaries(
   graph: ComputationalGraph,

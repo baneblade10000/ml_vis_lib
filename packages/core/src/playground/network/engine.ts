@@ -70,25 +70,25 @@ import type { PlaygroundOptimizerId } from "../optimizers";
 export type { PlaygroundOptimizerId } from "../optimizers";
 export { PLAYGROUND_OPTIMIZERS } from "../optimizers";
 
-export type TfActivationId = "relu" | "tanh" | "sigmoid" | "linear";
-export type TfRegularizationId = "none" | "L1" | "L2";
-export type TfDataMode = "2d" | "1d";
-export type TfProblemType = "classification" | "regression";
-export type TfAnyDatasetId = DatasetId | Dataset1DId;
+export type NetworkActivationId = "relu" | "tanh" | "sigmoid" | "linear";
+export type NetworkRegularizationId = "none" | "L1" | "L2";
+export type NetworkDataMode = "2d" | "1d";
+export type NetworkProblemType = "classification" | "regression";
+export type NetworkAnyDatasetId = DatasetId | Dataset1DId;
 export type { WeightInitId } from "./weight-init";
 export type { Dataset1DId } from "./dataset-1d";
 export { WEIGHT_INITS } from "./weight-init";
 
-export const TF_ACTIVATIONS: Record<TfActivationId, ActivationFunction> = {
+export const NETWORK_ACTIVATIONS: Record<NetworkActivationId, ActivationFunction> = {
   relu: Activations.RELU,
   tanh: Activations.TANH,
   sigmoid: Activations.SIGMOID,
   linear: Activations.LINEAR,
 };
 
-export const TF_REGULARIZATIONS: readonly TfRegularizationId[] = ["none", "L1", "L2"];
+export const NETWORK_REGULARIZATIONS: readonly NetworkRegularizationId[] = ["none", "L1", "L2"];
 
-export const TF_REGULARIZATION_RATES = [0, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10] as const;
+export const NETWORK_REGULARIZATION_RATES = [0, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10] as const;
 
 const DEFAULT_FEATURES_2D: Record<string, boolean> = {
   x: true,
@@ -110,19 +110,19 @@ const DEFAULT_FEATURES_1D: Record<string, boolean> = {
   sinY: false,
 };
 
-export interface TfPlaygroundConfig {
+export interface NetworkPlaygroundConfig {
   learningRate: number;
   optimizer: PlaygroundOptimizerId;
-  activation: TfActivationId;
+  activation: NetworkActivationId;
   weightInit: WeightInitId;
-  regularization: TfRegularizationId;
+  regularization: NetworkRegularizationId;
   regularizationRate: number;
   batchSize: number;
   noise: number;
   percTrainData: number;
-  dataMode: TfDataMode;
-  problemType: TfProblemType;
-  dataset: TfAnyDatasetId;
+  dataMode: NetworkDataMode;
+  problemType: NetworkProblemType;
+  dataset: NetworkAnyDatasetId;
   networkShape: number[];
   numHiddenLayers: number;
   enabledFeatures: Record<string, boolean>;
@@ -130,7 +130,7 @@ export interface TfPlaygroundConfig {
   architecturePreset: ArchitecturePresetId;
 }
 
-export const DEFAULT_TF_CONFIG: TfPlaygroundConfig = {
+export const DEFAULT_NETWORK_CONFIG: NetworkPlaygroundConfig = {
   learningRate: 0.03,
   optimizer: "SGD",
   activation: "tanh",
@@ -160,7 +160,7 @@ export interface LossHistoryPoint {
 const LOSS_HISTORY_MAX = 1200;
 
 export class PlaygroundEngine {
-  config: TfPlaygroundConfig;
+  config: NetworkPlaygroundConfig;
   graph: ComputationalGraph = new ComputationalGraph();
   boundary: Record<string, number[][]> = {};
   /** 1D activation curves per node (used when dataMode === "1d"). */
@@ -177,24 +177,24 @@ export class PlaygroundEngine {
   optStep = 0;
   private boundaryNeedsInputRefresh = true;
   /** Config snapshot from first page load — used by resetToInitial(). */
-  private readonly initialConfig: TfPlaygroundConfig;
+  private readonly initialConfig: NetworkPlaygroundConfig;
 
-  constructor(config: Partial<TfPlaygroundConfig> = {}) {
+  constructor(config: Partial<NetworkPlaygroundConfig> = {}) {
     this.config = this.cloneConfig(this.mergeConfig(config));
     this.initialConfig = this.cloneConfig(this.config);
     this.bootstrap();
   }
 
-  private mergeConfig(config: Partial<TfPlaygroundConfig>): TfPlaygroundConfig {
+  private mergeConfig(config: Partial<NetworkPlaygroundConfig>): NetworkPlaygroundConfig {
     return {
-      ...DEFAULT_TF_CONFIG,
+      ...DEFAULT_NETWORK_CONFIG,
       ...config,
-      networkShape: [...(config.networkShape ?? DEFAULT_TF_CONFIG.networkShape)],
-      enabledFeatures: { ...(config.enabledFeatures ?? DEFAULT_TF_CONFIG.enabledFeatures) },
+      networkShape: [...(config.networkShape ?? DEFAULT_NETWORK_CONFIG.networkShape)],
+      enabledFeatures: { ...(config.enabledFeatures ?? DEFAULT_NETWORK_CONFIG.enabledFeatures) },
     };
   }
 
-  private cloneConfig(config: TfPlaygroundConfig): TfPlaygroundConfig {
+  private cloneConfig(config: NetworkPlaygroundConfig): NetworkPlaygroundConfig {
     return {
       ...config,
       networkShape: [...config.networkShape],
@@ -344,6 +344,30 @@ export class PlaygroundEngine {
   }
 
   /**
+   * Apply weights + viz buffers from a train-worker tick onto this display
+   * engine (topology must already match).
+   */
+  applyWorkerViz(payload: {
+    epoch: number;
+    lossTrain: number;
+    lossTest: number;
+    lossHistory: LossHistoryPoint[];
+    boundary: Record<string, number[][]>;
+    curves: Record<string, number[]>;
+    targetCurve: number[] | null;
+    graphSnapshot: import("./graph/types").GraphSnapshot;
+  }): void {
+    this.epoch = payload.epoch;
+    this.lossTrain = payload.lossTrain;
+    this.lossTest = payload.lossTest;
+    this.lossHistory = payload.lossHistory.map((p) => ({ ...p }));
+    this.boundary = payload.boundary;
+    this.curves = payload.curves;
+    this.targetCurve = payload.targetCurve;
+    this.graph.applyWeightsFromSnapshot(payload.graphSnapshot);
+  }
+
+  /**
    * Snapshot current train/test loss for the learning-curve chart.
    * Updates the last point in place when the epoch hasn't advanced (Play
    * refreshes metrics between epochs).
@@ -386,6 +410,52 @@ export class PlaygroundEngine {
     if (updateTrainLoss) {
       this.lossTrain = this.getLoss(this.trainData);
     }
+  }
+
+  flattenParams(): Float64Array {
+    return this.graph.flattenParams();
+  }
+
+  loadParams(vector: Float64Array): void {
+    this.graph.loadParams(vector);
+  }
+
+  /**
+   * Accumulate grad sums for the given trainData indices.
+   * Caller must zeroGradAccumulators first. Returns examples processed.
+   */
+  accumulateGradIndices(indices: number[]): number {
+    const yCoord = this.config.dataMode === "1d" ? 0 : undefined;
+    let count = 0;
+    for (let k = 0; k < indices.length; k++) {
+      const point = this.trainData[indices[k]!];
+      if (!point) continue;
+      const input = constructInput(
+        point.x,
+        yCoord === undefined ? point.y : yCoord,
+        this.config.enabledFeatures,
+      );
+      // Reset node ders on first sample only; keep acc* across the batch.
+      forwardPropGraph(this.graph, input, k === 0);
+      backPropGraph(this.graph, point.label, Errors.SQUARE);
+      count++;
+    }
+    return count;
+  }
+
+  exportGradSums(): Float64Array {
+    return this.graph.exportGradSums();
+  }
+
+  applyGradSums(vector: Float64Array, count: number): void {
+    this.graph.loadGradSums(vector, count);
+    const { learningRate, regularizationRate, optimizer } = this.config;
+    this.optStep += 1;
+    updateWeightsGraph(this.graph, learningRate, regularizationRate, optimizer, this.optStep);
+  }
+
+  zeroGradAccumulators(): void {
+    this.graph.zeroGradAccumulators();
   }
 
   refreshMetrics(): void {
@@ -476,7 +546,7 @@ export class PlaygroundEngine {
     this.graph = applyArchitecturePreset(this.config.architecturePreset, {
       networkShape: this.config.networkShape,
       numHiddenLayers: this.config.numHiddenLayers,
-      activation: TF_ACTIVATIONS[this.config.activation],
+      activation: NETWORK_ACTIVATIONS[this.config.activation],
       outputActivation: this.outputActivation(),
       enabledFeatures: this.config.enabledFeatures,
     });
@@ -505,7 +575,7 @@ export class PlaygroundEngine {
     const activation =
       kind === "output" ? this.outputActivation()
       : kind === "sum" ? Activations.RELU
-      : TF_ACTIVATIONS[this.config.activation];
+      : NETWORK_ACTIVATIONS[this.config.activation];
 
     const node = this.graph.addNode(kind, activation, { position, label: kind === "dense" ? "Dense" : kind === "sum" ? "Add" : "Out" });
 
@@ -623,13 +693,13 @@ export class PlaygroundEngine {
     this.reset();
   }
 
-  setDataset(dataset: TfAnyDatasetId): void {
+  setDataset(dataset: NetworkAnyDatasetId): void {
     this.config.dataset = dataset;
     this.reset();
   }
 
   /** Switch between 2D heatmaps and 1D curves (rebuilds data + features). */
-  setDataMode(dataMode: TfDataMode): void {
+  setDataMode(dataMode: NetworkDataMode): void {
     if (this.config.dataMode === dataMode) return;
     this.config.dataMode = dataMode;
     const regression = this.config.problemType === "regression";
@@ -649,7 +719,7 @@ export class PlaygroundEngine {
   }
 
   /** Classification vs regression — swaps to a matching default dataset. */
-  setProblemType(problemType: TfProblemType): void {
+  setProblemType(problemType: NetworkProblemType): void {
     if (this.config.problemType === problemType) return;
     this.config.problemType = problemType;
     if (this.config.dataMode === "1d") {
@@ -671,9 +741,9 @@ export class PlaygroundEngine {
    * Swap the hidden-unit activation in place, preserving learned weights and
    * any custom topology. Output and sum nodes keep their own activations.
    */
-  setActivation(activation: TfActivationId): void {
+  setActivation(activation: NetworkActivationId): void {
     this.config.activation = activation;
-    const fn = TF_ACTIVATIONS[activation];
+    const fn = NETWORK_ACTIVATIONS[activation];
     for (const node of this.graph.nodes.values()) {
       if (node.kind === "dense") node.activation = fn;
     }
@@ -708,13 +778,13 @@ export class PlaygroundEngine {
   }
 
   /** Swap L1/L2/none on existing links without resetting weights. */
-  setRegularization(regularization: TfRegularizationId): void {
+  setRegularization(regularization: NetworkRegularizationId): void {
     this.config.regularization = regularization;
     this.applyRegularizationToLinks();
   }
 
   /** Regenerate data with current settings, keeping network and progress. */
-  updateDataParams(patch: Partial<Pick<TfPlaygroundConfig, "noise" | "percTrainData">>): void {
+  updateDataParams(patch: Partial<Pick<NetworkPlaygroundConfig, "noise" | "percTrainData">>): void {
     Object.assign(this.config, patch);
     this.regenerateData();
   }
@@ -848,7 +918,7 @@ export class PlaygroundEngine {
     ];
     this.graph = buildMlpGraph(
       shape,
-      TF_ACTIVATIONS[this.config.activation],
+      NETWORK_ACTIVATIONS[this.config.activation],
       this.outputActivation(),
       inputIds,
     );

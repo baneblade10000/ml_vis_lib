@@ -1,5 +1,6 @@
 export type {
   ArchitecturePresetId,
+  GraphActivationId,
   GraphEdgeDef,
   GraphNodeDef,
   GraphNodeKind,

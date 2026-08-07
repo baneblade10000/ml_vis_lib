@@ -154,6 +154,42 @@ export class DenseLayer extends Layer {
     }
   }
 
+  override writeParams(dst: Float64Array, offset: number): number {
+    let o = offset;
+    for (let u = 0; u < this.units; u++) {
+      for (let i = 0; i < this.inUnits; i++) dst[o++] = this.weights[u]![i]!;
+    }
+    for (let u = 0; u < this.units; u++) dst[o++] = this.biases[u]!;
+    return o;
+  }
+
+  override readParams(src: Float64Array, offset: number): number {
+    let o = offset;
+    for (let u = 0; u < this.units; u++) {
+      for (let i = 0; i < this.inUnits; i++) this.weights[u]![i] = src[o++]!;
+    }
+    for (let u = 0; u < this.units; u++) this.biases[u] = src[o++]!;
+    return o;
+  }
+
+  override writeGrads(dst: Float64Array, offset: number): number {
+    let o = offset;
+    for (let u = 0; u < this.units; u++) {
+      for (let i = 0; i < this.inUnits; i++) dst[o++] = this.gradWeights[u]![i]!;
+    }
+    for (let u = 0; u < this.units; u++) dst[o++] = this.gradBiases[u]!;
+    return o;
+  }
+
+  override readGrads(src: Float64Array, offset: number): number {
+    let o = offset;
+    for (let u = 0; u < this.units; u++) {
+      for (let i = 0; i < this.inUnits; i++) this.gradWeights[u]![i] = src[o++]!;
+    }
+    for (let u = 0; u < this.units; u++) this.gradBiases[u] = src[o++]!;
+    return o;
+  }
+
   clearOptimizerState(): void {
     for (const row of this.optWeights) for (const s of row) resetOptState(s);
     for (const s of this.optBiases) resetOptState(s);

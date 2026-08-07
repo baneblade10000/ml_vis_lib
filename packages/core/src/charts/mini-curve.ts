@@ -1,4 +1,4 @@
-import { CLASS_0_HEX, CLASS_1_HEX, valueToRgb } from "../playground/tf/colors";
+import { CLASS_0_HEX, CLASS_1_HEX, valueToRgb } from "../playground/network/colors";
 
 export type CurvePoint = { x: number; y: number; label: number };
 

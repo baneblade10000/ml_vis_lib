@@ -92,6 +92,29 @@ export abstract class Layer {
 
   /** Zero Adam/RMSProp moment buffers without touching weights. */
   clearOptimizerState(): void {}
+
+  /**
+   * Pack trainable params into `dst` starting at `offset`.
+   * Returns the next offset. Default: no params.
+   */
+  writeParams(_dst: Float64Array, offset: number): number {
+    return offset;
+  }
+
+  /** Unpack trainable params from `src` starting at `offset`. Returns next offset. */
+  readParams(_src: Float64Array, offset: number): number {
+    return offset;
+  }
+
+  /** Pack accumulated parameter gradients (same layout as params). */
+  writeGrads(_dst: Float64Array, offset: number): number {
+    return offset;
+  }
+
+  /** Replace accumulated grads from a packed buffer (same layout as params). */
+  readGrads(_src: Float64Array, offset: number): number {
+    return offset;
+  }
 }
 
 /** Unified shape descriptor for {@link Layer.outputShape}. */

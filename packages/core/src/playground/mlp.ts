@@ -140,48 +140,90 @@ export function predictProbabilities(mlp: MLP, batch: number[][]): number[] {
   return logits.map((row) => softmaxRow(row)[1]);
 }
 
-export function trainBatch(mlp: MLP, batch: number[][], labels: number[]): number {
+/**
+ * Accumulate SUM of per-example grads (not averaged) into a flat vector matching
+ * {@link flattenWeights} layout. Does not update weights / Adam.
+ */
+export function accumulateBatchGradSums(
+  mlp: MLP,
+  batch: number[][],
+  labels: number[],
+): { grads: Float64Array; count: number; lossSum: number } {
+  const grads = new Float64Array(
+    mlp.layers.reduce((sum, layer) => sum + layer.weights.length + layer.bias.length, 0),
+  );
+  let lossSum = 0;
   const batchSize = batch.length;
-  const layerGrads = mlp.layers.map((layer) => ({
-    weights: new Float64Array(layer.weights.length),
-    bias: new Float64Array(layer.bias.length),
-  }));
-  let loss = 0;
 
   for (let sampleIndex = 0; sampleIndex < batchSize; sampleIndex++) {
-    const { logits, cache } = forwardSample(mlp, batch[sampleIndex]);
+    const { logits, cache } = forwardSample(mlp, batch[sampleIndex]!);
     const probs = softmaxRow(logits);
-    const target = labels[sampleIndex];
-    loss -= Math.log(Math.max(probs[target], 1e-12));
+    const target = labels[sampleIndex]!;
+    lossSum -= Math.log(Math.max(probs[target]!, 1e-12));
 
     let delta = Float64Array.from(probs);
-    delta[target] -= 1;
+    delta[target]! -= 1;
+
+    // Write into a temp layer-grad structure then flatten (sum, not mean).
+    const layerGrads = mlp.layers.map((layer) => ({
+      weights: new Float64Array(layer.weights.length),
+      bias: new Float64Array(layer.bias.length),
+    }));
 
     for (let layerIndex = mlp.layers.length - 1; layerIndex >= 0; layerIndex--) {
-      const layer = mlp.layers[layerIndex];
-      const input = cache.inputs[layerIndex];
+      const layer = mlp.layers[layerIndex]!;
+      const input = cache.inputs[layerIndex]!;
       const nextDelta = new Float64Array(layer.inputSize);
 
       for (let o = 0; o < layer.outputSize; o++) {
-        const grad = delta[o] / batchSize;
-        layerGrads[layerIndex].bias[o] += grad;
+        const g = delta[o]!;
+        layerGrads[layerIndex]!.bias[o]! += g;
         for (let i = 0; i < layer.inputSize; i++) {
-          layerGrads[layerIndex].weights[o * layer.inputSize + i] += grad * input[i];
-          nextDelta[i] += layer.weights[o * layer.inputSize + i] * grad;
+          layerGrads[layerIndex]!.weights[o * layer.inputSize + i]! += g * input[i]!;
+          nextDelta[i]! += layer.weights[o * layer.inputSize + i]! * g;
         }
       }
 
       if (layerIndex > 0) {
-        const prevPreActivation = cache.preActivations[layerIndex - 1];
+        const prevPreActivation = cache.preActivations[layerIndex - 1]!;
         delta = Float64Array.from(nextDelta, (value, i) =>
-          value * activateDerivative(prevPreActivation[i], mlp.activation),
+          value * activateDerivative(prevPreActivation[i]!, mlp.activation),
         );
       }
     }
+
+    let offset = 0;
+    for (const g of layerGrads) {
+      for (let i = 0; i < g.weights.length; i++) grads[offset++]! += g.weights[i]!;
+      for (let i = 0; i < g.bias.length; i++) grads[offset++]! += g.bias[i]!;
+    }
   }
 
+  return { grads, count: batchSize, lossSum };
+}
+
+/** Apply mean grads (flat, same layout as flattenWeights) via the MLP optimizer. */
+export function applyFlatGradMeans(mlp: MLP, gradMeans: Float64Array): void {
+  const layerGrads = mlp.layers.map((layer) => ({
+    weights: new Float64Array(layer.weights.length),
+    bias: new Float64Array(layer.bias.length),
+  }));
+  let offset = 0;
+  for (const g of layerGrads) {
+    for (let i = 0; i < g.weights.length; i++) g.weights[i] = gradMeans[offset++]!;
+    for (let i = 0; i < g.bias.length; i++) g.bias[i] = gradMeans[offset++]!;
+  }
   applyGradients(mlp, layerGrads);
-  return loss / batchSize;
+}
+
+export function trainBatch(mlp: MLP, batch: number[][], labels: number[]): number {
+  const batchSize = batch.length;
+  if (batchSize === 0) return 0;
+  const { grads, lossSum } = accumulateBatchGradSums(mlp, batch, labels);
+  // Convert sums → means for applyGradients (matches previous trainBatch behaviour).
+  for (let i = 0; i < grads.length; i++) grads[i]! /= batchSize;
+  applyFlatGradMeans(mlp, grads);
+  return lossSum / batchSize;
 }
 
 function applyGradients(

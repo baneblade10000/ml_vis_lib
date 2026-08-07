@@ -1,5 +1,5 @@
 /**
- * Shared first-order optimizers for the interactive TF + CNN playgrounds.
+ * Shared first-order optimizers for the interactive network + CNN playgrounds.
  * Hyperparameters match the classic defaults used by the offline `mlp.ts` Adam path.
  */
 

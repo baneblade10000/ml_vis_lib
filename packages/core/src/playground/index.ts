@@ -14,7 +14,7 @@ export {
 } from "./train";
 export type { LiveTrainingState, TrainingSplit } from "./train";
 
-// Convolutional-network engine (isolated from the feedforward `tf` engine).
+// Convolutional-network engine (isolated from the feedforward network engine).
 export {
   CnnEngine,
   DEFAULT_CNN_CONFIG,
@@ -49,3 +49,20 @@ export type {
   Volume,
   Signal as CnnSignal,
 } from "./cnn";
+
+// Worker factories live in `@ml-vis/core/workers/createWorkers` so Vite/Rollup
+// keep `import.meta.url` next to the worker entry files (not the main bundle).
+export { TrainWorkerClient, canUseTrainWorkers } from "./workers";
+export type {
+  CnnLayerView,
+  CnnTrainSnapshot,
+  NetworkTrainSnapshot,
+  MlpTrainSnapshot,
+  TrainSnapshot,
+  ToTrainWorker,
+  FromTrainWorker,
+  TrainRebuildReason,
+  TrainWorkerClientOptions,
+  TrainWorkerTickHandler,
+  TrainWorkerErrorHandler,
+} from "./workers";

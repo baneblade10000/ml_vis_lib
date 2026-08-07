@@ -16,6 +16,24 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./workers/cnn-train": {
+      "import": "./dist/workers/cnn-train.js"
+    },
+    "./workers/network-train": {
+      "import": "./dist/workers/network-train.js"
+    },
+    "./workers/mlp-train": {
+      "import": "./dist/workers/mlp-train.js"
+    },
+    "./workers/grad-shard": {
+      "import": "./dist/workers/grad-shard.js"
+    },
+    "./workers/createWorkers": {
+      "import": {
+        "types": "./dist/workers/createWorkers.d.ts",
+        "default": "./dist/workers/createWorkers.js"
+      }
     }
   },
   "files": ["dist"],

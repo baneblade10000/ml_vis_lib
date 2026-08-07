@@ -6,8 +6,29 @@ import {
   resetGraphDerivatives,
   RegularizationFunction,
 } from "./runtime";
-import type { GraphEdgeDef, GraphNodeDef, GraphPosition, GraphSnapshot } from "./types";
+import type {
+  GraphActivationId,
+  GraphEdgeDef,
+  GraphNodeDef,
+  GraphPosition,
+  GraphSnapshot,
+} from "./types";
 import { optimizerDelta, type PlaygroundOptimizerId } from "../../optimizers";
+
+const ACTIVATION_BY_ID: Record<GraphActivationId, ActivationFunction> = {
+  relu: Activations.RELU,
+  tanh: Activations.TANH,
+  sigmoid: Activations.SIGMOID,
+  linear: Activations.LINEAR,
+};
+
+function activationIdOf(fn: ActivationFunction): GraphActivationId {
+  if (fn === Activations.RELU) return "relu";
+  if (fn === Activations.TANH) return "tanh";
+  if (fn === Activations.SIGMOID) return "sigmoid";
+  if (fn === Activations.LINEAR) return "linear";
+  return "tanh";
+}
 
 let nextNodeId = 1;
 
@@ -43,7 +64,8 @@ export class ComputationalGraph {
     resetGraphIdCounter(1000);
 
     for (const def of snapshot.nodes) {
-      const node = new GraphNode(def.id, def.kind, def.activation, false, def.label);
+      const activation = ACTIVATION_BY_ID[def.activation] ?? Activations.TANH;
+      const node = new GraphNode(def.id, def.kind, activation, false, def.label);
       node.bias = def.bias;
       graph.nodes.set(def.id, node);
     }
@@ -74,7 +96,7 @@ export class ComputationalGraph {
       nodes.push({
         id: node.id,
         kind: node.kind,
-        activation: node.activation,
+        activation: activationIdOf(node.activation),
         bias: node.bias,
         label: node.label,
       });
@@ -91,6 +113,7 @@ export class ComputationalGraph {
           source: link.source.id,
           target: link.dest.id,
           weight: link.weight,
+          lastGradient: link.lastGradient,
         });
       }
     }
@@ -107,6 +130,106 @@ export class ComputationalGraph {
       outputId: this.outputId,
       positions,
     };
+  }
+
+  /** Stable flat layout: per topo node (non-input) bias, then each live inputLink weight. */
+  paramVectorLength(): number {
+    let n = 0;
+    for (const id of this.topoOrder) {
+      const node = this.nodes.get(id);
+      if (!node || node.kind === "input") continue;
+      n += 1; // bias
+      for (const link of node.inputLinks) {
+        if (!link.isDead) n += 1;
+      }
+    }
+    return n;
+  }
+
+  flattenParams(): Float64Array {
+    const out = new Float64Array(this.paramVectorLength());
+    let o = 0;
+    for (const id of this.topoOrder) {
+      const node = this.nodes.get(id);
+      if (!node || node.kind === "input") continue;
+      out[o++] = node.bias;
+      for (const link of node.inputLinks) {
+        if (link.isDead) continue;
+        out[o++] = link.weight;
+      }
+    }
+    return out;
+  }
+
+  loadParams(vector: Float64Array): void {
+    let o = 0;
+    for (const id of this.topoOrder) {
+      const node = this.nodes.get(id);
+      if (!node || node.kind === "input") continue;
+      node.bias = vector[o++]!;
+      for (const link of node.inputLinks) {
+        if (link.isDead) continue;
+        link.weight = vector[o++]!;
+      }
+    }
+  }
+
+  /** Export accumulated grad sums (accInputDer / accErrorDer). */
+  exportGradSums(): Float64Array {
+    const out = new Float64Array(this.paramVectorLength());
+    let o = 0;
+    for (const id of this.topoOrder) {
+      const node = this.nodes.get(id);
+      if (!node || node.kind === "input") continue;
+      out[o++] = node.accInputDer;
+      for (const link of node.inputLinks) {
+        if (link.isDead) continue;
+        out[o++] = link.accErrorDer;
+      }
+    }
+    return out;
+  }
+
+  /** Load grad sums and set every accumulator count to `count` (for mean = sum/count). */
+  loadGradSums(vector: Float64Array, count: number): void {
+    const n = Math.max(1, count);
+    let o = 0;
+    for (const id of this.topoOrder) {
+      const node = this.nodes.get(id);
+      if (!node || node.kind === "input") continue;
+      node.accInputDer = vector[o++]!;
+      node.numAccumulatedDers = n;
+      for (const link of node.inputLinks) {
+        if (link.isDead) continue;
+        link.accErrorDer = vector[o++]!;
+        link.numAccumulatedDers = n;
+      }
+    }
+  }
+
+  zeroGradAccumulators(): void {
+    resetGraphDerivatives(this.nodes.values());
+  }
+
+  /**
+   * Copy biases/weights (and optional lastGradient) from a snapshot onto this
+   * graph without rebuilding topology. Used to sync a display engine from a
+   * train worker tick.
+   */
+  applyWeightsFromSnapshot(snapshot: GraphSnapshot): void {
+    for (const def of snapshot.nodes) {
+      const node = this.nodes.get(def.id);
+      if (node) node.bias = def.bias;
+    }
+    const byId = new Map(snapshot.edges.map((e) => [e.id, e]));
+    for (const node of this.nodes.values()) {
+      for (const link of node.outputs) {
+        const edge = byId.get(link.id);
+        if (!edge) continue;
+        link.weight = edge.weight;
+        if (edge.lastGradient !== undefined) link.lastGradient = edge.lastGradient;
+      }
+    }
   }
 
   getNode(id: string): GraphNode | undefined {

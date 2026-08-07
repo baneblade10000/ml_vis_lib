@@ -322,6 +322,66 @@ export class Conv2DLayer extends Layer {
     for (const s of this.optBiases) resetOptState(s);
   }
 
+  override writeParams(dst: Float64Array, offset: number): number {
+    let o = offset;
+    for (let f = 0; f < this.filters; f++) {
+      for (let i = 0; i < this.kernels[f]!.length; i++) {
+        for (let kr = 0; kr < this.kernelSize; kr++) {
+          for (let kc = 0; kc < this.kernelSize; kc++) {
+            dst[o++] = this.kernels[f]![i]![kr]![kc]!;
+          }
+        }
+      }
+    }
+    for (let f = 0; f < this.filters; f++) dst[o++] = this.biases[f]!;
+    return o;
+  }
+
+  override readParams(src: Float64Array, offset: number): number {
+    let o = offset;
+    for (let f = 0; f < this.filters; f++) {
+      for (let i = 0; i < this.kernels[f]!.length; i++) {
+        for (let kr = 0; kr < this.kernelSize; kr++) {
+          for (let kc = 0; kc < this.kernelSize; kc++) {
+            this.kernels[f]![i]![kr]![kc] = src[o++]!;
+          }
+        }
+      }
+    }
+    for (let f = 0; f < this.filters; f++) this.biases[f] = src[o++]!;
+    return o;
+  }
+
+  override writeGrads(dst: Float64Array, offset: number): number {
+    let o = offset;
+    for (let f = 0; f < this.filters; f++) {
+      for (let i = 0; i < this.gradKernels[f]!.length; i++) {
+        for (let kr = 0; kr < this.kernelSize; kr++) {
+          for (let kc = 0; kc < this.kernelSize; kc++) {
+            dst[o++] = this.gradKernels[f]![i]![kr]![kc]!;
+          }
+        }
+      }
+    }
+    for (let f = 0; f < this.filters; f++) dst[o++] = this.gradBiases[f]!;
+    return o;
+  }
+
+  override readGrads(src: Float64Array, offset: number): number {
+    let o = offset;
+    for (let f = 0; f < this.filters; f++) {
+      for (let i = 0; i < this.gradKernels[f]!.length; i++) {
+        for (let kr = 0; kr < this.kernelSize; kr++) {
+          for (let kc = 0; kc < this.kernelSize; kc++) {
+            this.gradKernels[f]![i]![kr]![kc] = src[o++]!;
+          }
+        }
+      }
+    }
+    for (let f = 0; f < this.filters; f++) this.gradBiases[f] = src[o++]!;
+    return o;
+  }
+
   paramCount(): number {
     if (this.kernels.length === 0) return 0;
     return this.filters * this.kernels[0].length * this.kernelSize * this.kernelSize + this.filters;

@@ -1,12 +1,11 @@
 /**
  * Decision boundary replay chart.
- * Heatmap rendering follows TensorFlow Playground (Apache-2.0, Google):
- * ImageData per grid cell + smooth CSS scaling.
+ * Heatmap via ImageData per grid cell + smooth CSS scaling.
  */
 
 import type { GridPoint, HistoryRow, Sample } from "../playground/types";
 import { probabilityToRgba, roundRect, setupCanvas } from "./common";
-import { CLASS_0_HEX, CLASS_1_HEX } from "../playground/tf/colors";
+import { CLASS_0_HEX, CLASS_1_HEX } from "../playground/network/colors";
 
 export interface DecisionBoundaryPayload {
   samples: Sample[];

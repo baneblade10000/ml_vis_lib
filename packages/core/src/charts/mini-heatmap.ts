@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-import { valueToRgb } from "../playground/tf/colors";
+import { valueToRgb } from "../playground/network/colors";
 
 /** Average each factor×factor block in a square matrix. */
 export function reduceMatrix(matrix: number[][], factor: number): number[][] {

@@ -21,7 +21,7 @@ import { DenseLayer } from "./layers/dense";
 import { OutputLayer } from "./layers/output";
 import { Losses } from "./loss";
 import type { Signal, Volume } from "./tensor";
-import type { LossHistoryPoint } from "../tf/engine";
+import type { LossHistoryPoint } from "../network/engine";
 import type { CnnRegularizationId } from "./regularization";
 import type { PlaygroundOptimizerId } from "../optimizers";
 export type { CnnRegularizationId } from "./regularization";
@@ -126,6 +126,16 @@ export interface FeatureMapSnapshot {
   signals?: number[][];
   /** Dense weight matrix `W[out][in]` for matrix visualization. */
   matrix?: number[][];
+  /**
+   * Conv2D display kernels: one `k×k` map per out filter (sum over in channels).
+   * Index-aligned with {@link maps2d}.
+   */
+  kernels2d?: number[][][];
+  /**
+   * Conv1D display kernels: one length-`k` vector per out filter (sum over in channels).
+   * Index-aligned with {@link signals}.
+   */
+  kernels1d?: number[][];
 }
 
 /**
@@ -398,13 +408,65 @@ export class CnnEngine {
     this.epoch++;
   }
 
+  /** Total trainable parameter count (flat layout for DP). */
+  paramVectorLength(): number {
+    let n = 0;
+    for (const layer of this.layers) n += layer.paramCount();
+    return n;
+  }
+
+  flattenParams(): Float64Array {
+    const out = new Float64Array(this.paramVectorLength());
+    let offset = 0;
+    for (const layer of this.layers) offset = layer.writeParams(out, offset);
+    return out;
+  }
+
+  loadParams(vector: Float64Array): void {
+    let offset = 0;
+    for (const layer of this.layers) offset = layer.readParams(vector, offset);
+  }
+
+  exportGradSums(): Float64Array {
+    const out = new Float64Array(this.paramVectorLength());
+    let offset = 0;
+    for (const layer of this.layers) offset = layer.writeGrads(out, offset);
+    return out;
+  }
+
+  loadGradSums(vector: Float64Array): void {
+    let offset = 0;
+    for (const layer of this.layers) offset = layer.readGrads(vector, offset);
+  }
+
+  /**
+   * Accumulate per-example grads for the given trainData indices
+   * (caller should zeroAllGrads first). Returns number of examples processed.
+   */
+  accumulateGradIndices(indices: number[]): number {
+    let count = 0;
+    for (const idx of indices) {
+      const example = this.trainData[idx];
+      if (!example) continue;
+      this.forwardExample(example);
+      this.outputLayer.setTarget(example.label);
+      this.backwardExample();
+      count++;
+    }
+    return count;
+  }
+
+  zeroAllGrads(): void {
+    for (const layer of this.layers) layer.zeroGrads();
+  }
+
   /**
    * Apply accumulated parameter gradients. Each layer already stores the
    * *per-example* grad from its most recent backward pass; we average by the
    * batch size by scaling the learning rate here.
    */
-  private applyUpdate(learningRate: number, batchSize: number): void {
-    const effectiveLr = learningRate / batchSize;
+  applyUpdate(learningRate: number, batchSize: number): void {
+    const effectiveLr = learningRate / Math.max(1, batchSize);
     const { regularization, regularizationRate, optimizer } = this.config;
     this.optStep += 1;
     for (const layer of this.layers) {
@@ -472,7 +534,11 @@ export class CnnEngine {
     if (layer.dataSpace === "2d") {
       const vol = (layer.output as Volume) ?? [];
       const maps2d = vol.map((ch) => ch.map((row) => row.slice()));
-      return { layerId: layer.id, maps2d };
+      const snap: FeatureMapSnapshot = { layerId: layer.id, maps2d };
+      if (layer instanceof Conv2DLayer && layer.kernels.length > 0) {
+        snap.kernels2d = layer.featureKernels();
+      }
+      return snap;
     }
     const sig = (layer.output as Signal) ?? [];
     const snap: FeatureMapSnapshot = {
@@ -481,6 +547,9 @@ export class CnnEngine {
     };
     if (layer instanceof DenseLayer && layer.weights.length > 0) {
       snap.matrix = layer.weights.map((row) => row.slice());
+    }
+    if (layer instanceof Conv1DLayer && layer.kernels.length > 0) {
+      snap.kernels1d = layer.featureKernels();
     }
     return snap;
   }
