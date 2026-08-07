@@ -51,6 +51,7 @@ export interface NetworkTrainSnapshot {
   /** Full graph weights/topology for syncing the main-thread display engine. */
   graphSnapshot: import("../network/graph/types").GraphSnapshot;
   trainData: Array<{ x: number; y: number; label: number }>;
+  testData?: Array<{ x: number; y: number; label: number }>;
 }
 
 export interface MlpTrainSnapshot {
@@ -77,4 +78,5 @@ export type ToTrainWorker =
 export type FromTrainWorker =
   | { type: "ready"; snapshot: TrainSnapshot }
   | { type: "tick"; snapshot: TrainSnapshot }
+  | { type: "rebuilt"; reason: TrainRebuildReason; snapshot: TrainSnapshot }
   | { type: "error"; message: string };

@@ -49,10 +49,16 @@ export function createPlayLoop(options: {
       let ran = 0;
       try {
         for (let i = 0; i < steps; i++) {
-          const cont = await options.trainOneEpoch();
-          ran++;
-          if (cont === false) {
-            playing = false;
+          try {
+            const cont = await options.trainOneEpoch();
+            ran++;
+            if (cont === false) {
+              playing = false;
+              break;
+            }
+          } catch {
+            // Shard pool may be torn down mid-epoch on topology rebuild.
+            // Bail this frame; next play()/frame starts clean.
             break;
           }
         }
@@ -77,6 +83,8 @@ export function createPlayLoop(options: {
       lastTime = performance.now();
       lastPaint = 0;
       epochBank = 0;
+      // Clear a stuck busy from a cancelled in-flight epoch (pool terminate).
+      busy = false;
       raf = self.requestAnimationFrame(frame);
     },
     pause() {

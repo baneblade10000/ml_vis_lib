@@ -68,6 +68,9 @@ export type {
 export {
   CLASS_0_HEX,
   CLASS_1_HEX,
+  PALETTE_HIGH,
+  PALETTE_LOW,
+  PALETTE_MID,
   mixProbabilityColor,
   probabilityColorRgb,
   probabilityToRgba,

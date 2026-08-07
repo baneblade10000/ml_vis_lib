@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { reduceMatrix } from "../../charts/mini-heatmap";
 import { boundaryToGridPoints, computeBoundaries } from "./boundary";
-import { valueToRgb, PALETTE_HIGH, PALETTE_LOW } from "./colors";
+import { valueToRgb, PALETTE_HIGH, PALETTE_LOW, PALETTE_MID } from "./colors";
 import { PlaygroundEngine } from "./engine";
 import { Activations } from "./nn";
 
@@ -43,6 +43,25 @@ describe("PlaygroundEngine", () => {
     expect(hiddenId && engine.boundary[hiddenId].length).toBe(10);
   });
 
+  it("rebuilds boundary keys after applyTopologySnapshot (worker init path)", () => {
+    const main = new PlaygroundEngine({ dataset: "circle", networkShape: [4], numHiddenLayers: 1 });
+    main.addNeuron(0);
+    main.addNeuron(0);
+    main.addLayer();
+    const snap = main.graph.toSnapshot();
+    const worker = new PlaygroundEngine({ dataset: "xor", networkShape: [2], numHiddenLayers: 1 });
+    // Simulate the old bug: bootstrap store for a smaller net, then swap topology.
+    worker.applyTopologySnapshot(snap, {
+      trainData: main.trainData,
+      testData: main.testData,
+    });
+    for (const id of main.graph.nodes.keys()) {
+      expect(worker.boundary[id], `missing boundary for ${id}`).toBeDefined();
+    }
+    expect(worker.boundary[worker.outputNodeId]?.length).toBe(200);
+    expect(worker.trainData).toEqual(main.trainData);
+  });
+
   it("maps boundary values to probabilities in [0, 1]", () => {
     const engine = new PlaygroundEngine();
     const matrix = engine.boundary[engine.outputNodeId];
@@ -66,6 +85,7 @@ describe("mini-heatmap helpers", () => {
 
   it("valueToRgb returns palette endpoints", () => {
     expect(valueToRgb(-1)).toEqual(PALETTE_LOW);
+    expect(valueToRgb(0)).toEqual(PALETTE_MID);
     expect(valueToRgb(1)).toEqual(PALETTE_HIGH);
   });
 });

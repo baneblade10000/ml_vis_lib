@@ -196,7 +196,11 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
       else if (msg.reason === "mode" && msg.payload) engine.setMode(msg.payload as never);
       else if (msg.reason === "dataset" && msg.payload) engine.setDataset(msg.payload as never);
       await syncPool();
-      post({ type: "tick", snapshot: buildSnapshot(engine) });
+      {
+        const snapshot = buildSnapshot(engine);
+        post({ type: "tick", snapshot });
+        post({ type: "rebuilt", reason: msg.reason, snapshot });
+      }
       break;
     }
     case "play": {

@@ -62,7 +62,7 @@ import {
   type GraphNodeKind,
   type GraphPosition,
 } from "./graph";
-import { layoutMlpFromLayers, MLP_ROW_SPACING, normalizeGraphLayout } from "./graph/mlp-layout";
+import { normalizeGraphLayout } from "./graph/mlp-layout";
 import { CURVE_DENSITY, PLAY_BOUNDARY_STRIDE, PLAY_CURVE_STRIDE } from "./constants";
 import { sampleBias, sampleWeight, type WeightInitId } from "./weight-init";
 
@@ -356,15 +356,63 @@ export class PlaygroundEngine {
     curves: Record<string, number[]>;
     targetCurve: number[] | null;
     graphSnapshot: import("./graph/types").GraphSnapshot;
+    trainData?: Example2D[];
+    testData?: Example2D[];
   }): void {
     this.epoch = payload.epoch;
     this.lossTrain = payload.lossTrain;
     this.lossTest = payload.lossTest;
     this.lossHistory = payload.lossHistory.map((p) => ({ ...p }));
-    this.boundary = payload.boundary;
+    // Only adopt viz buffers when they cover the live output node — a stale
+    // worker tick after addNeuron would otherwise blank the heatmaps.
+    if (payload.boundary[this.graph.outputId]) {
+      this.boundary = payload.boundary;
+    }
     this.curves = payload.curves;
     this.targetCurve = payload.targetCurve;
     this.graph.applyWeightsFromSnapshot(payload.graphSnapshot);
+    if (payload.trainData?.length) {
+      this.trainData = payload.trainData.map((p) => ({ ...p }));
+    }
+    if (payload.testData?.length) {
+      this.testData = payload.testData.map((p) => ({ ...p }));
+    }
+  }
+
+  /**
+   * Replace topology from a worker/main snapshot and rebuild viz buffers so
+   * boundary keys match the new node ids (critical after freeform edits).
+   */
+  applyTopologySnapshot(
+    snapshot: import("./graph/types").GraphSnapshot,
+    options?: {
+      trainData?: Example2D[];
+      testData?: Example2D[];
+      /** Reset epoch / loss history (default true — topology edits start fresh). */
+      resetTraining?: boolean;
+    },
+  ): void {
+    const reg = this.graph.regularization;
+    this.graph = ComputationalGraph.fromSnapshot(snapshot, reg);
+    this.syncOutputActivation();
+    if (options?.trainData?.length) {
+      this.trainData = options.trainData.map((p) => ({ ...p }));
+    }
+    if (options?.testData?.length) {
+      this.testData = options.testData.map((p) => ({ ...p }));
+    }
+    if (options?.resetTraining !== false) {
+      this.epoch = 0;
+      this.optStep = 0;
+      this.lossHistory = [];
+    }
+    this.boundaryNeedsInputRefresh = true;
+    this.rebuildBoundaryStore();
+    this.refreshMetrics();
+    this.refreshBoundary();
+    if (options?.resetTraining !== false) {
+      this.lossHistory.push({ epoch: 0, train: this.lossTrain, test: this.lossTest });
+    }
   }
 
   /**
@@ -645,7 +693,7 @@ export class PlaygroundEngine {
       this.config.architecturePreset = "mlp";
     }
     if (layerIdx < 0 || layerIdx >= this.config.numHiddenLayers) return;
-    if (this.config.networkShape[layerIdx] >= 8) return;
+    if (this.config.networkShape[layerIdx] >= 16) return;
     this.config.networkShape[layerIdx]++;
     this.rebuildMlpPreservingLayout();
   }
@@ -664,7 +712,7 @@ export class PlaygroundEngine {
     if (this.config.architecturePreset !== "mlp") {
       this.config.architecturePreset = "mlp";
     }
-    if (this.config.numHiddenLayers >= 6) return;
+    if (this.config.numHiddenLayers >= 8) return;
     this.config.networkShape[this.config.numHiddenLayers] = 4;
     this.config.numHiddenLayers++;
     this.rebuildMlpPreservingLayout();
@@ -902,15 +950,6 @@ export class PlaygroundEngine {
 
   private rebuildMlpPreservingLayout(): void {
     const inputIds = constructInputIds(this.config.enabledFeatures);
-    const oldLayers = this.graph.toLayeredNetwork();
-    const posBySlot = new Map<string, GraphPosition>();
-    for (let li = 0; li < oldLayers.length; li++) {
-      for (let ri = 0; ri < oldLayers[li].length; ri++) {
-        const pos = this.graph.positions.get(oldLayers[li][ri].id);
-        if (pos) posBySlot.set(`${li}:${ri}`, { ...pos });
-      }
-    }
-
     const shape = [
       inputIds.length,
       ...this.config.networkShape.slice(0, this.config.numHiddenLayers),
@@ -922,39 +961,9 @@ export class PlaygroundEngine {
       this.outputActivation(),
       inputIds,
     );
-
-    layoutMlpFromLayers(this.graph, this.graph.toLayeredNetwork(), inputIds);
-
-    const newLayers = this.graph.toLayeredNetwork();
-    // Old positions are keyed by layer index, so they are only meaningful when
-    // the layer count is unchanged (add/remove neuron). When a layer is added
-    // or removed, the indices shift and restoring them would scramble columns —
-    // keep the canonical layout instead.
-    if (newLayers.length === oldLayers.length) {
-      for (let li = 0; li < newLayers.length; li++) {
-        const restored: GraphPosition[] = [];
-        const fresh: GraphNode[] = [];
-        for (let ri = 0; ri < newLayers[li].length; ri++) {
-          const saved = posBySlot.get(`${li}:${ri}`);
-          if (saved) {
-            this.graph.setPosition(newLayers[li][ri].id, saved);
-            restored.push(saved);
-          } else {
-            fresh.push(newLayers[li][ri]);
-          }
-        }
-        // A brand-new neuron goes below the bottom of its column instead of
-        // its canonical centered slot, which can land on a restored node.
-        if (fresh.length > 0 && restored.length > 0) {
-          const x = restored[0].x;
-          let y = Math.max(...restored.map((p) => p.y));
-          for (const node of fresh) {
-            y += MLP_ROW_SPACING;
-            this.graph.setPosition(node.id, { x, y });
-          }
-        }
-      }
-    }
+    // Always snap to the canonical column grid (same as "Arrange layout") so
+    // add/remove neuron/layer does not leave the new node dangling below the stack.
+    normalizeGraphLayout(this.graph, inputIds);
 
     // The network is rebuilt with fresh weights, so training starts over.
     this.reinitializeWeights();

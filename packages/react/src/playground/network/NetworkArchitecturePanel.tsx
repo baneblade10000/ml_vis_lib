@@ -14,8 +14,8 @@ export interface NetworkArchitecturePanelProps {
 export function NetworkArchitecturePanel({
   numHiddenLayers,
   networkShape,
-  maxHiddenLayers = 6,
-  maxNeuronsPerLayer = 8,
+  maxHiddenLayers = 8,
+  maxNeuronsPerLayer = 16,
   onAddLayer,
   onRemoveLayer,
   onAddNeuron,

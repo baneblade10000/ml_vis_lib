@@ -1,6 +1,5 @@
 /// <reference lib="webworker" />
 import { PlaygroundEngine, type NetworkPlaygroundConfig } from "../network/engine";
-import { ComputationalGraph } from "../network/graph/computational-graph";
 import type { GraphSnapshot } from "../network/graph/types";
 import type { FromTrainWorker, NetworkTrainSnapshot, ToTrainWorker } from "./protocol";
 import { createPlayLoop } from "./runPlayLoop";
@@ -20,11 +19,22 @@ function createGradShardWorker(): Worker {
   return new Worker(new URL("./grad-shard.js", import.meta.url), { type: "module" });
 }
 
-function workerPayload(): { config: NetworkPlaygroundConfig; graphSnapshot: GraphSnapshot } {
+function workerPayload(): {
+  config: NetworkPlaygroundConfig;
+  graphSnapshot: GraphSnapshot;
+  trainData: Array<{ x: number; y: number; label: number }>;
+  testData: Array<{ x: number; y: number; label: number }>;
+} {
   return {
     config: structuredClone(engine!.config),
     graphSnapshot: engine!.graph.toSnapshot(),
+    trainData: clonePoints(engine!.trainData),
+    testData: clonePoints(engine!.testData),
   };
+}
+
+function clonePoints(points: Array<{ x: number; y: number; label: number }>) {
+  return points.map((p) => ({ x: p.x, y: p.y, label: p.label }));
 }
 
 function buildSnapshot(e: PlaygroundEngine, fullBoundary: boolean): NetworkTrainSnapshot {
@@ -49,7 +59,8 @@ function buildSnapshot(e: PlaygroundEngine, fullBoundary: boolean): NetworkTrain
     curves: e.curves,
     targetCurve: e.targetCurve,
     graphSnapshot: e.graph.toSnapshot(),
-    trainData: e.trainData.map((p) => ({ x: p.x, y: p.y, label: p.label })),
+    trainData: clonePoints(e.trainData),
+    testData: clonePoints(e.testData),
   };
 }
 
@@ -79,7 +90,17 @@ async function trainEpochDp(): Promise<void> {
     const indices: number[] = [];
     for (let i = start; i < end; i++) indices.push(i);
     const weights = e.flattenParams();
-    const result = await pool.computeGrads(weights, indices);
+    let result: { grads: Float64Array; count: number } | null = null;
+    try {
+      result = await pool.computeGrads(weights, indices);
+    } catch {
+      // Pool was rebuilt/terminated mid-batch (add neuron while Play).
+      // Finish this epoch on the coordinator so training keeps moving.
+      e.zeroGradAccumulators();
+      e.accumulateGradIndices(indices);
+      e.applyGradSums(e.exportGradSums(), indices.length);
+      continue;
+    }
     if (!result || result.count === 0) {
       e.zeroGradAccumulators();
       e.accumulateGradIndices(indices);
@@ -105,15 +126,38 @@ function ensurePlay(): ReturnType<typeof createPlayLoop> {
   return play;
 }
 
-function initFromPayload(payload: {
-  config: NetworkPlaygroundConfig;
-  graphSnapshot?: GraphSnapshot;
-}): void {
+function initFromPayload(
+  payload: {
+    config: NetworkPlaygroundConfig;
+    graphSnapshot?: GraphSnapshot;
+    trainData?: Array<{ x: number; y: number; label: number }>;
+    testData?: Array<{ x: number; y: number; label: number }>;
+  },
+  options?: { resetTraining?: boolean },
+): void {
   play?.stop();
-  engine = new PlaygroundEngine(structuredClone(payload.config));
+  const config = structuredClone(payload.config);
+  if (!engine) {
+    engine = new PlaygroundEngine(config);
+  } else {
+    engine.config = {
+      ...config,
+      networkShape: [...config.networkShape],
+      enabledFeatures: { ...config.enabledFeatures },
+    };
+  }
   if (payload.graphSnapshot) {
-    const reg = engine.graph.regularization;
-    engine.graph = ComputationalGraph.fromSnapshot(payload.graphSnapshot, reg);
+    // Rebuild boundary/curve stores for the snapshot node ids — swapping the
+    // graph without this leaves heatmaps keyed to the bootstrap topology and
+    // neurons paint as blank white tiles.
+    engine.applyTopologySnapshot(payload.graphSnapshot, {
+      trainData: payload.trainData,
+      testData: payload.testData,
+      resetTraining: options?.resetTraining,
+    });
+  } else if (payload.trainData?.length) {
+    engine.trainData = clonePoints(payload.trainData);
+    if (payload.testData?.length) engine.testData = clonePoints(payload.testData);
     engine.refreshMetrics();
     engine.refreshBoundary();
   }
@@ -138,22 +182,36 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
     }
     case "rebuild": {
       play?.pause();
+      // Topology / dataset edits reset training; weight-only sync must not.
+      const resetTraining =
+        msg.reason === "topology" ||
+        msg.reason === "dataset" ||
+        msg.reason === "reset" ||
+        msg.reason === "resetWeights" ||
+        msg.reason === "mode";
       if (msg.reason === "reset" || msg.reason === "resetWeights") {
         const payload = msg.payload as
           | { config: NetworkPlaygroundConfig; graphSnapshot?: GraphSnapshot }
           | undefined;
-        if (payload) initFromPayload(payload);
+        if (payload) initFromPayload(payload, { resetTraining: true });
         else if (engine) {
           if (msg.reason === "reset") engine.resetToInitial();
           else engine.resetWeights();
         }
       } else if (msg.payload) {
-        initFromPayload(msg.payload as { config: NetworkPlaygroundConfig; graphSnapshot?: GraphSnapshot });
+        initFromPayload(
+          msg.payload as { config: NetworkPlaygroundConfig; graphSnapshot?: GraphSnapshot },
+          { resetTraining },
+        );
       } else if (!engine) {
         return;
       }
       await syncPool();
-      if (engine) post({ type: "tick", snapshot: buildSnapshot(engine, true) });
+      if (engine) {
+        const snapshot = buildSnapshot(engine, true);
+        post({ type: "tick", snapshot });
+        post({ type: "rebuilt", reason: msg.reason, snapshot });
+      }
       break;
     }
     case "play": {
@@ -203,6 +261,12 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
           initFromPayload({
             config: engine.config,
             graphSnapshot: a.graphSnapshot as GraphSnapshot,
+            trainData: Array.isArray(a.trainData)
+              ? (a.trainData as Array<{ x: number; y: number; label: number }>)
+              : undefined,
+            testData: Array.isArray(a.testData)
+              ? (a.testData as Array<{ x: number; y: number; label: number }>)
+              : undefined,
           });
           await syncPool();
           break;
@@ -225,11 +289,16 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
   }
 }
 
+/** Serialize async handlers — play/step must not race an in-flight rebuild/pool sync. */
+let messageChain: Promise<void> = Promise.resolve();
+
 self.onmessage = (ev: MessageEvent<ToTrainWorker>) => {
-  void handleMessage(ev.data).catch((err) => {
-    post({
-      type: "error",
-      message: err instanceof Error ? err.message : String(err),
+  messageChain = messageChain
+    .then(() => handleMessage(ev.data))
+    .catch((err) => {
+      post({
+        type: "error",
+        message: err instanceof Error ? err.message : String(err),
+      });
     });
-  });
 };

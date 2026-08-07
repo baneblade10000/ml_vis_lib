@@ -26,6 +26,7 @@ export class TrainWorkerClient {
   private disposed = false;
   private onTick: TrainWorkerTickHandler | undefined;
   private onError: TrainWorkerErrorHandler | undefined;
+  private rebuildWaiters: Array<() => void> = [];
   /** Latest snapshot (ready or tick). */
   snapshot: TrainSnapshot | null = null;
 
@@ -74,8 +75,15 @@ export class TrainWorkerClient {
     this.post({ type: "setConfig", patch });
   }
 
-  rebuild(reason: TrainRebuildReason, payload?: unknown): void {
+  /**
+   * Rebuild the worker engine. Resolves after the worker acknowledges
+   * (`rebuilt`), so callers can safely play/step afterward.
+   */
+  rebuild(reason: TrainRebuildReason, payload?: unknown): Promise<void> {
     this.post({ type: "rebuild", reason, payload });
+    return new Promise<void>((resolve) => {
+      this.rebuildWaiters.push(resolve);
+    });
   }
 
   inspect(exampleIndex?: number): void {
@@ -104,6 +112,8 @@ export class TrainWorkerClient {
     }
     this.readyPromise = null;
     this.readyResolve = null;
+    for (const resolve of this.rebuildWaiters) resolve();
+    this.rebuildWaiters = [];
   }
 
   private post(msg: ToTrainWorker): void {
@@ -120,6 +130,9 @@ export class TrainWorkerClient {
     if (this.disposed) return;
     if (msg.type === "error") {
       this.onError?.(msg.message);
+      // Unblock any waiter so Play is not stuck forever after a failed rebuild.
+      const resolve = this.rebuildWaiters.shift();
+      resolve?.();
       return;
     }
     this.snapshot = msg.snapshot;
@@ -127,6 +140,11 @@ export class TrainWorkerClient {
       this.readyResolve(msg.snapshot);
       this.readyResolve = null;
     }
+    if (msg.type === "rebuilt") {
+      const resolve = this.rebuildWaiters.shift();
+      resolve?.();
+    }
+    // ready / tick / rebuilt all carry a snapshot for the UI.
     this.onTick?.(msg.snapshot);
   }
 }

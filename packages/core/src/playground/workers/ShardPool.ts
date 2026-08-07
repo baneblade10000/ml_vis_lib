@@ -8,6 +8,11 @@ export interface ShardPoolOptions {
   shardCount?: number;
 }
 
+type Pending = {
+  reject: (err: Error) => void;
+  cleanup: () => void;
+};
+
 /**
  * Pool of grad-shard workers used by a train coordinator.
  * Coordinator owns Adam; shards only compute gradient sums.
@@ -17,6 +22,7 @@ export class ShardPool {
   private readonly kind: GradShardKind;
   private readonly createShardWorker: () => Worker;
   readonly shardCount: number;
+  private readonly pending = new Set<Pending>();
 
   constructor(options: ShardPoolOptions) {
     this.kind = options.kind;
@@ -73,7 +79,7 @@ export class ShardPool {
       const shardIdx: number[] = [];
       for (let k = i; k < indices.length; k += n) shardIdx.push(indices[k]!);
       const wCopy = weights.slice();
-      return requestGrads(w, wCopy, shardIdx);
+      return this.requestGrads(w, wCopy, shardIdx);
     });
     const results = await Promise.all(tasks);
     const count = results.reduce((s, r) => s + r.count, 0);
@@ -82,6 +88,7 @@ export class ShardPool {
   }
 
   dispose(): void {
+    this.rejectPending("shard pool disposed");
     for (const w of this.workers) {
       try {
         post(w, { type: "dispose" });
@@ -94,32 +101,55 @@ export class ShardPool {
   }
 
   private terminateAll(): void {
+    // Critical: in-flight computeGrads must reject, otherwise the play loop's
+    // `busy` flag stays true forever after topology rebuild mid-epoch.
+    this.rejectPending("shard pool terminated");
     for (const w of this.workers) w.terminate();
     this.workers = [];
+  }
+
+  private rejectPending(message: string): void {
+    const err = new Error(message);
+    for (const p of this.pending) {
+      p.cleanup();
+      p.reject(err);
+    }
+    this.pending.clear();
+  }
+
+  private requestGrads(
+    w: Worker,
+    weights: Float64Array,
+    indices: number[],
+  ): Promise<{ grads: Float64Array; count: number }> {
+    return new Promise((resolve, reject) => {
+      const onMsg = (ev: MessageEvent<FromGradShard>) => {
+        const msg = ev.data;
+        if (msg.type === "grads") {
+          cleanup();
+          this.pending.delete(entry);
+          resolve({ grads: msg.grads, count: msg.count });
+        } else if (msg.type === "error") {
+          cleanup();
+          this.pending.delete(entry);
+          reject(new Error(msg.message));
+        }
+      };
+      const cleanup = () => w.removeEventListener("message", onMsg);
+      const entry: Pending = { reject, cleanup };
+      this.pending.add(entry);
+      w.addEventListener("message", onMsg);
+      try {
+        w.postMessage({ type: "compute", weights, indices } satisfies ToGradShard, [weights.buffer]);
+      } catch (err) {
+        cleanup();
+        this.pending.delete(entry);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   }
 }
 
 function post(w: Worker, msg: ToGradShard): void {
   w.postMessage(msg);
-}
-
-function requestGrads(
-  w: Worker,
-  weights: Float64Array,
-  indices: number[],
-): Promise<{ grads: Float64Array; count: number }> {
-  return new Promise((resolve, reject) => {
-    const onMsg = (ev: MessageEvent<FromGradShard>) => {
-      const msg = ev.data;
-      if (msg.type === "grads") {
-        w.removeEventListener("message", onMsg);
-        resolve({ grads: msg.grads, count: msg.count });
-      } else if (msg.type === "error") {
-        w.removeEventListener("message", onMsg);
-        reject(new Error(msg.message));
-      }
-    };
-    w.addEventListener("message", onMsg);
-    w.postMessage({ type: "compute", weights, indices } satisfies ToGradShard, [weights.buffer]);
-  });
 }

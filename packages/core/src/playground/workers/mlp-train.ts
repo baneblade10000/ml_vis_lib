@@ -118,7 +118,11 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
       if (!cfg) return;
       state = resetLiveTraining(structuredClone(cfg));
       await syncPool();
-      post({ type: "tick", snapshot: buildSnapshot(state) });
+      {
+        const snapshot = buildSnapshot(state);
+        post({ type: "tick", snapshot });
+        post({ type: "rebuilt", reason: msg.reason, snapshot });
+      }
       break;
     }
     case "play": {

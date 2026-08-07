@@ -427,7 +427,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
         <div
           className="nn-weight-legend nn-weight-legend--dock"
           role="img"
-          aria-label="Weight color scale from −1 (violet) to +1 (magenta)"
+          aria-label="Weight color scale from −1 (violet) through 0 (orchid) to +1 (magenta)"
         >
           <span className="nn-weight-legend__title">Weight</span>
           <div className="nn-weight-legend__bar" />
@@ -489,6 +489,10 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   const trainClientRef = useRef<TrainWorkerClient | null>(null);
   const trainReadyRef = useRef<Promise<unknown> | null>(null);
   const edgeVizBumpRef = useRef(0);
+  /** Bumped on main-thread topology edits; worker rebuild catches up. */
+  const topologyEpochRef = useRef(0);
+  const syncedTopologyEpochRef = useRef(0);
+  const rebuildPromiseRef = useRef<Promise<void> | null>(null);
 
   const syncRuntimeRefs = useCallback(() => {
     const engine = engineRef.current;
@@ -504,6 +508,15 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   const applyNetworkTick = useCallback(
     (snap: NetworkTrainSnapshot) => {
       const engine = engineRef.current;
+      // Ignore stale ticks from a pre-edit worker topology — otherwise their
+      // boundary map (old node ids) wipes heatmaps and leaves new neurons white.
+      if (
+        snap.graphSnapshot.outputId !== engine.graph.outputId ||
+        snap.graphSnapshot.nodes.length !== engine.graph.nodes.size ||
+        snap.graphSnapshot.nodes.some((n) => !engine.graph.nodes.has(n.id))
+      ) {
+        return;
+      }
       engine.applyWorkerViz(snap);
       boundaryRef.current = engine.boundary;
       curvesRef.current = engine.curves;
@@ -530,6 +543,8 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     return {
       config: structuredClone(engine.config),
       graphSnapshot: engine.graph.toSnapshot(),
+      trainData: engine.trainData.map((p) => ({ x: p.x, y: p.y, label: p.label })),
+      testData: engine.testData.map((p) => ({ x: p.x, y: p.y, label: p.label })),
     };
   }, []);
 
@@ -547,9 +562,15 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
       onError: (message) => console.error("[network train worker]", message),
     });
     trainClientRef.current = client;
-    trainReadyRef.current = client.init(workerPayload()).catch((err) => {
-      console.error("[network train worker] init failed", err);
-    });
+    trainReadyRef.current = client
+      .init(workerPayload())
+      .then((snap) => {
+        syncedTopologyEpochRef.current = topologyEpochRef.current;
+        return snap;
+      })
+      .catch((err) => {
+        console.error("[network train worker] init failed", err);
+      });
     return () => {
       client.dispose();
       trainClientRef.current = null;
@@ -557,9 +578,45 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     };
   }, [applyNetworkTick, workerPayload]);
 
-  const syncWorkerFromMain = useCallback(() => {
-    trainClientRef.current?.rebuild("topology", workerPayload());
-  }, [workerPayload]);
+  const syncWorkerFromMain = useCallback(
+    (reason: "topology" | "dataset" | "reset" | "resetWeights" | "mode" = "topology") => {
+      const client = trainClientRef.current;
+      if (!client) {
+        syncedTopologyEpochRef.current = topologyEpochRef.current;
+        return Promise.resolve();
+      }
+      const epochAtStart = topologyEpochRef.current;
+      const p = client.rebuild(reason, workerPayload()).then(() => {
+        if (rebuildPromiseRef.current === p) rebuildPromiseRef.current = null;
+        // Only mark synced if no newer edit landed while we waited.
+        if (topologyEpochRef.current === epochAtStart) {
+          syncedTopologyEpochRef.current = epochAtStart;
+        }
+      });
+      rebuildPromiseRef.current = p;
+      return p;
+    },
+    [workerPayload],
+  );
+
+  /** Wait until worker matches main topology (and any in-flight rebuild finishes). */
+  const ensureWorkerSynced = useCallback(async () => {
+    if (syncedTopologyEpochRef.current !== topologyEpochRef.current) {
+      await syncWorkerFromMain("topology");
+    } else if (rebuildPromiseRef.current) {
+      await rebuildPromiseRef.current;
+    }
+  }, [syncWorkerFromMain]);
+
+  /** Topology edits on main must rebuild the train worker or ticks desync heatmaps. */
+  const afterTopologyEdit = useCallback(() => {
+    topologyEpochRef.current += 1;
+    setPlaying(false);
+    syncRuntimeRefs();
+    void syncWorkerFromMain("topology");
+    requestPaint();
+    bump();
+  }, [bump, requestPaint, syncRuntimeRefs, syncWorkerFromMain]);
 
   // Play/pause → worker owns trainEpoch; display engine only applies ticks.
   useEffect(() => {
@@ -596,15 +653,19 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     }
     if (playing) {
       const ready = trainReadyRef.current ?? Promise.resolve();
-      void ready.then(() => {
-        if (!trainClientRef.current || trainClientRef.current !== client) return;
-        syncWorkerFromMain();
-        client.play(75);
-      });
-    } else {
-      client.pause();
+      let cancelled = false;
+      void ready
+        .then(() => ensureWorkerSynced())
+        .then(() => {
+          if (cancelled || !trainClientRef.current || trainClientRef.current !== client) return;
+          client.play(75);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
-  }, [playing, syncWorkerFromMain, syncRuntimeRefs]);
+    client.pause();
+  }, [playing, ensureWorkerSynced, syncRuntimeRefs]);
 
   useEffect(() => {
     if (wasPlayingRef.current && !playing) {
@@ -630,12 +691,13 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
 
   const reset = () => {
     engineRef.current.resetToInitial();
+    topologyEpochRef.current += 1;
     setPlaying(false);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setRefitViewKey((n) => n + 1);
     syncRuntimeRefs();
-    syncWorkerFromMain();
+    syncWorkerFromMain("reset");
     requestPaint();
     bump();
   };
@@ -644,7 +706,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     engineRef.current.resetWeights();
     setPlaying(false);
     syncRuntimeRefs();
-    syncWorkerFromMain();
+    syncWorkerFromMain("resetWeights");
     requestPaint();
     bump();
   };
@@ -653,8 +715,10 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     setPlaying(false);
     const client = trainClientRef.current;
     if (client) {
-      syncWorkerFromMain();
-      client.step();
+      void ensureWorkerSynced().then(() => {
+        if (trainClientRef.current !== client) return;
+        client.step();
+      });
     } else {
       engineRef.current.step();
       syncRuntimeRefs();
@@ -685,18 +749,20 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
 
   const onActivationChange = useCallback((activation: NetworkPlaygroundConfig["activation"]) => {
     engineRef.current.setActivation(activation);
+    topologyEpochRef.current += 1;
     setPlaying(false);
     syncRuntimeRefs();
-    syncWorkerFromMain();
+    syncWorkerFromMain("topology");
     requestPaint();
     bump();
   }, [bump, requestPaint, syncRuntimeRefs, syncWorkerFromMain]);
 
   const onWeightInitChange = useCallback((weightInit: NetworkPlaygroundConfig["weightInit"]) => {
     engineRef.current.setWeightInit(weightInit);
+    topologyEpochRef.current += 1;
     setPlaying(false);
     syncRuntimeRefs();
-    syncWorkerFromMain();
+    syncWorkerFromMain("resetWeights");
     requestPaint();
     bump();
   }, [bump, requestPaint, syncRuntimeRefs, syncWorkerFromMain]);
@@ -715,50 +781,50 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
 
   const onDatasetChange = useCallback((dataset: NetworkAnyDatasetId) => {
     engineRef.current.setDataset(dataset);
+    topologyEpochRef.current += 1;
     setPlaying(false);
     syncRuntimeRefs();
+    syncWorkerFromMain("dataset");
     requestPaint();
     bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+  }, [bump, requestPaint, syncRuntimeRefs, syncWorkerFromMain]);
 
   const onDataModeChange = useCallback((dataMode: NetworkDataMode) => {
     engineRef.current.setDataMode(dataMode);
+    topologyEpochRef.current += 1;
     setPlaying(false);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     syncRuntimeRefs();
+    syncWorkerFromMain("mode");
     requestPaint();
     bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+  }, [bump, requestPaint, syncRuntimeRefs, syncWorkerFromMain]);
 
   const onProblemTypeChange = useCallback((problemType: NetworkProblemType) => {
     engineRef.current.setProblemType(problemType);
+    topologyEpochRef.current += 1;
     setPlaying(false);
     syncRuntimeRefs();
+    syncWorkerFromMain("dataset");
     requestPaint();
     bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+  }, [bump, requestPaint, syncRuntimeRefs, syncWorkerFromMain]);
 
   const onToggleFeature = useCallback((id: string) => {
     engineRef.current.toggleFeature(id);
-    syncRuntimeRefs();
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+    afterTopologyEdit();
+  }, [afterTopologyEdit]);
 
   const onConnect = useCallback((sourceId: string, targetId: string) => {
     engineRef.current.connectNodes(sourceId, targetId);
-    syncRuntimeRefs();
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+    afterTopologyEdit();
+  }, [afterTopologyEdit]);
 
   const onDropNode = useCallback((kind: Parameters<PlaygroundEngine["addPaletteNode"]>[0], position: { x: number; y: number }) => {
     engineRef.current.addPaletteNode(kind, position);
-    syncRuntimeRefs();
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+    afterTopologyEdit();
+  }, [afterTopologyEdit]);
 
   const onMoveNode = useCallback((nodeId: string, position: { x: number; y: number }) => {
     engineRef.current.setNodePosition(nodeId, position);
@@ -767,46 +833,40 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   const onRemoveNode = useCallback((nodeId: string) => {
     engineRef.current.removeGraphNode(nodeId);
     setSelectedNodeId(null);
-    syncRuntimeRefs();
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+    afterTopologyEdit();
+  }, [afterTopologyEdit]);
 
   const onRemoveEdge = useCallback((sourceId: string, targetId: string) => {
     engineRef.current.disconnectNodes(sourceId, targetId);
     setSelectedEdgeId(null);
-    syncRuntimeRefs();
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+    afterTopologyEdit();
+  }, [afterTopologyEdit]);
+
+  const afterMlpShapeEdit = useCallback(() => {
+    afterTopologyEdit();
+    // Trigger the same glide + viewport refit as "Arrange layout".
+    setRefitViewKey((n) => n + 1);
+  }, [afterTopologyEdit]);
 
   const onAddLayer = useCallback(() => {
     engineRef.current.addLayer();
-    syncRuntimeRefs();
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+    afterMlpShapeEdit();
+  }, [afterMlpShapeEdit]);
 
   const onRemoveLayer = useCallback(() => {
     engineRef.current.removeLayer();
-    syncRuntimeRefs();
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+    afterMlpShapeEdit();
+  }, [afterMlpShapeEdit]);
 
   const onAddNeuron = useCallback((layerIdx: number) => {
     engineRef.current.addNeuron(layerIdx);
-    syncRuntimeRefs();
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+    afterMlpShapeEdit();
+  }, [afterMlpShapeEdit]);
 
   const onRemoveNeuron = useCallback((layerIdx: number) => {
     engineRef.current.removeNeuron(layerIdx);
-    syncRuntimeRefs();
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+    afterMlpShapeEdit();
+  }, [afterMlpShapeEdit]);
 
   const onNormalizeLayout = useCallback(() => {
     engineRef.current.normalizeLayout();
