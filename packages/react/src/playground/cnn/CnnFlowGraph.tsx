@@ -167,18 +167,18 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
 
   const labelFor = useCallback((layer: Parameters<typeof formatCnnNodeLabel>[0]) => formatCnnNodeLabel(layer, t), [t]);
 
-  // paintGeneration is delivered via context — keep it out of RF node data so
-  // Play ticks don't rebuild the whole graph every frame.
+  // Readout probs live in playVizRef — don't put them in RF node data (avoids
+  // graph rebuild / Y realign when only the bars should move).
+  void loss;
+  void probability;
   const mapped = useMemo(
     () =>
       cnnPipelineToFlow(pipeline, {
         selectedNodeId,
         featureMaps,
-        loss,
-        probability,
         labelFor,
       }),
-    [pipeline, selectedNodeId, featureMaps, loss, probability, labelFor],
+    [pipeline, selectedNodeId, featureMaps, labelFor],
   );
 
   const nodeKey = mapped.nodes.map((n) => n.id).join(",");
@@ -188,26 +188,31 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
     setNodes((prev) => alignNodesToMidline(prev));
   }, [setNodes]);
 
-  // Sync pipeline → RF nodes (x from layout), then align Y from DOM heights.
+  // Sync pipeline → RF nodes. Never touch Y here during Play map ticks.
   useLayoutEffect(() => {
     setNodes((prev) => {
       const prevById = new Map(prev.map((n) => [n.id, n]));
+      const sameTopo =
+        prev.length === mapped.nodes.length &&
+        prev.every((n, i) => n.id === mapped.nodes[i]?.id);
       const merged = mapped.nodes.map((n) => {
         const cur = prevById.get(n.id);
         return {
           ...n,
-          // Keep prior measured box until DOM align overwrites height.
           measured: cur?.measured,
+          height: cur?.height ?? n.height,
           position: { x: n.position.x, y: cur?.position.y ?? n.position.y },
         };
       });
+      if (sameTopo || props.trainingLiveRef.current) return merged;
       return alignNodesToMidline(merged);
     });
-  }, [mapped.nodes, setNodes]);
+  }, [mapped.nodes, setNodes, props.trainingLiveRef]);
 
-  // Re-align after RF mount / topology change — not on every paint tick.
+  // Re-align after RF mount / topology change — not while Play is live.
   useLayoutEffect(() => {
     if (!nodesInitialized) return;
+    if (props.trainingLiveRef.current) return;
     realign();
     const t1 = window.setTimeout(realign, 32);
     const t2 = window.setTimeout(realign, 100);
@@ -217,16 +222,19 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
       window.clearTimeout(t2);
       window.clearTimeout(t3);
     };
-  }, [nodesInitialized, nodeKey, realign]);
+  }, [nodesInitialized, nodeKey, realign, props.trainingLiveRef]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<Node<CnnNodeData>>[]) => {
       onNodesChange(changes);
+      // During Play, feature-map canvases resize every tick — realigning Y makes
+      // the whole pipeline columns jump/flip. Keep midline stable while training.
+      if (props.trainingLiveRef.current) return;
       if (changes.some((c) => c.type === "dimensions")) {
         requestAnimationFrame(realign);
       }
     },
-    [onNodesChange, realign],
+    [onNodesChange, realign, props.trainingLiveRef],
   );
 
   useEffect(() => {

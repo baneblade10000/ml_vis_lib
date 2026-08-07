@@ -2558,7 +2558,7 @@
 .cnn-readout-col__fill {
   width: 100%;
   min-height: 2px;
-  transition: height 0.15s ease;
+  /* No height transition — Play updates ~12 Hz and a transition looks like flipping. */
 }
 
 .cnn-readout-col__val {

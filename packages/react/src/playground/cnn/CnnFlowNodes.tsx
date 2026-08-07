@@ -562,6 +562,8 @@ export function CnnReadoutNode({ id, data }: NodeProps<Node<CnnNodeData>>) {
   const p1ValRef = useRef<HTMLSpanElement>(null);
   const p0ValRef = useRef<HTMLSpanElement>(null);
 
+  // Height is set only via DOM — never put it in React `style`, or every
+  // paintGeneration re-render resets bars to the JSX default (visible flip).
   const paintProbs = useCallback(() => {
     const live = playVizRef?.current?.probability;
     const p1 = Math.min(1, Math.max(0, live ?? data.probability ?? 0.5));
@@ -576,9 +578,6 @@ export function CnnReadoutNode({ id, data }: NodeProps<Node<CnnNodeData>>) {
     paintProbs();
   }, [paintProbs, paintGeneration]);
 
-  const p1 = Math.min(1, Math.max(0, data.probability ?? 0.5));
-  const p0 = 1 - p1;
-
   return (
     <BaseCnnNode data={data} className="cnn-node--readout" hideSource>
       <div className="cnn-readout-body" title={t.readoutProb}>
@@ -588,11 +587,11 @@ export function CnnReadoutNode({ id, data }: NodeProps<Node<CnnNodeData>>) {
               <div
                 ref={p0FillRef}
                 className="cnn-readout-col__fill"
-                style={{ height: `${Math.max(2, p0 * 100)}%`, background: CLASS_0_HEX }}
+                style={{ background: CLASS_0_HEX }}
               />
             </div>
             <span ref={p0ValRef} className="cnn-readout-col__val">
-              {p0.toFixed(2)}
+              —
             </span>
             <span className="cnn-readout-col__label">{t.class0}</span>
           </div>
@@ -601,11 +600,11 @@ export function CnnReadoutNode({ id, data }: NodeProps<Node<CnnNodeData>>) {
               <div
                 ref={p1FillRef}
                 className="cnn-readout-col__fill"
-                style={{ height: `${Math.max(2, p1 * 100)}%`, background: CLASS_1_HEX }}
+                style={{ background: CLASS_1_HEX }}
               />
             </div>
             <span ref={p1ValRef} className="cnn-readout-col__val">
-              {p1.toFixed(2)}
+              —
             </span>
             <span className="cnn-readout-col__label">{t.class1}</span>
           </div>
