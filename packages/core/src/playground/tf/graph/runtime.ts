@@ -71,6 +71,9 @@ export function resetGraphDerivatives(nodes: Iterable<GraphNode>): void {
       link.errorDer = 0;
       link.accErrorDer = 0;
       link.numAccumulatedDers = 0;
+      // Keep lastGradient — it is a display snapshot of the last batch mean
+      // ∂E/∂w. Forward-only passes (loss, boundary) must not wipe it or the
+      // edge visualization goes blank right after every Step / Play tick.
     }
     for (const link of node.outputs) {
       link.errorDer = 0;

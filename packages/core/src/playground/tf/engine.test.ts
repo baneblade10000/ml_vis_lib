@@ -3,6 +3,7 @@ import { reduceMatrix } from "../../charts/mini-heatmap";
 import { boundaryToGridPoints, computeBoundaries } from "./boundary";
 import { valueToRgb, PALETTE_HIGH, PALETTE_LOW } from "./colors";
 import { PlaygroundEngine } from "./engine";
+import { Activations } from "./nn";
 
 describe("PlaygroundEngine", () => {
   it("trains and reduces loss on circle data", () => {
@@ -12,6 +13,24 @@ describe("PlaygroundEngine", () => {
     expect(engine.epoch).toBe(20);
     expect(engine.lossTrain).toBeLessThanOrEqual(initialLoss);
     expect(engine.boundary[engine.outputNodeId]).toBeDefined();
+  });
+
+  it("keeps lastGradient after step() so multi-layer edge viz survives loss refresh", () => {
+    const engine = new PlaygroundEngine({
+      dataset: "circle",
+      networkShape: [3, 3],
+      numHiddenLayers: 2,
+    });
+    engine.step();
+    const links = engine.graph.getAllLinks();
+    expect(links.length).toBeGreaterThan(0);
+    const withGrad = links.filter((l) => l.lastGradient !== 0);
+    expect(withGrad.length).toBeGreaterThan(0);
+    // Both early (into first hidden) and late (into output) edges should retain signal.
+    const intoHidden = withGrad.filter((l) => l.dest.kind === "dense");
+    const intoOutput = withGrad.filter((l) => l.dest.kind === "output");
+    expect(intoHidden.length).toBeGreaterThan(0);
+    expect(intoOutput.length).toBeGreaterThan(0);
   });
 
   it("stores coarse boundary grids for hidden nodes and full res for output", () => {
@@ -105,7 +124,8 @@ describe("1D data mode", () => {
     expect(engine.config.dataset).toBe("sine");
     expect(engine.targetCurve?.length).toBe(240);
     engine.setDataMode("2d");
-    expect(engine.config.dataset).toBe("circle");
+    expect(engine.config.problemType).toBe("regression");
+    expect(engine.config.dataset).toBe("sinSin");
     expect(engine.config.enabledFeatures.y).toBe(true);
   });
 
@@ -118,6 +138,30 @@ describe("1D data mode", () => {
     expect(engine.config.dataMode).toBe("1d");
     expect(engine.config.problemType).toBe("regression");
     expect(engine.config.dataset).toBe("cubic");
+  });
+});
+
+describe("2D regression", () => {
+  it("setProblemType enables sinSin with linear output", () => {
+    const engine = new PlaygroundEngine();
+    engine.setProblemType("regression");
+    expect(engine.config.dataMode).toBe("2d");
+    expect(engine.config.dataset).toBe("sinSin");
+    expect(engine.graph.getOutputNode().activation).toBe(Activations.LINEAR);
+    expect(engine.trainData.every((p) => Number.isFinite(p.label))).toBe(true);
+  });
+
+  it("trains on sin(x)·sin(y)", () => {
+    const engine = new PlaygroundEngine({
+      problemType: "regression",
+      dataset: "sinSin",
+      networkShape: [8, 8],
+      numHiddenLayers: 2,
+      learningRate: 0.1,
+    });
+    const initialLoss = engine.lossTrain;
+    for (let i = 0; i < 40; i++) engine.step();
+    expect(engine.lossTrain).toBeLessThan(initialLoss);
   });
 });
 

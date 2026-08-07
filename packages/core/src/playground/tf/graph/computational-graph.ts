@@ -7,6 +7,7 @@ import {
   RegularizationFunction,
 } from "./runtime";
 import type { GraphEdgeDef, GraphNodeDef, GraphPosition, GraphSnapshot } from "./types";
+import { optimizerDelta, type PlaygroundOptimizerId } from "../../optimizers";
 
 let nextNodeId = 1;
 
@@ -379,13 +380,16 @@ export function updateWeightsGraph(
   graph: ComputationalGraph,
   learningRate: number,
   regularizationRate: number,
+  optimizer: PlaygroundOptimizerId = "SGD",
+  optStep = 1,
 ): void {
   for (const id of graph.getTopoOrder()) {
     const node = graph.nodes.get(id);
     if (!node || node.kind === "input") continue;
 
     if (node.numAccumulatedDers > 0) {
-      node.bias -= learningRate * node.accInputDer / node.numAccumulatedDers;
+      const gBias = node.accInputDer / node.numAccumulatedDers;
+      node.bias -= optimizerDelta(gBias, node, optimizer, learningRate, optStep);
       node.accInputDer = 0;
       node.numAccumulatedDers = 0;
     }
@@ -394,13 +398,17 @@ export function updateWeightsGraph(
       if (link.isDead) continue;
       const regulDer = link.regularization ? link.regularization.der(link.weight) : 0;
       if (link.numAccumulatedDers > 0) {
-        link.weight -= (learningRate / link.numAccumulatedDers) * link.accErrorDer;
-        const newLinkWeight = link.weight - learningRate * regularizationRate * regulDer;
-        if (link.regularization === RegularizationFunction.L1 && link.weight * newLinkWeight < 0) {
+        link.lastGradient = link.accErrorDer / link.numAccumulatedDers;
+        const gData = link.accErrorDer / link.numAccumulatedDers;
+        // Regularization is folded into the effective gradient (same as CNN path).
+        const gEff = gData + regularizationRate * regulDer;
+        const prev = link.weight;
+        const next = prev - optimizerDelta(gEff, link, optimizer, learningRate, optStep);
+        if (link.regularization === RegularizationFunction.L1 && prev * next < 0) {
           link.weight = 0;
           link.isDead = true;
         } else {
-          link.weight = newLinkWeight;
+          link.weight = next;
         }
         link.accErrorDer = 0;
         link.numAccumulatedDers = 0;

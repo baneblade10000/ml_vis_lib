@@ -6,6 +6,12 @@ import {
   type Signal,
 } from "../tensor";
 import { activationById, type CnnActivationId } from "../activations";
+import {
+  applyBiasUpdate,
+  applyRegularizedUpdate,
+  type CnnRegularizationId,
+} from "../regularization";
+import { createOptState, resetOptState, type OptState, type PlaygroundOptimizerId } from "../../optimizers";
 import { Layer, type LayerShape } from "./base";
 
 interface Conv1DConfig {
@@ -36,6 +42,8 @@ export class Conv1DLayer extends Layer {
   private paddedInput: Signal = [];
   private gradKernels: Kernel1D;
   private gradBiases: number[];
+  private optKernels: OptState[][][] = [];
+  private optBiases: OptState[] = [];
 
   constructor(id: string, config: Conv1DConfig) {
     super(id, "conv1d", "1d");
@@ -48,6 +56,7 @@ export class Conv1DLayer extends Layer {
     this.biases = new Array(this.filters).fill(0);
     this.gradKernels = [];
     this.gradBiases = new Array(this.filters).fill(0);
+    this.optBiases = Array.from({ length: this.filters }, () => createOptState());
   }
 
   label(): string {
@@ -66,19 +75,27 @@ export class Conv1DLayer extends Layer {
     const bound = Math.sqrt(6 / Math.max(fanIn, 1));
     this.kernels = new Array(this.filters);
     this.gradKernels = new Array(this.filters);
+    this.optKernels = new Array(this.filters);
     for (let o = 0; o < this.filters; o++) {
       this.kernels[o] = new Array(inChannels);
       this.gradKernels[o] = new Array(inChannels);
+      this.optKernels[o] = new Array(inChannels);
       for (let i = 0; i < inChannels; i++) {
         const w = new Array(this.kernelSize);
         const gw = new Array(this.kernelSize).fill(0);
-        for (let k = 0; k < this.kernelSize; k++) w[k] = (rng() * 2 - 1) * bound;
-        this.kernels[o][i] = w;
-        this.gradKernels[o][i] = gw;
+        const ow = new Array(this.kernelSize);
+        for (let k = 0; k < this.kernelSize; k++) {
+          w[k] = (rng() * 2 - 1) * bound;
+          ow[k] = createOptState();
+        }
+        this.kernels[o]![i] = w;
+        this.gradKernels[o]![i] = gw;
+        this.optKernels[o]![i] = ow;
       }
     }
     this.biases = new Array(this.filters).fill(0);
     this.gradBiases = new Array(this.filters).fill(0);
+    this.optBiases = Array.from({ length: this.filters }, () => createOptState());
   }
 
   private zeroGradsInternal(): void {
@@ -192,15 +209,47 @@ export class Conv1DLayer extends Layer {
     return this.inputGrad;
   }
 
-  updateParams(learningRate: number): void {
+  updateParams(
+    learningRate: number,
+    regularization: CnnRegularizationId = "none",
+    regularizationRate = 0,
+    optimizer: PlaygroundOptimizerId = "SGD",
+    optStep = 1,
+  ): void {
     for (let o = 0; o < this.filters; o++) {
-      this.biases[o] -= learningRate * this.gradBiases[o];
-      for (let i = 0; i < this.kernels[o].length; i++) {
-        const w = this.kernels[o][i];
-        const gw = this.gradKernels[o][i];
-        for (let kk = 0; kk < this.kernelSize; kk++) w[kk] -= learningRate * gw[kk];
+      this.biases[o] = applyBiasUpdate(
+        this.biases[o]!,
+        this.gradBiases[o]!,
+        learningRate,
+        optimizer,
+        this.optBiases[o]!,
+        optStep,
+      );
+      for (let i = 0; i < this.kernels[o]!.length; i++) {
+        const w = this.kernels[o]![i]!;
+        const gw = this.gradKernels[o]![i]!;
+        const ow = this.optKernels[o]![i]!;
+        for (let kk = 0; kk < this.kernelSize; kk++) {
+          w[kk] = applyRegularizedUpdate(
+            w[kk]!,
+            gw[kk]!,
+            learningRate,
+            regularization,
+            regularizationRate,
+            optimizer,
+            ow[kk]!,
+            optStep,
+          );
+        }
       }
     }
+  }
+
+  clearOptimizerState(): void {
+    for (const bank of this.optKernels) {
+      for (const ch of bank) for (const s of ch) resetOptState(s);
+    }
+    for (const s of this.optBiases) resetOptState(s);
   }
 
   paramCount(): number {

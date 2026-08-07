@@ -8,6 +8,12 @@ import {
   type Volume,
 } from "../tensor";
 import { activationById, type CnnActivationId } from "../activations";
+import {
+  applyBiasUpdate,
+  applyRegularizedUpdate,
+  type CnnRegularizationId,
+} from "../regularization";
+import { createOptState, resetOptState, type OptState, type PlaygroundOptimizerId } from "../../optimizers";
 import { Layer, type LayerShape } from "./base";
 
 interface Conv2DConfig {
@@ -50,6 +56,8 @@ export class Conv2DLayer extends Layer {
 
   private gradKernels: Kernel2D;
   private gradBiases: number[];
+  private optKernels: OptState[][][][] = [];
+  private optBiases: OptState[] = [];
 
   constructor(id: string, config: Conv2DConfig) {
     super(id, "conv2d", "2d");
@@ -62,6 +70,7 @@ export class Conv2DLayer extends Layer {
     this.biases = new Array(this.filters).fill(0);
     this.gradKernels = [];
     this.gradBiases = new Array(this.filters).fill(0);
+    this.optBiases = Array.from({ length: this.filters }, () => createOptState());
   }
 
   label(): string {
@@ -83,25 +92,32 @@ export class Conv2DLayer extends Layer {
     const bound = Math.sqrt(6 / Math.max(fanIn, 1));
     this.kernels = new Array(this.filters);
     this.gradKernels = new Array(this.filters);
+    this.optKernels = new Array(this.filters);
     for (let o = 0; o < this.filters; o++) {
       this.kernels[o] = new Array(inChannels);
       this.gradKernels[o] = new Array(inChannels);
+      this.optKernels[o] = new Array(inChannels);
       for (let i = 0; i < inChannels; i++) {
         const w = new Array(this.kernelSize);
         const gw = new Array(this.kernelSize);
+        const ow = new Array(this.kernelSize);
         for (let kr = 0; kr < this.kernelSize; kr++) {
           w[kr] = new Array(this.kernelSize);
           gw[kr] = new Array(this.kernelSize).fill(0);
+          ow[kr] = new Array(this.kernelSize);
           for (let kc = 0; kc < this.kernelSize; kc++) {
-            w[kr][kc] = (rng() * 2 - 1) * bound;
+            w[kr]![kc] = (rng() * 2 - 1) * bound;
+            ow[kr]![kc] = createOptState();
           }
         }
-        this.kernels[o][i] = w;
-        this.gradKernels[o][i] = gw;
+        this.kernels[o]![i] = w;
+        this.gradKernels[o]![i] = gw;
+        this.optKernels[o]![i] = ow;
       }
     }
     this.biases = new Array(this.filters).fill(0);
     this.gradBiases = new Array(this.filters).fill(0);
+    this.optBiases = Array.from({ length: this.filters }, () => createOptState());
   }
 
   private zeroGradsInternal(): void {
@@ -259,19 +275,51 @@ export class Conv2DLayer extends Layer {
     return this.inputGrad;
   }
 
-  updateParams(learningRate: number): void {
+  updateParams(
+    learningRate: number,
+    regularization: CnnRegularizationId = "none",
+    regularizationRate = 0,
+    optimizer: PlaygroundOptimizerId = "SGD",
+    optStep = 1,
+  ): void {
     for (let o = 0; o < this.filters; o++) {
-      this.biases[o] -= learningRate * this.gradBiases[o];
-      for (let i = 0; i < this.kernels[o].length; i++) {
-        const w = this.kernels[o][i];
-        const gw = this.gradKernels[o][i];
+      this.biases[o] = applyBiasUpdate(
+        this.biases[o]!,
+        this.gradBiases[o]!,
+        learningRate,
+        optimizer,
+        this.optBiases[o]!,
+        optStep,
+      );
+      for (let i = 0; i < this.kernels[o]!.length; i++) {
+        const w = this.kernels[o]![i]!;
+        const gw = this.gradKernels[o]![i]!;
+        const ow = this.optKernels[o]![i]!;
         for (let kr = 0; kr < this.kernelSize; kr++) {
           for (let kc = 0; kc < this.kernelSize; kc++) {
-            w[kr][kc] -= learningRate * gw[kr][kc];
+            w[kr]![kc] = applyRegularizedUpdate(
+              w[kr]![kc]!,
+              gw[kr]![kc]!,
+              learningRate,
+              regularization,
+              regularizationRate,
+              optimizer,
+              ow[kr]![kc]!,
+              optStep,
+            );
           }
         }
       }
     }
+  }
+
+  clearOptimizerState(): void {
+    for (const bank of this.optKernels) {
+      for (const ch of bank) {
+        for (const row of ch) for (const s of row) resetOptState(s);
+      }
+    }
+    for (const s of this.optBiases) resetOptState(s);
   }
 
   paramCount(): number {

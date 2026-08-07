@@ -21,8 +21,18 @@ import { DenseLayer } from "./layers/dense";
 import { OutputLayer } from "./layers/output";
 import { Losses } from "./loss";
 import type { Signal, Volume } from "./tensor";
+import type { LossHistoryPoint } from "../tf/engine";
+import type { CnnRegularizationId } from "./regularization";
+import type { PlaygroundOptimizerId } from "../optimizers";
+export type { CnnRegularizationId } from "./regularization";
+export { CNN_REGULARIZATIONS, CNN_REGULARIZATION_RATES } from "./regularization";
+export type { PlaygroundOptimizerId } from "../optimizers";
+export { PLAYGROUND_OPTIMIZERS } from "../optimizers";
 
 export type CnnMode = "2d" | "1d";
+
+/** Cap so long Play sessions don't grow unbounded (~1 min at ~20 Hz). */
+const LOSS_HISTORY_MAX = 1200;
 
 /** Declarative spec for one layer — the editable description of the network. */
 export interface LayerSpec {
@@ -41,11 +51,14 @@ export interface CnnConfig {
   /** Ordered layer specs (input + output are implicit). */
   layers: LayerSpec[];
   learningRate: number;
+  optimizer: PlaygroundOptimizerId;
   activation: CnnActivationId;
   batchSize: number;
   /** Noise level ∈ [0,1] passed to the dataset generator. */
   noise: number;
   percTrainData: number;
+  regularization: CnnRegularizationId;
+  regularizationRate: number;
 }
 
 export const DEFAULT_CNN_CONFIG_2D: CnnConfig = {
@@ -60,10 +73,13 @@ export const DEFAULT_CNN_CONFIG_2D: CnnConfig = {
     { kind: "dense", units: 1, activation: "linear" },
   ],
   learningRate: 0.1,
+  optimizer: "SGD",
   activation: "relu",
   batchSize: 16,
   noise: 0.1,
   percTrainData: 50,
+  regularization: "none",
+  regularizationRate: 0,
 };
 
 export const DEFAULT_CNN_CONFIG_1D: CnnConfig = {
@@ -78,10 +94,13 @@ export const DEFAULT_CNN_CONFIG_1D: CnnConfig = {
     { kind: "dense", units: 1, activation: "linear" },
   ],
   learningRate: 0.1,
+  optimizer: "SGD",
   activation: "relu",
   batchSize: 16,
   noise: 0.1,
   percTrainData: 50,
+  regularization: "none",
+  regularizationRate: 0,
 };
 
 export const DEFAULT_CNN_CONFIG: Record<CnnMode, CnnConfig> = {
@@ -124,6 +143,10 @@ export class CnnEngine {
   lossTest = 0;
   accTrain = 0;
   accTest = 0;
+  /** Learning-curve samples (train/test loss vs epoch). */
+  lossHistory: LossHistoryPoint[] = [];
+  /** 1-based Adam/RMSProp step; reset on weight reinit or optimizer change. */
+  optStep = 0;
   /** Index of the example currently shown in the input node. */
   inspectedExampleIndex = 0;
   private readonly initialConfig: CnnConfig;
@@ -138,10 +161,34 @@ export class CnnEngine {
 
   private bootstrap(): void {
     this.epoch = 0;
+    this.optStep = 0;
+    this.lossHistory = [];
     this.buildPipeline();
     this.generateData();
     this.refreshMetrics();
     this.forwardInspected();
+    this.pushLossHistory();
+  }
+
+  /**
+   * Snapshot current train/test loss for the learning-curve chart.
+   * Updates the last point in place when the epoch hasn't advanced.
+   */
+  pushLossHistory(): void {
+    const last = this.lossHistory[this.lossHistory.length - 1];
+    if (last && last.epoch === this.epoch) {
+      last.train = this.lossTrain;
+      last.test = this.lossTest;
+      return;
+    }
+    this.lossHistory.push({
+      epoch: this.epoch,
+      train: this.lossTrain,
+      test: this.lossTest,
+    });
+    if (this.lossHistory.length > LOSS_HISTORY_MAX) {
+      this.lossHistory.splice(0, this.lossHistory.length - LOSS_HISTORY_MAX);
+    }
   }
 
   /** Build the concrete layer pipeline (input + spec layers + output) from config. */
@@ -358,8 +405,10 @@ export class CnnEngine {
    */
   private applyUpdate(learningRate: number, batchSize: number): void {
     const effectiveLr = learningRate / batchSize;
+    const { regularization, regularizationRate, optimizer } = this.config;
+    this.optStep += 1;
     for (const layer of this.layers) {
-      layer.updateParams(effectiveLr);
+      layer.updateParams(effectiveLr, regularization, regularizationRate, optimizer, this.optStep);
     }
   }
 
@@ -455,9 +504,12 @@ export class CnnEngine {
 
   resetWeights(): void {
     this.epoch = 0;
+    this.optStep = 0;
+    this.lossHistory = [];
     for (const layer of this.layers) layer.reinitialize(Math.random);
     this.refreshMetrics();
     this.forwardInspected();
+    this.pushLossHistory();
   }
 
   setMode(mode: CnnMode): void {
@@ -469,9 +521,11 @@ export class CnnEngine {
   setDataset(dataset: CnnDatasetId2D | CnnDatasetId1D): void {
     this.config.dataset = dataset;
     this.epoch = 0;
+    this.lossHistory = [];
     this.generateData();
     this.refreshMetrics();
     this.forwardInspected();
+    this.pushLossHistory();
   }
 
   setActivation(activation: CnnActivationId): void {
@@ -495,12 +549,29 @@ export class CnnEngine {
     this.config.batchSize = bs;
   }
 
+  setRegularization(regularization: CnnRegularizationId): void {
+    this.config.regularization = regularization;
+  }
+
+  setRegularizationRate(rate: number): void {
+    this.config.regularizationRate = rate;
+  }
+
+  setOptimizer(optimizer: PlaygroundOptimizerId): void {
+    if (this.config.optimizer === optimizer) return;
+    this.config.optimizer = optimizer;
+    this.optStep = 0;
+    for (const layer of this.layers) layer.clearOptimizerState();
+  }
+
   /** Rebuild pipeline + reinit from current layer specs. */
   private rebuildPipeline(): void {
     this.epoch = 0;
+    this.lossHistory = [];
     this.buildPipeline();
     this.refreshMetrics();
     this.forwardInspected();
+    this.pushLossHistory();
   }
 
   /**
@@ -542,6 +613,7 @@ export class CnnEngine {
     this.trainEpoch();
     this.refreshMetrics();
     this.forwardInspected();
+    this.pushLossHistory();
   }
 
   /** Compute the shape that flows through the pipeline (for display). */

@@ -1,5 +1,11 @@
 import { cloneSignal, zeros1D, type Signal } from "../tensor";
 import { activationById, type CnnActivationId } from "../activations";
+import {
+  applyBiasUpdate,
+  applyRegularizedUpdate,
+  type CnnRegularizationId,
+} from "../regularization";
+import { createOptState, resetOptState, type OptState, type PlaygroundOptimizerId } from "../../optimizers";
 import { Layer, type LayerShape } from "./base";
 
 /**
@@ -18,6 +24,8 @@ export class DenseLayer extends Layer {
   private lastInput: number[] = [];
   private gradWeights: number[][] = [];
   private gradBiases: number[] = [];
+  private optWeights: OptState[][] = [];
+  private optBiases: OptState[] = [];
   private inUnits = 0;
 
   constructor(id: string, units: number, activation: CnnActivationId = "linear") {
@@ -40,15 +48,22 @@ export class DenseLayer extends Layer {
     const bound = Math.sqrt(6 / Math.max(inUnits, 1));
     this.weights = new Array(this.units);
     this.gradWeights = new Array(this.units);
+    this.optWeights = new Array(this.units);
     for (let o = 0; o < this.units; o++) {
       const w = new Array(inUnits);
       const gw = new Array(inUnits).fill(0);
-      for (let i = 0; i < inUnits; i++) w[i] = (rng() * 2 - 1) * bound;
+      const ow = new Array(inUnits);
+      for (let i = 0; i < inUnits; i++) {
+        w[i] = (rng() * 2 - 1) * bound;
+        ow[i] = createOptState();
+      }
       this.weights[o] = w;
       this.gradWeights[o] = gw;
+      this.optWeights[o] = ow;
     }
     this.biases = new Array(this.units).fill(0);
     this.gradBiases = new Array(this.units).fill(0);
+    this.optBiases = Array.from({ length: this.units }, () => createOptState());
   }
 
   forward(input: Signal): Signal {
@@ -98,12 +113,37 @@ export class DenseLayer extends Layer {
     return wrapped;
   }
 
-  updateParams(learningRate: number): void {
+  updateParams(
+    learningRate: number,
+    regularization: CnnRegularizationId = "none",
+    regularizationRate = 0,
+    optimizer: PlaygroundOptimizerId = "SGD",
+    optStep = 1,
+  ): void {
     for (let o = 0; o < this.units; o++) {
-      this.biases[o] -= learningRate * this.gradBiases[o];
-      const w = this.weights[o];
-      const gw = this.gradWeights[o];
-      for (let i = 0; i < this.inUnits; i++) w[i] -= learningRate * gw[i];
+      this.biases[o] = applyBiasUpdate(
+        this.biases[o]!,
+        this.gradBiases[o]!,
+        learningRate,
+        optimizer,
+        this.optBiases[o]!,
+        optStep,
+      );
+      const w = this.weights[o]!;
+      const gw = this.gradWeights[o]!;
+      const ow = this.optWeights[o]!;
+      for (let i = 0; i < this.inUnits; i++) {
+        w[i] = applyRegularizedUpdate(
+          w[i]!,
+          gw[i]!,
+          learningRate,
+          regularization,
+          regularizationRate,
+          optimizer,
+          ow[i]!,
+          optStep,
+        );
+      }
     }
   }
 
@@ -112,6 +152,11 @@ export class DenseLayer extends Layer {
       this.gradBiases[o] = 0;
       this.gradWeights[o].fill(0);
     }
+  }
+
+  clearOptimizerState(): void {
+    for (const row of this.optWeights) for (const s of row) resetOptState(s);
+    for (const s of this.optBiases) resetOptState(s);
   }
 
   paramCount(): number {

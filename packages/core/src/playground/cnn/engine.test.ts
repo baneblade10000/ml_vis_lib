@@ -190,4 +190,19 @@ describe("CnnEngine (2D)", () => {
     const sample = (engine.testData[0] as ImageExample | SignalExample).label;
     expect(sample === 0 || sample === 1).toBe(true);
   });
+
+  it("strong L1 drives dense weights toward zero", () => {
+    const engine = new CnnEngine({
+      ...DEFAULT_CNN_CONFIG_2D,
+      regularization: "L1",
+      regularizationRate: 10,
+      learningRate: 0.3,
+    });
+    const dense = engine.layers.find((l) => l instanceof DenseLayer) as DenseLayer;
+    expect(dense).toBeDefined();
+    const before = dense.weights.flat().reduce((s, w) => s + Math.abs(w), 0);
+    for (let i = 0; i < 40; i++) engine.trainEpoch();
+    const after = dense.weights.flat().reduce((s, w) => s + Math.abs(w), 0);
+    expect(after).toBeLessThan(before);
+  });
 });

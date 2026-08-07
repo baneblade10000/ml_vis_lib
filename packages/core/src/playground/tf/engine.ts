@@ -15,6 +15,8 @@ limitations under the License.
 
 import {
   DATASETS,
+  DEFAULT_DATASET_2D_CLASSIFICATION,
+  DEFAULT_DATASET_2D_REGRESSION,
   NUM_SAMPLES,
   shuffle,
   type DataGenerator,
@@ -64,6 +66,10 @@ import { layoutMlpFromLayers, MLP_ROW_SPACING, normalizeGraphLayout } from "./gr
 import { CURVE_DENSITY, PLAY_BOUNDARY_STRIDE, PLAY_CURVE_STRIDE } from "./constants";
 import { sampleBias, sampleWeight, type WeightInitId } from "./weight-init";
 
+import type { PlaygroundOptimizerId } from "../optimizers";
+export type { PlaygroundOptimizerId } from "../optimizers";
+export { PLAYGROUND_OPTIMIZERS } from "../optimizers";
+
 export type TfActivationId = "relu" | "tanh" | "sigmoid" | "linear";
 export type TfRegularizationId = "none" | "L1" | "L2";
 export type TfDataMode = "2d" | "1d";
@@ -106,6 +112,7 @@ const DEFAULT_FEATURES_1D: Record<string, boolean> = {
 
 export interface TfPlaygroundConfig {
   learningRate: number;
+  optimizer: PlaygroundOptimizerId;
   activation: TfActivationId;
   weightInit: WeightInitId;
   regularization: TfRegularizationId;
@@ -125,6 +132,7 @@ export interface TfPlaygroundConfig {
 
 export const DEFAULT_TF_CONFIG: TfPlaygroundConfig = {
   learningRate: 0.03,
+  optimizer: "SGD",
   activation: "tanh",
   weightInit: "uniform",
   regularization: "none",
@@ -135,7 +143,7 @@ export const DEFAULT_TF_CONFIG: TfPlaygroundConfig = {
   dataMode: "2d",
   problemType: "classification",
   dataset: "circle",
-  networkShape: [2],
+  networkShape: [4],
   numHiddenLayers: 1,
   enabledFeatures: { ...DEFAULT_FEATURES_2D },
   discretize: false,
@@ -147,6 +155,9 @@ export interface LossHistoryPoint {
   train: number;
   test: number;
 }
+
+/** Cap so long Play sessions don't grow unbounded (~1 min at ~20 Hz sample rate). */
+const LOSS_HISTORY_MAX = 1200;
 
 export class PlaygroundEngine {
   config: TfPlaygroundConfig;
@@ -162,6 +173,8 @@ export class PlaygroundEngine {
   lossTest = 0;
   epoch = 0;
   lossHistory: LossHistoryPoint[] = [];
+  /** 1-based Adam/RMSProp step; reset on weight reinit or optimizer change. */
+  optStep = 0;
   private boundaryNeedsInputRefresh = true;
   /** Config snapshot from first page load — used by resetToInitial(). */
   private readonly initialConfig: TfPlaygroundConfig;
@@ -260,8 +273,13 @@ export class PlaygroundEngine {
         this.config.enabledFeatures.x = true;
       }
     } else {
-      this.config.problemType = "classification";
-      this.config.dataset = dataset in DATASETS ? (dataset as DatasetId) : "circle";
+      this.config.problemType = problemType;
+      this.config.dataset =
+        dataset in DATASETS
+          ? (dataset as DatasetId)
+          : problemType === "regression"
+            ? DEFAULT_DATASET_2D_REGRESSION
+            : DEFAULT_DATASET_2D_CLASSIFICATION;
       this.config.enabledFeatures =
         dataset in DATASETS
           ? { ...DEFAULT_FEATURES_2D, ...enabledFeatures }
@@ -289,20 +307,31 @@ export class PlaygroundEngine {
 
   /** Fresh weights / biases in place using the selected init scheme. */
   private reinitializeWeights(): void {
+    this.optStep = 0;
     const init = this.config.weightInit;
     for (const node of this.graph.nodes.values()) {
       if (node.kind === "input") continue;
       node.bias = sampleBias(init, node.kind);
+      node.m = 0;
+      node.v = 0;
       const fanIn = Math.max(node.inputLinks.length, 1);
       const fanOut = Math.max(node.outputs.length, 1);
       for (const link of node.inputLinks) {
         // Residual skip edges into Add nodes are identity (weight = 1).
         if (node.kind === "sum" && link.weight === 1) {
           link.isDead = false;
+          link.m = 0;
+          link.v = 0;
           continue;
         }
         link.weight = sampleWeight(init, fanIn, fanOut);
         link.isDead = false;
+        link.errorDer = 0;
+        link.accErrorDer = 0;
+        link.numAccumulatedDers = 0;
+        link.lastGradient = 0;
+        link.m = 0;
+        link.v = 0;
       }
     }
   }
@@ -311,13 +340,35 @@ export class PlaygroundEngine {
     this.trainEpoch();
     this.refreshMetrics();
     this.refreshBoundary();
-    this.lossHistory.push({ epoch: this.epoch, train: this.lossTrain, test: this.lossTest });
+    this.pushLossHistory();
+  }
+
+  /**
+   * Snapshot current train/test loss for the learning-curve chart.
+   * Updates the last point in place when the epoch hasn't advanced (Play
+   * refreshes metrics between epochs).
+   */
+  pushLossHistory(): void {
+    const last = this.lossHistory[this.lossHistory.length - 1];
+    if (last && last.epoch === this.epoch) {
+      last.train = this.lossTrain;
+      last.test = this.lossTest;
+      return;
+    }
+    this.lossHistory.push({
+      epoch: this.epoch,
+      train: this.lossTrain,
+      test: this.lossTest,
+    });
+    if (this.lossHistory.length > LOSS_HISTORY_MAX) {
+      this.lossHistory.splice(0, this.lossHistory.length - LOSS_HISTORY_MAX);
+    }
   }
 
   /** One training pass without boundary / test-loss refresh (for fast Play loop). */
   trainEpoch(updateTrainLoss = false): void {
     this.epoch++;
-    const { batchSize, learningRate, regularizationRate } = this.config;
+    const { batchSize, learningRate, regularizationRate, optimizer } = this.config;
     const yCoord = this.config.dataMode === "1d" ? 0 : undefined;
     this.trainData.forEach((point, i) => {
       const input = constructInput(
@@ -328,7 +379,8 @@ export class PlaygroundEngine {
       forwardPropGraph(this.graph, input, i === 0);
       backPropGraph(this.graph, point.label, Errors.SQUARE);
       if ((i + 1) % batchSize === 0) {
-        updateWeightsGraph(this.graph, learningRate, regularizationRate);
+        this.optStep += 1;
+        updateWeightsGraph(this.graph, learningRate, regularizationRate, optimizer, this.optStep);
       }
     });
     if (updateTrainLoss) {
@@ -543,7 +595,7 @@ export class PlaygroundEngine {
       this.config.architecturePreset = "mlp";
     }
     if (this.config.numHiddenLayers >= 6) return;
-    this.config.networkShape[this.config.numHiddenLayers] = 2;
+    this.config.networkShape[this.config.numHiddenLayers] = 4;
     this.config.numHiddenLayers++;
     this.rebuildMlpPreservingLayout();
   }
@@ -580,27 +632,37 @@ export class PlaygroundEngine {
   setDataMode(dataMode: TfDataMode): void {
     if (this.config.dataMode === dataMode) return;
     this.config.dataMode = dataMode;
+    const regression = this.config.problemType === "regression";
     if (dataMode === "1d") {
-      this.config.problemType = "classification";
-      this.config.dataset = DEFAULT_DATASET_1D_CLASSIFICATION;
+      this.config.dataset = regression
+        ? DEFAULT_DATASET_1D_REGRESSION
+        : DEFAULT_DATASET_1D_CLASSIFICATION;
       this.config.enabledFeatures = { ...DEFAULT_FEATURES_1D };
     } else {
-      this.config.problemType = "classification";
-      this.config.dataset = "circle";
+      this.config.dataset = regression
+        ? DEFAULT_DATASET_2D_REGRESSION
+        : DEFAULT_DATASET_2D_CLASSIFICATION;
       this.config.enabledFeatures = { ...DEFAULT_FEATURES_2D };
     }
+    this.syncOutputActivation();
     this.reset();
   }
 
-  /** Classification vs regression (1D only; 2D stays classification). */
+  /** Classification vs regression — swaps to a matching default dataset. */
   setProblemType(problemType: TfProblemType): void {
-    if (this.config.dataMode !== "1d") return;
     if (this.config.problemType === problemType) return;
     this.config.problemType = problemType;
-    this.config.dataset =
-      problemType === "regression"
-        ? DEFAULT_DATASET_1D_REGRESSION
-        : DEFAULT_DATASET_1D_CLASSIFICATION;
+    if (this.config.dataMode === "1d") {
+      this.config.dataset =
+        problemType === "regression"
+          ? DEFAULT_DATASET_1D_REGRESSION
+          : DEFAULT_DATASET_1D_CLASSIFICATION;
+    } else {
+      this.config.dataset =
+        problemType === "regression"
+          ? DEFAULT_DATASET_2D_REGRESSION
+          : DEFAULT_DATASET_2D_CLASSIFICATION;
+    }
     this.syncOutputActivation();
     this.reset();
   }
@@ -624,6 +686,25 @@ export class PlaygroundEngine {
   setWeightInit(weightInit: WeightInitId): void {
     this.config.weightInit = weightInit;
     this.resetWeights();
+  }
+
+  /** Switch optimizer; clears moment buffers so Adam/RMSProp start fresh. */
+  setOptimizer(optimizer: PlaygroundOptimizerId): void {
+    if (this.config.optimizer === optimizer) return;
+    this.config.optimizer = optimizer;
+    this.clearOptimizerState();
+  }
+
+  private clearOptimizerState(): void {
+    this.optStep = 0;
+    for (const node of this.graph.nodes.values()) {
+      node.m = 0;
+      node.v = 0;
+      for (const link of node.inputLinks) {
+        link.m = 0;
+        link.v = 0;
+      }
+    }
   }
 
   /** Swap L1/L2/none on existing links without resetting weights. */
@@ -663,9 +744,7 @@ export class PlaygroundEngine {
   }
 
   private outputActivation(): ActivationFunction {
-    return this.config.dataMode === "1d" && this.config.problemType === "regression"
-      ? Activations.LINEAR
-      : Activations.TANH;
+    return this.config.problemType === "regression" ? Activations.LINEAR : Activations.TANH;
   }
 
   private syncOutputActivation(): void {
@@ -814,6 +893,7 @@ export class PlaygroundEngine {
     this.lossHistory = [];
     this.lossTrain = this.getLoss(this.trainData);
     this.lossTest = this.getLoss(this.testData);
+    this.lossHistory.push({ epoch: 0, train: this.lossTrain, test: this.lossTest });
     this.boundaryNeedsInputRefresh = true;
     this.rebuildBoundaryStore();
     this.refreshBoundary();
@@ -847,7 +927,9 @@ export class PlaygroundEngine {
     }
     const dataset = (this.config.dataset in DATASETS
       ? this.config.dataset
-      : "circle") as DatasetId;
+      : this.config.problemType === "regression"
+        ? DEFAULT_DATASET_2D_REGRESSION
+        : DEFAULT_DATASET_2D_CLASSIFICATION) as DatasetId;
     this.config.dataset = dataset;
     const generator: DataGenerator = DATASETS[dataset];
     const data = generator(NUM_SAMPLES, this.config.noise / 100);

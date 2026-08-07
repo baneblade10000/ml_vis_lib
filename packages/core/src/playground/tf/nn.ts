@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+import { optimizerDelta, type PlaygroundOptimizerId } from "../optimizers";
+
 /**
  * A node in a neural network. Each node has a state
  * (total input, output, and their respectively derivatives) which changes
@@ -42,6 +44,10 @@ export class Node {
    * since the last update.
    */
   numAccumulatedDers = 0;
+  /** Adam first moment / unused for RMSProp (bias). */
+  m = 0;
+  /** Adam second moment / RMSProp cache (bias). */
+  v = 0;
   /** Activation function that takes total input and returns node's output */
   activation: ActivationFunction;
 
@@ -166,6 +172,15 @@ export class Link {
   accErrorDer = 0;
   /** Number of accumulated derivatives since the last update. */
   numAccumulatedDers = 0;
+  /**
+   * Mean ∂E/∂w from the last completed batch (kept after accumulators reset)
+   * so edge visualization can show a stable gradient signal.
+   */
+  lastGradient = 0;
+  /** Adam first moment / unused for RMSProp (weight). */
+  m = 0;
+  /** Adam second moment / RMSProp cache (weight). */
+  v = 0;
   regularization: RegularizationFunction | null;
 
   /**
@@ -332,19 +347,23 @@ export function backProp(network: Node[][], target: number,
  * Updates the weights of the network using the previously accumulated error
  * derivatives.
  */
-export function updateWeights(network: Node[][], learningRate: number,
-    regularizationRate: number) {
+export function updateWeights(
+  network: Node[][],
+  learningRate: number,
+  regularizationRate: number,
+  optimizer: PlaygroundOptimizerId = "SGD",
+  optStep = 1,
+) {
   for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
     let currentLayer = network[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      // Update the node's bias.
       if (node.numAccumulatedDers > 0) {
-        node.bias -= learningRate * node.accInputDer / node.numAccumulatedDers;
+        const gBias = node.accInputDer / node.numAccumulatedDers;
+        node.bias -= optimizerDelta(gBias, node, optimizer, learningRate, optStep);
         node.accInputDer = 0;
         node.numAccumulatedDers = 0;
       }
-      // Update the weights coming into this node.
       for (let j = 0; j < node.inputLinks.length; j++) {
         let link = node.inputLinks[j];
         if (link.isDead) {
@@ -353,19 +372,16 @@ export function updateWeights(network: Node[][], learningRate: number,
         let regulDer = link.regularization ?
             link.regularization.der(link.weight) : 0;
         if (link.numAccumulatedDers > 0) {
-          // Update the weight based on dE/dw.
-          link.weight = link.weight -
-              (learningRate / link.numAccumulatedDers) * link.accErrorDer;
-          // Further update the weight based on regularization.
-          let newLinkWeight = link.weight -
-              (learningRate * regularizationRate) * regulDer;
-          if (link.regularization === RegularizationFunction.L1 &&
-              link.weight * newLinkWeight < 0) {
-            // The weight crossed 0 due to the regularization term. Set it to 0.
+          link.lastGradient = link.accErrorDer / link.numAccumulatedDers;
+          const gData = link.accErrorDer / link.numAccumulatedDers;
+          const gEff = gData + regularizationRate * regulDer;
+          const prev = link.weight;
+          const next = prev - optimizerDelta(gEff, link, optimizer, learningRate, optStep);
+          if (link.regularization === RegularizationFunction.L1 && prev * next < 0) {
             link.weight = 0;
             link.isDead = true;
           } else {
-            link.weight = newLinkWeight;
+            link.weight = next;
           }
           link.accErrorDer = 0;
           link.numAccumulatedDers = 0;

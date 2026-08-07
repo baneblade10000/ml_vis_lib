@@ -29,15 +29,37 @@ type Point = {
 
 export const NUM_SAMPLES = 500;
 
-export type DatasetId = "circle" | "xor" | "gauss" | "spiral";
+export type Dataset2DClassificationId = "circle" | "xor" | "gauss" | "spiral";
+export type Dataset2DRegressionId = "sinSin";
+export type DatasetId = Dataset2DClassificationId | Dataset2DRegressionId;
 export type DataGenerator = (numSamples: number, noise: number) => Example2D[];
 
-export const DATASETS: Record<DatasetId, DataGenerator> = {
+export const DATASETS_2D_CLASSIFICATION: Record<Dataset2DClassificationId, DataGenerator> = {
   circle: classifyCircleData,
   xor: classifyXORData,
   gauss: classifyTwoGaussData,
   spiral: classifySpiralData,
 };
+
+export const DATASETS_2D_REGRESSION: Record<Dataset2DRegressionId, DataGenerator> = {
+  sinSin: regressSinSin,
+};
+
+export const DATASETS: Record<DatasetId, DataGenerator> = {
+  ...DATASETS_2D_CLASSIFICATION,
+  ...DATASETS_2D_REGRESSION,
+};
+
+export const DEFAULT_DATASET_2D_CLASSIFICATION: Dataset2DClassificationId = "circle";
+export const DEFAULT_DATASET_2D_REGRESSION: Dataset2DRegressionId = "sinSin";
+
+export function isDataset2DClassificationId(id: string): id is Dataset2DClassificationId {
+  return id in DATASETS_2D_CLASSIFICATION;
+}
+
+export function isDataset2DRegressionId(id: string): id is Dataset2DRegressionId {
+  return id in DATASETS_2D_REGRESSION;
+}
 
 /**
  * Shuffles the array using Fisher-Yates algorithm.
@@ -144,6 +166,32 @@ export function classifyXORData(numSamples: number, noise: number): Example2D[] 
     const noiseY = randUniform(-5, 5) * noise;
     const label = getXORLabel({ x: x + noiseX, y: y + noiseY });
     points.push({ x, y, label });
+  }
+  return points;
+}
+
+/**
+ * Continuous target sin(x)·sin(y) ∈ [-1, 1].
+ * Points are laid on a grid so the checkerboard pattern stays readable;
+ * label noise is applied only when the noise slider is > 0.
+ */
+export function regressSinSin(numSamples: number, noise: number): Example2D[] {
+  const points: Example2D[] = [];
+  const side = Math.max(2, Math.round(Math.sqrt(numSamples)));
+  const lo = -6;
+  const hi = 6;
+  const span = hi - lo;
+  for (let i = 0; i < side; i++) {
+    for (let j = 0; j < side; j++) {
+      // Cell centers — avoids clustering on the domain border.
+      const x = lo + ((i + 0.5) / side) * span;
+      const y = lo + ((j + 0.5) / side) * span;
+      let label = Math.sin(x) * Math.sin(y);
+      if (noise > 0) {
+        label += randUniform(-1, 1) * noise * 0.5;
+      }
+      points.push({ x, y, label });
+    }
   }
   return points;
 }

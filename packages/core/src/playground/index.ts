@@ -23,6 +23,9 @@ export {
   CNN_DATASET_IDS_2D,
   CNN_DATASET_IDS_1D,
   CNN_ACTIVATION_IDS,
+  CNN_REGULARIZATIONS,
+  CNN_REGULARIZATION_RATES,
+  PLAYGROUND_OPTIMIZERS,
   IMAGE_SIZE,
   SIGNAL_LENGTH,
 } from "./cnn";
@@ -38,6 +41,8 @@ export type {
   CnnDatasetId2D,
   CnnDatasetId1D,
   CnnActivationId,
+  CnnRegularizationId,
+  PlaygroundOptimizerId,
   LayerKind,
   LayerShape,
   Map2D,

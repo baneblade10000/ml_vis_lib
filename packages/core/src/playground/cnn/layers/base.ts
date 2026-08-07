@@ -1,4 +1,6 @@
 import type { Signal, Volume } from "../tensor";
+import type { CnnRegularizationId } from "../regularization";
+import type { PlaygroundOptimizerId } from "../../optimizers";
 
 /**
  * Discriminated kind used by the UI adapter to map a layer to a React Flow node
@@ -61,8 +63,17 @@ export abstract class Layer {
    */
   abstract backward(gradOut: Volume | Signal): Volume | Signal;
 
-  /** Apply accumulated parameter gradients with plain SGD (no momentum). */
-  abstract updateParams(learningRate: number): void;
+  /**
+   * Apply accumulated parameter gradients (SGD / RMSProp / Adam).
+   * Weights may take an L1/L2 penalty; biases are never regularized.
+   */
+  abstract updateParams(
+    learningRate: number,
+    regularization?: CnnRegularizationId,
+    regularizationRate?: number,
+    optimizer?: PlaygroundOptimizerId,
+    optStep?: number,
+  ): void;
 
   /**
    * Zero the accumulated parameter gradients at the start of a mini-batch. No-op
@@ -78,6 +89,9 @@ export abstract class Layer {
 
   /** Aggregated weight magnitude (tanh) for edge colour/width, or null if none. */
   abstract weightMagnitude(): number | null;
+
+  /** Zero Adam/RMSProp moment buffers without touching weights. */
+  clearOptimizerState(): void {}
 }
 
 /** Unified shape descriptor for {@link Layer.outputShape}. */

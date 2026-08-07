@@ -2,11 +2,11 @@
 
 export type DatasetId = "circles" | "xor" | "spiral" | "gaussian";
 export type ActivationId = "tanh" | "relu" | "sigmoid";
-export type OptimizerId = "Adam" | "SGD";
+export type OptimizerId = "SGD" | "RMSProp" | "Adam";
 
 export const DATASETS: DatasetId[] = ["circles", "xor", "spiral", "gaussian"];
 export const ACTIVATIONS: ActivationId[] = ["tanh", "relu", "sigmoid"];
-export const OPTIMIZERS: OptimizerId[] = ["Adam", "SGD"];
+export const OPTIMIZERS: OptimizerId[] = ["SGD", "RMSProp", "Adam"];
 
 export const DEFAULT_FEATURES = ["x1", "x2"] as const;
 export type FeatureName =

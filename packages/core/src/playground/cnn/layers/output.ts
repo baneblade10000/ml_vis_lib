@@ -1,4 +1,10 @@
 import { cloneSignal, zeros1D, type Signal } from "../tensor";
+import {
+  applyBiasUpdate,
+  applyRegularizedUpdate,
+  type CnnRegularizationId,
+} from "../regularization";
+import { createOptState, resetOptState, type OptState, type PlaygroundOptimizerId } from "../../optimizers";
 import { Layer, type LayerShape } from "./base";
 import { Losses, type LossFunction } from "../loss";
 
@@ -18,6 +24,8 @@ export class OutputLayer extends Layer {
   private bias = 0;
   private gradWeights: number[] = [];
   private gradBias = 0;
+  private optWeights: OptState[] = [];
+  private optBias: OptState = createOptState();
   private lastInput: number[] = [];
   private inUnits = 0;
 
@@ -40,9 +48,14 @@ export class OutputLayer extends Layer {
     const bound = Math.sqrt(6 / Math.max(inUnits, 1));
     this.weights = new Array(inUnits);
     this.gradWeights = new Array(inUnits).fill(0);
-    for (let i = 0; i < inUnits; i++) this.weights[i] = (rng() * 2 - 1) * bound;
+    this.optWeights = new Array(inUnits);
+    for (let i = 0; i < inUnits; i++) {
+      this.weights[i] = (rng() * 2 - 1) * bound;
+      this.optWeights[i] = createOptState();
+    }
     this.bias = 0;
     this.gradBias = 0;
+    this.optBias = createOptState();
   }
 
   forward(input: Signal): Signal {
@@ -89,14 +102,43 @@ export class OutputLayer extends Layer {
     return this.lossFn.error(this.probability, target);
   }
 
-  updateParams(learningRate: number): void {
-    this.bias -= learningRate * this.gradBias;
-    for (let i = 0; i < this.inUnits; i++) this.weights[i] -= learningRate * this.gradWeights[i];
+  updateParams(
+    learningRate: number,
+    regularization: CnnRegularizationId = "none",
+    regularizationRate = 0,
+    optimizer: PlaygroundOptimizerId = "SGD",
+    optStep = 1,
+  ): void {
+    this.bias = applyBiasUpdate(
+      this.bias,
+      this.gradBias,
+      learningRate,
+      optimizer,
+      this.optBias,
+      optStep,
+    );
+    for (let i = 0; i < this.inUnits; i++) {
+      this.weights[i] = applyRegularizedUpdate(
+        this.weights[i]!,
+        this.gradWeights[i]!,
+        learningRate,
+        regularization,
+        regularizationRate,
+        optimizer,
+        this.optWeights[i]!,
+        optStep,
+      );
+    }
   }
 
   zeroGrads(): void {
     this.gradBias = 0;
     this.gradWeights.fill(0);
+  }
+
+  clearOptimizerState(): void {
+    for (const s of this.optWeights) resetOptState(s);
+    resetOptState(this.optBias);
   }
 
   paramCount(): number {

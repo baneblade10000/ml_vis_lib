@@ -72,6 +72,9 @@ export {
   DEFAULT_CNN_CONFIG,
   DEFAULT_CNN_CONFIG_2D,
   DEFAULT_CNN_CONFIG_1D,
+  CNN_REGULARIZATIONS,
+  CNN_REGULARIZATION_RATES,
+  PLAYGROUND_OPTIMIZERS,
 } from "./engine";
 export type {
   CnnMode,
@@ -79,4 +82,7 @@ export type {
   CnnConfig,
   TrainingStats,
   FeatureMapSnapshot,
+  CnnRegularizationId,
+  PlaygroundOptimizerId,
 } from "./engine";
+export { applyRegularizedUpdate, regularizationDerivative } from "./regularization";

@@ -188,15 +188,16 @@ function applyGradients(
   mlp: MLP,
   layerGrads: Array<{ weights: Float64Array; bias: Float64Array }>,
 ): void {
+  // Keep flat adamM/adamV buffers for Adam + RMSProp (v in adamV; m unused for RMSProp).
   if (mlp.optimizer === "SGD") {
     for (let layerIndex = 0; layerIndex < mlp.layers.length; layerIndex++) {
-      const layer = mlp.layers[layerIndex];
-      const grad = layerGrads[layerIndex];
+      const layer = mlp.layers[layerIndex]!;
+      const grad = layerGrads[layerIndex]!;
       for (let i = 0; i < layer.weights.length; i++) {
-        layer.weights[i] -= mlp.learningRate * grad.weights[i];
+        layer.weights[i]! -= mlp.learningRate * grad.weights[i]!;
       }
       for (let i = 0; i < layer.bias.length; i++) {
-        layer.bias[i] -= mlp.learningRate * grad.bias[i];
+        layer.bias[i]! -= mlp.learningRate * grad.bias[i]!;
       }
     }
     return;
@@ -205,26 +206,32 @@ function applyGradients(
   mlp.adamStep += 1;
   const beta1 = 0.9;
   const beta2 = 0.999;
+  const rmsDecay = 0.9;
   const epsilon = 1e-8;
   const biasCorrection1 = 1 - beta1 ** mlp.adamStep;
   const biasCorrection2 = 1 - beta2 ** mlp.adamStep;
   let offset = 0;
 
   for (let layerIndex = 0; layerIndex < mlp.layers.length; layerIndex++) {
-    const layer = mlp.layers[layerIndex];
-    const grad = layerGrads[layerIndex];
+    const layer = mlp.layers[layerIndex]!;
+    const grad = layerGrads[layerIndex]!;
     const blocks = [layer.weights, layer.bias] as const;
     const gradBlocks = [grad.weights, grad.bias] as const;
     for (let block = 0; block < 2; block++) {
-      const array = blocks[block];
-      const gradArray = gradBlocks[block];
+      const array = blocks[block]!;
+      const gradArray = gradBlocks[block]!;
       for (let i = 0; i < array.length; i++) {
-        const g = gradArray[i];
-        mlp.adamM[offset] = beta1 * mlp.adamM[offset] + (1 - beta1) * g;
-        mlp.adamV[offset] = beta2 * mlp.adamV[offset] + (1 - beta2) * g * g;
-        const mHat = mlp.adamM[offset] / biasCorrection1;
-        const vHat = mlp.adamV[offset] / biasCorrection2;
-        array[i] -= (mlp.learningRate * mHat) / (Math.sqrt(vHat) + epsilon);
+        const g = gradArray[i]!;
+        if (mlp.optimizer === "RMSProp") {
+          mlp.adamV[offset] = rmsDecay * mlp.adamV[offset]! + (1 - rmsDecay) * g * g;
+          array[i]! -= (mlp.learningRate * g) / (Math.sqrt(mlp.adamV[offset]!) + epsilon);
+        } else {
+          mlp.adamM[offset] = beta1 * mlp.adamM[offset]! + (1 - beta1) * g;
+          mlp.adamV[offset] = beta2 * mlp.adamV[offset]! + (1 - beta2) * g * g;
+          const mHat = mlp.adamM[offset]! / biasCorrection1;
+          const vHat = mlp.adamV[offset]! / biasCorrection2;
+          array[i]! -= (mlp.learningRate * mHat) / (Math.sqrt(vHat) + epsilon);
+        }
         offset += 1;
       }
     }

@@ -27,10 +27,23 @@ export {
   classifyTwoGaussData,
   classifyXORData,
   DATASETS,
+  DATASETS_2D_CLASSIFICATION,
+  DATASETS_2D_REGRESSION,
+  DEFAULT_DATASET_2D_CLASSIFICATION,
+  DEFAULT_DATASET_2D_REGRESSION,
+  isDataset2DClassificationId,
+  isDataset2DRegressionId,
   NUM_SAMPLES,
+  regressSinSin,
   shuffle,
 } from "./dataset";
-export type { DataGenerator, DatasetId, Example2D } from "./dataset";
+export type {
+  DataGenerator,
+  Dataset2DClassificationId,
+  Dataset2DRegressionId,
+  DatasetId,
+  Example2D,
+} from "./dataset";
 
 export {
   DATASETS_1D,
@@ -70,6 +83,7 @@ export { boundaryToGridPoints, computeBoundaries, examplesToSamples } from "./bo
 export {
   DEFAULT_TF_CONFIG,
   PlaygroundEngine,
+  PLAYGROUND_OPTIMIZERS,
   TF_ACTIVATIONS,
   TF_REGULARIZATIONS,
   TF_REGULARIZATION_RATES,
@@ -80,6 +94,7 @@ export type {
   GraphNodeKind,
   GraphPosition,
   LossHistoryPoint,
+  PlaygroundOptimizerId,
   TfActivationId,
   TfAnyDatasetId,
   TfDataMode,
