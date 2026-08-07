@@ -6,7 +6,6 @@ export interface CnnArchitecturePanelProps {
   layers: LayerSpec[];
   selectedIndex: number | null;
   onSelectLayer: (index: number) => void;
-  onAddLayer: (kind: "conv" | "pool" | "dense") => void;
   onRemoveLayer: (index: number) => void;
   onSetFilters: (index: number, filters: number) => void;
   onSetKernelSize: (index: number, kernelSize: number) => void;
@@ -101,7 +100,6 @@ export function CnnArchitecturePanel({
   layers,
   selectedIndex,
   onSelectLayer,
-  onAddLayer,
   onRemoveLayer,
   onSetFilters,
   onSetKernelSize,
@@ -210,18 +208,6 @@ export function CnnArchitecturePanel({
             </div>
           );
         })}
-
-        <div className="cnn-arch-add" role="group" aria-label={t.addLayer}>
-          <button type="button" className="cnn-arch-add__btn" onClick={() => onAddLayer("conv")}>
-            + {t.paletteConv}
-          </button>
-          <button type="button" className="cnn-arch-add__btn" onClick={() => onAddLayer("pool")}>
-            + {t.palettePool}
-          </button>
-          <button type="button" className="cnn-arch-add__btn" onClick={() => onAddLayer("dense")}>
-            + {t.paletteDense}
-          </button>
-        </div>
       </div>
     </div>
   );

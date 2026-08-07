@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { renderValueMatrix } from "@ml-vis/core";
 import type { ImageExample, SignalExample } from "@ml-vis/core";
 import { useCnnMessages } from "./messages";
@@ -23,17 +23,22 @@ function ImageThumb({ example, prediction, selected, onClick }: {
 }) {
   const heatRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  if (heatRef.current && canvasRef.current) {
-    renderValueMatrix(heatRef.current, example.pixels, {
+
+  useLayoutEffect(() => {
+    const heat = heatRef.current;
+    const canvas = canvasRef.current;
+    if (!heat || !canvas) return;
+    renderValueMatrix(heat, example.pixels, {
       layout: "row-major",
       palette: "gray",
     });
-    const ctx = canvasRef.current.getContext("2d");
-    if (ctx) {
-      ctx.clearRect(0, 0, 28, 28);
-      ctx.drawImage(heatRef.current, 0, 0, 28, 28);
-    }
-  }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, 28, 28);
+    ctx.drawImage(heat, 0, 0, 28, 28);
+  }, [example.pixels]);
+
   const predicted = prediction >= 0.5 ? 1 : 0;
   const correct = predicted === example.label;
   return (
@@ -57,17 +62,22 @@ function SignalThumb({ example, prediction, selected, onClick }: {
 }) {
   const heatRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  if (heatRef.current && canvasRef.current) {
-    renderValueMatrix(heatRef.current, [example.values], {
+
+  useLayoutEffect(() => {
+    const heat = heatRef.current;
+    const canvas = canvasRef.current;
+    if (!heat || !canvas) return;
+    renderValueMatrix(heat, [example.values], {
       layout: "row-major",
       palette: "gray",
     });
-    const ctx = canvasRef.current.getContext("2d");
-    if (ctx) {
-      ctx.clearRect(0, 0, 56, 12);
-      ctx.drawImage(heatRef.current, 0, 0, 56, 12);
-    }
-  }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, 56, 12);
+    ctx.drawImage(heat, 0, 0, 56, 12);
+  }, [example.values]);
+
   const predicted = prediction >= 0.5 ? 1 : 0;
   const correct = predicted === example.label;
   return (

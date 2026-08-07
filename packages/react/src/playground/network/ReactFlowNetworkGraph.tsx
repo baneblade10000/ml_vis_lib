@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type
 import {
   Background,
   Controls,
-  Panel,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
@@ -22,6 +21,7 @@ import {
   flowKindFromDrag,
   graphToFlow,
   PALETTE_DRAG_TYPE,
+  type EdgeVizMode,
   type NetworkNodeData,
   type WeightEdgeData,
 } from "./graphAdapter";
@@ -65,6 +65,8 @@ export interface ReactFlowNetworkGraphProps {
   trainingLive?: boolean;
   trainingLiveRef?: RefObject<boolean>;
   paintGeneration?: number;
+  edgeVizMode?: EdgeVizMode;
+  learningRate?: number;
   boundaryRef: RefObject<Record<string, number[][]>>;
   curvesRef?: RefObject<CurveStore>;
   targetCurveRef?: RefObject<number[] | null>;
@@ -151,17 +153,21 @@ function ReactFlowNetworkGraphInner({
   layoutKey,
   trainingLive = false,
   paintGeneration = 0,
+  edgeVizMode = "weight",
+  learningRate = 0,
 }: ReactFlowNetworkGraphProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const rf = useReactFlow();
   const topologyKeyRef = useRef("");
   const fitViewKeyRef = useRef("");
   const refitViewKeyRef = useRef<string | number | undefined>(undefined);
+  const fittedSizeRef = useRef({ width: 0, height: 0 });
   const draggingNodesRef = useRef(new Set<string>());
   const { setViewport } = useReactFlow();
-  const [measuredHeight, setMeasuredHeight] = useState(height);
   const [animateLayout, setAnimateLayout] = useState(false);
-  const containerSizeRef = useRef({ width: 0, height: 0 });
+  // Size must be state (not only a ref) so the fit effect re-runs once the
+  // canvas has a real layout — first paint often measures 0×0.
+  const [measured, setMeasured] = useState({ width: 0, height: 0 });
 
   // Briefly enable a CSS transition on node positions whenever the canonical
   // grid is re-applied ("Arrange layout"), so nodes glide into place instead of
@@ -176,21 +182,19 @@ function ReactFlowNetworkGraphInner({
   useEffect(() => {
     if (!reactFlowWrapper.current) return;
     const el = reactFlowWrapper.current;
-    let last = 0;
     const sync = () => {
-      const rect = el.getBoundingClientRect();
-      containerSizeRef.current = { width: rect.width, height: rect.height };
-      const next = Math.floor(rect.height);
-      if (fillHeight && next > 0 && Math.abs(next - last) > 1) {
-        last = next;
-        setMeasuredHeight(next);
-      }
+      const next = { width: el.clientWidth, height: el.clientHeight };
+      setMeasured((prev) =>
+        Math.abs(prev.width - next.width) < 0.5 && Math.abs(prev.height - next.height) < 0.5
+          ? prev
+          : next,
+      );
     };
     sync();
     const ro = new ResizeObserver(() => sync());
     ro.observe(el);
     return () => ro.disconnect();
-  }, [fillHeight]);
+  }, []);
 
   const topologyKey = `${graph.inputIds.join(",")};${[...graph.nodes.keys()].sort().join(",")}`;
 
@@ -204,10 +208,12 @@ function ReactFlowNetworkGraphInner({
       lossTest: trainingLive ? undefined : lossTest,
       lossTrain: trainingLive ? undefined : lossTrain,
       paintGeneration,
+      edgeVizMode,
+      learningRate,
     }),
     trainingLive
-      ? [enabledFeatures, discretize, selectedNodeId, selectedEdgeId, trainData, trainingLive, paintGeneration]
-      : [enabledFeatures, discretize, selectedNodeId, selectedEdgeId, trainData, lossTest, lossTrain, trainingLive, paintGeneration],
+      ? [enabledFeatures, discretize, selectedNodeId, selectedEdgeId, trainData, trainingLive, paintGeneration, edgeVizMode, learningRate]
+      : [enabledFeatures, discretize, selectedNodeId, selectedEdgeId, trainData, lossTest, lossTrain, trainingLive, paintGeneration, edgeVizMode, learningRate],
   );
 
   const mapped = useMemo(
@@ -220,7 +226,6 @@ function ReactFlowNetworkGraphInner({
 
   useEffect(() => {
     const topologyChanged = topologyKeyRef.current !== topologyKey;
-    const isInitial = topologyKeyRef.current === "";
     if (topologyChanged) {
       topologyKeyRef.current = topologyKey;
       draggingNodesRef.current.clear();
@@ -286,32 +291,49 @@ function ReactFlowNetworkGraphInner({
           edge.style?.strokeOpacity === next.style?.strokeOpacity &&
           edgeMarkerColor(edge.markerEnd) === edgeMarkerColor(next.markerEnd);
         const sameData =
-          edge.data?.weight === next.data?.weight && edge.data?.active === next.data?.active;
+          edge.data?.weight === next.data?.weight &&
+          edge.data?.gradient === next.data?.gradient &&
+          edge.data?.learningRate === next.data?.learningRate &&
+          edge.data?.active === next.data?.active &&
+          edge.data?.vizMode === next.data?.vizMode;
         if (sameStyle && sameData && edge.selected === selected) return edge;
         changed = true;
         return { ...edge, data: next.data, style: next.style, markerEnd: next.markerEnd, selected };
       });
       return changed ? nextEdges : current;
     });
+  }, [mapped, topologyKey, selectedNodeId, selectedEdgeId, setNodes, setEdges]);
 
-    if (topologyChanged) {
-      const shouldFit =
-        isInitial || (fitViewKey !== undefined && fitViewKeyRef.current !== fitViewKey);
-      if (shouldFit && fitViewKey !== undefined) {
-        fitViewKeyRef.current = fitViewKey;
-      }
-      if (shouldFit) {
-        const viewport = viewportForNodes(mapped.nodes, containerSizeRef.current, fillHeight);
-        if (viewport) void setViewport(viewport, { duration: 0 });
-      }
-    }
+  // Fit/center only after the container has a real size. Consume fit keys only on
+  // success so a 0×0 first measure does not permanently skip centering. Also
+  // re-fit when the canvas settles to a new size (flex layout often grows after
+  // the first non-zero measure).
+  useEffect(() => {
+    if (measured.width <= 0 || measured.height <= 0 || !mapped.nodes.length) return;
 
-    if (refitViewKey !== undefined && refitViewKeyRef.current !== refitViewKey) {
-      refitViewKeyRef.current = refitViewKey;
-      const viewport = viewportForNodes(mapped.nodes, containerSizeRef.current, fillHeight);
-      if (viewport) void setViewport(viewport, { duration: 200 });
-    }
-  }, [mapped, topologyKey, fitViewKey, refitViewKey, selectedNodeId, selectedEdgeId, setNodes, setEdges, setViewport, fillHeight]);
+    const fitPending = fitViewKey !== undefined && fitViewKeyRef.current !== fitViewKey;
+    const refitPending = refitViewKey !== undefined && refitViewKeyRef.current !== refitViewKey;
+    const sizeDrift =
+      Math.abs(measured.width - fittedSizeRef.current.width) > 24 ||
+      Math.abs(measured.height - fittedSizeRef.current.height) > 24;
+    const resizeRefit =
+      fittedSizeRef.current.width > 0 &&
+      sizeDrift &&
+      (fitViewKeyRef.current !== "" || refitViewKeyRef.current !== undefined);
+
+    if (!fitPending && !refitPending && !resizeRefit) return;
+
+    const viewport = viewportForNodes(mapped.nodes, measured, fillHeight);
+    if (!viewport) return;
+
+    const hadPriorFit = fitViewKeyRef.current !== "" || refitViewKeyRef.current !== undefined;
+    void setViewport(viewport, {
+      duration: (refitPending || resizeRefit) && hadPriorFit ? 200 : 0,
+    });
+    fittedSizeRef.current = measured;
+    if (fitPending) fitViewKeyRef.current = fitViewKey!;
+    if (refitPending) refitViewKeyRef.current = refitViewKey;
+  }, [measured, mapped.nodes, fitViewKey, refitViewKey, fillHeight, setViewport]);
 
   const handleNodesChange: OnNodesChange<Node<NetworkNodeData>> = useCallback(
     (changes) => {
@@ -417,17 +439,15 @@ function ReactFlowNetworkGraphInner({
     return () => window.removeEventListener("keydown", handler);
   }, [selectedNodeId, selectedEdgeId, graph, onRemoveNode, onRemoveEdge]);
 
-  const canvasHeight = fillHeight ? measuredHeight : height;
-
   return (
     <div
       className={`tf-flow-wrap${fillHeight ? " tf-flow-wrap--fill" : ""}`}
       ref={reactFlowWrapper}
-      style={fillHeight ? undefined : { height: canvasHeight }}
+      style={fillHeight ? undefined : { height }}
     >
       <div
         className={`tf-flow-canvas${animateLayout ? " tf-flow-canvas--animate" : ""}`}
-        style={{ width: "100%", height: fillHeight ? measuredHeight : canvasHeight }}
+        style={fillHeight ? undefined : { width: "100%", height }}
       >
       <ReactFlow
         nodes={nodes}
@@ -457,17 +477,6 @@ function ReactFlowNetworkGraphInner({
       >
         <Background gap={20} size={1} color="var(--tf-border)" />
         <Controls showInteractive={false} position="bottom-right" />
-        <Panel position="bottom-right" className="tf-flow-panel-legend">
-          <div className="tf-weight-legend" role="img" aria-label="Weight color scale: negative violet, positive magenta">
-            <span className="tf-weight-legend__title">Weight</span>
-            <div className="tf-weight-legend__bar" />
-            <div className="tf-weight-legend__scale">
-              <span>− (neg)</span>
-              <span>0</span>
-              <span>+ (pos)</span>
-            </div>
-          </div>
-        </Panel>
       </ReactFlow>
       </div>
 

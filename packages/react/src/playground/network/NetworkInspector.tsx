@@ -1,4 +1,5 @@
 import type { ComputationalGraph } from "@ml-vis/core";
+import { linkPartialDerivative } from "./graphAdapter";
 import { useNetworkMessages } from "./messages";
 
 export function NetworkInspector({
@@ -41,6 +42,10 @@ export function NetworkInspector({
         <div className="tf-network-inspector-row">
           <span className="label">{t.inspectorWeight}</span>
           <span className="value">{edge.weight.toFixed(4)}</span>
+        </div>
+        <div className="tf-network-inspector-row">
+          <span className="label">{t.inspectorGradient}</span>
+          <span className="value">{linkPartialDerivative(edge).toFixed(6)}</span>
         </div>
         <button type="button" className="tf-btn tf-btn--ghost tf-btn--sm" onClick={() => onRemoveEdge(edge.id)}>
           {t.removeEdge}

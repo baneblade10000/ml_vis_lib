@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { renderValueMatrix } from "@ml-vis/core";
 import { useCnnMessages } from "./messages";
 
@@ -18,16 +18,21 @@ export interface CnnInspectorProps {
 function KernelThumb({ map, size }: { map: number[][]; size: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heatRef = useRef<HTMLCanvasElement>(null);
-  if (canvasRef.current && heatRef.current) {
-    renderValueMatrix(heatRef.current, map, { layout: "row-major", palette: "gray" });
-    const ctx = canvasRef.current.getContext("2d");
-    if (ctx) {
-      ctx.clearRect(0, 0, size, size);
-      ctx.drawImage(heatRef.current, 0, 0, size, size);
-    }
-  }
   const cols = map[0]?.length ?? 1;
   const rows = map.length;
+
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    const heat = heatRef.current;
+    if (!canvas || !heat || !map.length) return;
+    renderValueMatrix(heat, map, { layout: "row-major", palette: "gray" });
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(heat, 0, 0, size, size);
+  }, [map, size]);
+
   return (
     <div className="cnn-kernel-thumb" style={{ width: size, height: size }}>
       <canvas ref={heatRef} width={cols} height={rows} hidden aria-hidden />

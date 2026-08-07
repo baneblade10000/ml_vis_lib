@@ -1,8 +1,16 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   Background,
   Controls,
-  Panel,
   ReactFlow,
   ReactFlowProvider,
   useNodesInitialized,
@@ -11,7 +19,14 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { CnnEngine, FeatureMapSnapshot } from "@ml-vis/core";
-import { cnnPipelineToFlow, type CnnNodeData } from "./cnnAdapter";
+import {
+  cnnPipelineToFlow,
+  flowDragFromKind,
+  formatCnnNodeLabel,
+  PALETTE_DRAG_TYPE,
+  type CnnDragKind,
+  type CnnNodeData,
+} from "./cnnAdapter";
 import { cnnEdgeTypes, cnnNodeTypes } from "./CnnFlowNodes";
 import {
   FeatureMapRefContext,
@@ -21,6 +36,7 @@ import {
   type CnnTrainingStats,
   type FeatureMapStore,
 } from "./featureMapContext";
+import { useCnnMessages } from "./messages";
 
 export interface CnnFlowGraphProps {
   engine: CnnEngine;
@@ -28,6 +44,8 @@ export interface CnnFlowGraphProps {
   paintGeneration: number;
   featureMaps: FeatureMapSnapshot[];
   onSelectNode: (nodeId: string | null) => void;
+  /** Palette drop / click → append a layer to the pipeline. */
+  onDropLayer?: (kind: CnnDragKind) => void;
   featureMapRef: RefObject<FeatureMapStore>;
   statsRef: RefObject<CnnTrainingStats>;
   trainingLiveRef: RefObject<boolean>;
@@ -39,8 +57,52 @@ export interface CnnFlowGraphProps {
   refitViewKey?: number;
 }
 
-const MIN_ZOOM = 0.3;
+const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 1.5;
+const FIT_MAX_ZOOM = 1.05;
+const LABEL_MARGIN = 20;
+
+/**
+ * Viewport that fits the pipeline between immersive side docks.
+ * Uses known node geometry (same approach as the MLP graph).
+ */
+function viewportForNodes(
+  nodes: Node<CnnNodeData>[],
+  container: { width: number; height: number },
+  fillHeight: boolean,
+): { x: number; y: number; zoom: number } | null {
+  if (!nodes.length || container.width <= 0 || container.height <= 0) return null;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const node of nodes) {
+    minX = Math.min(minX, node.position.x);
+    minY = Math.min(minY, node.position.y);
+    maxX = Math.max(maxX, node.position.x + (node.width ?? 0));
+    maxY = Math.max(maxY, node.position.y + (node.height ?? 0) + LABEL_MARGIN);
+  }
+
+  // Left dock is wide (~20.5rem); right dock ~16rem.
+  const pad = fillHeight
+    ? { top: 28, bottom: 36, left: 352, right: 280 }
+    : { top: 32, bottom: 32, left: 48, right: 48 };
+  const availWidth = Math.max(container.width - pad.left - pad.right, 120);
+  const availHeight = Math.max(container.height - pad.top - pad.bottom, 120);
+  const boundsWidth = Math.max(maxX - minX, 1);
+  const boundsHeight = Math.max(maxY - minY, 1);
+
+  const zoom = Math.min(
+    Math.max(Math.min(availWidth / boundsWidth, availHeight / boundsHeight), MIN_ZOOM),
+    FIT_MAX_ZOOM,
+  );
+  return {
+    x: pad.left + (availWidth - boundsWidth * zoom) / 2 - minX * zoom,
+    y: pad.top + (availHeight - boundsHeight * zoom) / 2 - minY * zoom,
+    zoom,
+  };
+}
 
 function CnnFlowGraphInner(props: CnnFlowGraphProps) {
   const {
@@ -49,18 +111,26 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
     paintGeneration,
     featureMaps,
     onSelectNode,
+    onDropLayer,
     loss,
     probability,
     fillHeight = false,
     height = 420,
     refitViewKey,
   } = props;
+  const t = useCnnMessages();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const rf = useReactFlow();
+  const { setViewport } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
-  const [measuredHeight, setMeasuredHeight] = useState(height);
+  const [measured, setMeasured] = useState({ width: 0, height: 0 });
   /** Measured vertical offsets so every node center sits on one axis. */
   const [centerYs, setCenterYs] = useState<Record<string, number>>({});
+  const fittedSizeRef = useRef({ width: 0, height: 0 });
+  const topologyFitRef = useRef("");
+  const refitViewKeyRef = useRef<number | undefined>(undefined);
+
+  const labelFor = useCallback((layer: Parameters<typeof formatCnnNodeLabel>[0]) => formatCnnNodeLabel(layer, t), [t]);
 
   const mapped = useMemo(
     () =>
@@ -70,29 +140,32 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
         featureMaps,
         loss,
         probability,
+        labelFor,
       }),
-    [engine, selectedNodeId, paintGeneration, featureMaps, loss, probability],
+    [engine, selectedNodeId, paintGeneration, featureMaps, loss, probability, labelFor],
   );
 
   const nodeKey = mapped.nodes.map((n) => n.id).join(",");
 
-  // Track measured container height for fill mode.
+  // Track measured container size so fit re-runs once layout is real.
   useEffect(() => {
-    if (!wrapperRef.current || !fillHeight) return;
+    if (!wrapperRef.current) return;
     const el = wrapperRef.current;
-    let last = 0;
     const sync = () => {
-      const h = Math.floor(el.getBoundingClientRect().height);
-      if (h > 0 && Math.abs(h - last) > 1) {
-        last = h;
-        setMeasuredHeight(h);
-      }
+      const rect = el.getBoundingClientRect();
+      const width = Math.floor(rect.width);
+      const heightPx = Math.floor(rect.height);
+      setMeasured((prev) =>
+        Math.abs(prev.width - width) > 1 || Math.abs(prev.height - heightPx) > 1
+          ? { width, height: heightPx }
+          : prev,
+      );
     };
     sync();
     const ro = new ResizeObserver(sync);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [fillHeight]);
+  }, []);
 
   // After React Flow measures real node boxes, re-center on a shared midline.
   useLayoutEffect(() => {
@@ -116,9 +189,8 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
       });
     };
     align();
-    const t = window.setTimeout(align, 60);
-    return () => window.clearTimeout(t);
-    // Remeasure when topology or feature-map content size may change node boxes.
+    const timer = window.setTimeout(align, 60);
+    return () => window.clearTimeout(timer);
   }, [nodesInitialized, nodeKey, featureMaps, rf]);
 
   const nodes = useMemo(
@@ -130,21 +202,60 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
     [mapped.nodes, centerYs],
   );
 
-  // Refit the view to show all layers whenever topology changes or on demand.
-  const prevNodeKey = useRef("");
+  // Fit between docks whenever topology changes, on demand, or after size drift.
   useEffect(() => {
-    if (prevNodeKey.current === nodeKey && refitViewKey === undefined) return;
-    prevNodeKey.current = nodeKey;
-    const t = window.setTimeout(() => rf.fitView({ padding: 0.2, maxZoom: 1 }), 30);
-    return () => window.clearTimeout(t);
-  }, [nodeKey, refitViewKey, rf]);
+    if (measured.width <= 0 || measured.height <= 0 || !nodes.length) return;
+
+    const topologyPending = topologyFitRef.current !== nodeKey;
+    const refitPending = refitViewKey !== undefined && refitViewKeyRef.current !== refitViewKey;
+    const sizeDrift =
+      Math.abs(measured.width - fittedSizeRef.current.width) > 24 ||
+      Math.abs(measured.height - fittedSizeRef.current.height) > 24;
+    const resizeRefit =
+      fittedSizeRef.current.width > 0 && sizeDrift && topologyFitRef.current !== "";
+
+    if (!topologyPending && !refitPending && !resizeRefit) return;
+
+    const viewport = viewportForNodes(nodes, measured, fillHeight);
+    if (!viewport) return;
+
+    const hadPriorFit = topologyFitRef.current !== "";
+    void setViewport(viewport, {
+      duration: (refitPending || resizeRefit) && hadPriorFit ? 200 : 0,
+    });
+    fittedSizeRef.current = measured;
+    if (topologyPending) topologyFitRef.current = nodeKey;
+    if (refitPending) refitViewKeyRef.current = refitViewKey;
+  }, [measured, nodes, nodeKey, refitViewKey, fillHeight, setViewport]);
 
   const onNodeClick = (_: React.MouseEvent, node: Node<CnnNodeData>) => {
     onSelectNode(node.id);
   };
   const onPaneClick = () => onSelectNode(null);
 
-  const canvasHeight = fillHeight ? measuredHeight : height;
+  const onDragOver = useCallback(
+    (event: React.DragEvent) => {
+      if (!onDropLayer) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    },
+    [onDropLayer],
+  );
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      if (!onDropLayer) return;
+      event.preventDefault();
+      const raw =
+        event.dataTransfer.getData(PALETTE_DRAG_TYPE) || event.dataTransfer.getData("text/plain");
+      const kind = flowDragFromKind(raw, engine.config.mode);
+      if (!kind) return;
+      onDropLayer(kind);
+    },
+    [onDropLayer, engine.config.mode],
+  );
+
+  const canvasHeight = fillHeight ? measured.height || height : height;
 
   return (
     <div
@@ -152,7 +263,10 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
       ref={wrapperRef}
       style={fillHeight ? undefined : { height: canvasHeight }}
     >
-      <div className="tf-flow-canvas" style={{ width: "100%", height: fillHeight ? measuredHeight : canvasHeight }}>
+      <div
+        className="tf-flow-canvas"
+        style={{ width: "100%", height: fillHeight ? "100%" : canvasHeight }}
+      >
         <ReactFlow
           nodes={nodes}
           edges={mapped.edges}
@@ -160,28 +274,17 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
           edgeTypes={cnnEdgeTypes}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
+          onDrop={onDropLayer ? onDrop : undefined}
+          onDragOver={onDropLayer ? onDragOver : undefined}
           minZoom={MIN_ZOOM}
           maxZoom={MAX_ZOOM}
           proOptions={{ hideAttribution: true }}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable
-          fitView
-          fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
         >
           <Background gap={20} size={1} color="var(--tf-border)" />
           <Controls showInteractive={false} position="bottom-right" />
-          <Panel position="bottom-right" className="tf-flow-panel-legend">
-            <div className="tf-weight-legend" role="img" aria-label="Weight magnitude: violet (neg), magenta (pos)">
-              <span className="tf-weight-legend__title">Weights</span>
-              <div className="tf-weight-legend__bar" />
-              <div className="tf-weight-legend__scale">
-                <span>−</span>
-                <span>0</span>
-                <span>+</span>
-              </div>
-            </div>
-          </Panel>
         </ReactFlow>
       </div>
       {props.children && <div className="tf-flow-overlays">{props.children}</div>}

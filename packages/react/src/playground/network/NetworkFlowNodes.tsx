@@ -23,6 +23,7 @@ import {
   renderCurvePoints,
   renderTargetCurve,
   renderValueMatrix,
+  valueToRgb,
   weightColor,
   weightValueNormalized,
 } from "@ml-vis/core";
@@ -35,7 +36,6 @@ import {
   NetworkTargetCurveRefContext,
   NetworkVizModeContext,
   TrainingLiveRefContext,
-  TrainingStatsRefContext,
 } from "./NetworkBoundaryContext";
 import { registerBoundaryPainter } from "./boundaryPaint";
 
@@ -94,6 +94,7 @@ function paintTrainOverlay(
   canvas: HTMLCanvasElement,
   px: number,
   trainData: DataPoint[],
+  regression = false,
 ): void {
   const dpr = window.devicePixelRatio || 1;
   const ctx = ensureCanvasSize(canvas, px, dpr);
@@ -105,7 +106,12 @@ function paintTrainOverlay(
   for (const point of trainData) {
     ctx.beginPath();
     ctx.arc(mapX(point.x), mapY(point.y), 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = point.label > 0 ? CLASS_1_HEX : CLASS_0_HEX;
+    if (regression) {
+      const { r, g, b } = valueToRgb(point.label);
+      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+    } else {
+      ctx.fillStyle = point.label > 0 ? CLASS_1_HEX : CLASS_0_HEX;
+    }
     ctx.fill();
     ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
     ctx.lineWidth = 0.75;
@@ -157,15 +163,17 @@ function NodeHeatmap({
   const boundaryRef = useContext(NetworkBoundaryRefContext);
   const paintGeneration = useContext(BoundaryPaintGenerationContext);
   const trainingLiveRef = useContext(TrainingLiveRefContext);
+  const vizMode = useContext(NetworkVizModeContext);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heatmapRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const px = size - 6;
+  const regression = vizMode.problemType === "regression";
 
   const paintOverlay = useCallback(() => {
     if (!trainData?.length || !overlayRef.current) return;
-    paintTrainOverlay(overlayRef.current, px, trainData);
-  }, [trainData, px]);
+    paintTrainOverlay(overlayRef.current, px, trainData, regression);
+  }, [trainData, px, regression]);
 
   useEffect(() => {
     paintOverlay();
@@ -469,35 +477,32 @@ export function SumFlowNode({
   );
 }
 
+const OUTPUT_AXIS_TICKS = [-6, 0, 6] as const;
+
+function OutputAxisTicks({
+  axis,
+  ticks = OUTPUT_AXIS_TICKS,
+}: {
+  axis: "x" | "y";
+  ticks?: readonly number[];
+}) {
+  // Y is screen-flipped (top = +6), so reverse the label order for the column.
+  const labels = axis === "y" ? [...ticks].reverse() : ticks;
+  return (
+    <div className={`tf-flow-axis tf-flow-axis--${axis}`} aria-hidden>
+      {labels.map((t) => (
+        <span key={`${axis}-${t}`}>{t > 0 ? t : t === 0 ? "0" : `−${Math.abs(t)}`}</span>
+      ))}
+    </div>
+  );
+}
+
 export function OutputFlowNode({
   id,
   data,
 }: NodeProps<Node<NetworkNodeData>>) {
-  const statsRef = useContext(TrainingStatsRefContext);
-  const paintGeneration = useContext(BoundaryPaintGenerationContext);
-  const lossLabelRef = useRef<HTMLSpanElement>(null);
-
-  const paintMeta = useCallback(() => {
-    const stats = statsRef?.current;
-    if (lossLabelRef.current && stats) {
-      lossLabelRef.current.textContent = `${stats.lossTest.toFixed(3)} / ${stats.lossTrain.toFixed(3)}`;
-    }
-  }, [statsRef]);
-
-  useLayoutEffect(() => {
-    paintMeta();
-  }, [paintMeta, paintGeneration, data.lossTest, data.lossTrain]);
-
-  const trainingLiveRef = useContext(TrainingLiveRefContext);
-  useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      if (trainingLiveRef?.current) paintMeta();
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [paintMeta, trainingLiveRef]);
+  const { dataMode } = useContext(NetworkVizModeContext);
+  const showAxes = dataMode === "2d";
 
   return (
     <BaseNetworkNode
@@ -506,6 +511,7 @@ export function OutputFlowNode({
       hideSource
       size={OUTPUT_NODE_WIDTH}
     >
+      {showAxes && <OutputAxisTicks axis="y" />}
       <NodeViz
         nodeId={id}
         discretize={data.discretize}
@@ -514,13 +520,7 @@ export function OutputFlowNode({
         showTarget
         paintGeneration={data.paintGeneration}
       />
-      <div className="tf-flow-output-meta">
-        <span ref={lossLabelRef} className="tf-flow-output-loss">
-          {data.lossTest !== undefined && data.lossTrain !== undefined
-            ? `${data.lossTest.toFixed(3)} / ${data.lossTrain.toFixed(3)}`
-            : null}
-        </span>
-      </div>
+      {showAxes && <OutputAxisTicks axis="x" />}
     </BaseNetworkNode>
   );
 }
@@ -554,8 +554,16 @@ export const WeightFlowEdge = function WeightFlowEdge({
     targetPosition,
   });
 
-  const weight = data?.weight;
-  const showLabel = (hovered || selected) && typeof weight === "number";
+  const vizMode = data?.vizMode ?? "weight";
+  const value = vizMode === "gradient" ? data?.gradient : data?.weight;
+  const showLabel = (hovered || selected) && typeof value === "number";
+  const digits = vizMode === "gradient" ? 3 : 2;
+  const signed = (n: number, places: number) => `${n >= 0 ? "+" : ""}${n.toFixed(places)}`;
+  // SGD step implied by the shown batch-mean gradient (reg term omitted).
+  const deltaW =
+    vizMode === "gradient" && typeof data?.gradient === "number"
+      ? -(data.learningRate ?? 0) * data.gradient
+      : null;
 
   return (
     <>
@@ -590,8 +598,16 @@ export const WeightFlowEdge = function WeightFlowEdge({
               color: style?.stroke as string | undefined,
             }}
           >
-            {weight! >= 0 ? "+" : ""}
-            {weight!.toFixed(2)}
+            {vizMode === "gradient" ? (
+              <>
+                ∂ {signed(value!, digits)}
+                {deltaW !== null && (
+                  <span className="tf-edge-label__delta"> → Δw {signed(deltaW, 3)}</span>
+                )}
+              </>
+            ) : (
+              signed(value!, digits)
+            )}
           </div>
         </EdgeLabelRenderer>
       )}

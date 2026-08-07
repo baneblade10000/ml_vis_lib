@@ -17,7 +17,12 @@ import {
   valueToRgb,
   type FeatureMapSnapshot,
 } from "@ml-vis/core";
-import type { CnnNodeData, CnnEdgeData } from "./cnnAdapter";
+import {
+  downsample1D,
+  unitStackSize,
+  type CnnNodeData,
+  type CnnEdgeData,
+} from "./cnnAdapter";
 import {
   FeatureMapRefContext,
   PaintGenerationContext,
@@ -25,6 +30,7 @@ import {
   TrainingLiveRefContext,
 } from "./featureMapContext";
 import { registerBoundaryPainter } from "./featureMapPaint";
+import { useCnnMessages } from "./messages";
 
 /** Pixel size of one feature-map tile. */
 const MAP_PX = 44;
@@ -131,32 +137,19 @@ function Signal1DCanvas({ values, px }: { values: number[]; px: number }) {
   );
 }
 
-/** Unit diameter / gap for Flatten + Dense circle stacks. */
-function unitCircleMetrics(count: number, columns = 1) {
-  const n = Math.max(1, count);
-  const gap = 1.5;
-  const gapX = 3;
-  const d = Math.max(5.25, Math.min(10.5, (520 / n) * 1.5));
-  return {
-    d,
-    r: d / 2,
-    gap,
-    gapX,
-    width: columns * d + gapX * Math.max(0, columns - 1),
-    height: n * d + gap * Math.max(0, n - 1),
-  };
-}
-
-/** Flattened vector as a vertical stack of squares. */
+/** Flattened vector as a compact vertical stack of squares (downsampled when long). */
 function VectorColumnCanvas({ values }: { values: number[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const total = values.length;
 
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !values.length) return;
 
-    const n = values.length;
-    const { d, gap, width, height } = unitCircleMetrics(n);
+    const stack = unitStackSize(values.length, 1);
+    const shown = downsample1D(values, stack.visCount);
+    const n = shown.length;
+    const { d, gap, width, height } = stack;
     const radius = Math.min(1.25, d * 0.25);
 
     const dpr = window.devicePixelRatio || 1;
@@ -173,7 +166,7 @@ function VectorColumnCanvas({ values }: { values: number[] }) {
 
     let min = Infinity;
     let max = -Infinity;
-    for (const v of values) {
+    for (const v of shown) {
       if (v < min) min = v;
       if (v > max) max = v;
     }
@@ -184,7 +177,7 @@ function VectorColumnCanvas({ values }: { values: number[] }) {
     const span = max - min;
 
     for (let i = 0; i < n; i++) {
-      const t = Math.min(1, Math.max(0, (values[i]! - min) / span));
+      const t = Math.min(1, Math.max(0, (shown[i]! - min) / span));
       const g8 = Math.round(Math.pow(t, 0.85) * 255);
       const y = i * (d + gap);
       ctx.fillStyle = `rgb(${g8},${g8},${g8})`;
@@ -199,8 +192,9 @@ function VectorColumnCanvas({ values }: { values: number[] }) {
   useLayoutEffect(() => paintRef.current(), [paint]);
 
   return (
-    <div className="cnn-feature-cell cnn-feature-cell--vector" title={`${values.length} units`}>
+    <div className="cnn-feature-cell cnn-feature-cell--vector" title={`${total} units`}>
       <canvas ref={canvasRef} className="cnn-feature-canvas" />
+      {total > 0 && <span className="cnn-dense-weights__meta">{total}</span>}
     </div>
   );
 }
@@ -333,12 +327,17 @@ function DenseWeightMatrix({ layerId, units }: { layerId: string; units: number 
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const t = useCnnMessages();
+
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !matrix || rows === 0 || cols === 0) return;
 
-    // One vertical stack of circles per output unit (inputs top→bottom).
-    const { d, r, gap, gapX, width, height } = unitCircleMetrics(cols, rows);
+    // One vertical stack of circles per output unit; downsample long input axes.
+    const stack = unitStackSize(cols, rows);
+    const visIn = stack.visCount;
+    const { d, gap, gapX, width, height } = stack;
+    const r = d / 2;
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== Math.ceil(width * dpr) || canvas.height !== Math.ceil(height * dpr)) {
       canvas.width = Math.ceil(width * dpr);
@@ -352,8 +351,10 @@ function DenseWeightMatrix({ layerId, units }: { layerId: string; units: number 
     ctx.clearRect(0, 0, width, height);
 
     for (let out = 0; out < rows; out++) {
-      for (let inn = 0; inn < cols; inn++) {
-        const w = matrix[out]![inn]!;
+      const row = matrix[out]!;
+      const sampled = downsample1D(row, visIn);
+      for (let inn = 0; inn < sampled.length; inn++) {
+        const w = sampled[inn]!;
         const { r: cr, g: cg, b: cb } = valueToRgb(Math.tanh(w * 2));
         const cx = out * (d + gapX) + r;
         const cy = inn * (d + gap) + r;
@@ -370,7 +371,7 @@ function DenseWeightMatrix({ layerId, units }: { layerId: string; units: number 
   useLayoutEffect(() => paintRef.current(), [paint]);
 
   if (!matrix || cols === 0) {
-    return <div className="cnn-feature-empty" title="Weights initialize on first forward" />;
+    return <div className="cnn-feature-empty" title={t.denseWeightsEmpty} />;
   }
 
   return (
@@ -390,6 +391,7 @@ export function CnnDenseNode({ data }: NodeProps<Node<CnnNodeData>>) {
 }
 
 export function CnnReadoutNode({ id, data }: NodeProps<Node<CnnNodeData>>) {
+  const t = useCnnMessages();
   const statsRef = useContext(TrainingStatsRefContext);
   const lossLabelRef = useRef<HTMLSpanElement>(null);
   const paintGeneration = useContext(PaintGenerationContext);
@@ -411,7 +413,7 @@ export function CnnReadoutNode({ id, data }: NodeProps<Node<CnnNodeData>>) {
   return (
     <BaseCnnNode data={data} className="cnn-node--readout" hideSource>
       <div className="cnn-readout-body">
-        <div className="cnn-readout-prob" title="Predicted probability of class 1">
+        <div className="cnn-readout-prob" title={t.readoutProb}>
           <div
             className="cnn-readout-bar"
             style={{ width: `${Math.max(2, prob * 100)}%`, background: barColor }}
@@ -419,7 +421,7 @@ export function CnnReadoutNode({ id, data }: NodeProps<Node<CnnNodeData>>) {
         </div>
         <div className="cnn-readout-loss">
           <span ref={lossLabelRef} className="cnn-readout-loss-value">
-            test / train
+            {t.lossTestTrain}
           </span>
         </div>
       </div>

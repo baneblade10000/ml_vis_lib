@@ -28,6 +28,8 @@ export interface CnnMessages {
   paletteDenseHint: string;
   paletteHint: string;
   flatten: string;
+  input: string;
+  output: string;
   network: string;
   layer: string;
   filters: string;
@@ -43,6 +45,7 @@ export interface CnnMessages {
   datasetLabels1D: Record<string, string>;
   training: string;
   learningRate: string;
+  optimizer: string;
   activation: string;
   noise: string;
   trainRatio: string;
@@ -60,6 +63,15 @@ export interface CnnMessages {
   labelCorrect: string;
   labelWrong: string;
   arrangeLayout: string;
+  weightsLegend: string;
+  weightsLegendAria: string;
+  readoutProb: string;
+  lossTestTrain: string;
+  denseWeightsEmpty: string;
+  learningCurve: string;
+  regularization: string;
+  regularizationLabels: Record<"none" | "L1" | "L2", string>;
+  regularizationRate: string;
 }
 
 export const cnnMessages: Record<Locale, CnnMessages> = {
@@ -84,8 +96,10 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     palettePoolHint: "2×2 downsampling (max/avg)",
     paletteDense: "Dense",
     paletteDenseHint: "Fully-connected layer",
-    paletteHint: "Drag onto canvas · select a layer to edit it",
+    paletteHint: "Click or drag onto canvas to add a layer",
     flatten: "Flatten",
+    input: "Input",
+    output: "Output",
     network: "Network",
     layer: "Layer",
     filters: "Filters",
@@ -109,6 +123,7 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     },
     training: "Training",
     learningRate: "Learning rate",
+    optimizer: "Optimizer",
     activation: "Activation",
     noise: "Noise",
     trainRatio: "Train ratio",
@@ -126,6 +141,19 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     labelCorrect: "correct",
     labelWrong: "wrong",
     arrangeLayout: "Arrange layout",
+    weightsLegend: "Weights",
+    weightsLegendAria: "Weight color scale from −1 (violet) to +1 (magenta)",
+    readoutProb: "Predicted probability of class 1",
+    lossTestTrain: "test / train",
+    denseWeightsEmpty: "Weights initialize on first forward",
+    learningCurve: "Learning curve",
+    regularization: "Regularization",
+    regularizationLabels: {
+      none: "None",
+      L1: "L1",
+      L2: "L2",
+    },
+    regularizationRate: "Regularization rate",
   },
   ru: {
     reset: "Сброс",
@@ -148,8 +176,10 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     palettePoolHint: "Понижение 2×2 (max/avg)",
     paletteDense: "Полносвязный",
     paletteDenseHint: "Полносвязный слой",
-    paletteHint: "Перетащите на холст · выберите слой для редактирования",
-    flatten: "Flatten",
+    paletteHint: "Клик или перетащите на холст, чтобы добавить слой",
+    flatten: "Плоский",
+    input: "Вход",
+    output: "Выход",
     network: "Сеть",
     layer: "Слой",
     filters: "Фильтры",
@@ -173,6 +203,7 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     },
     training: "Обучение",
     learningRate: "Скорость обучения",
+    optimizer: "Оптимизатор",
     activation: "Активация",
     noise: "Шум",
     trainRatio: "Доля обучения",
@@ -190,6 +221,19 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     labelCorrect: "верно",
     labelWrong: "ошибка",
     arrangeLayout: "Выровнять схему",
+    weightsLegend: "Веса",
+    weightsLegendAria: "Цвет весов от −1 (фиолетовый) до +1 (пурпурный)",
+    readoutProb: "Предсказанная вероятность класса 1",
+    lossTestTrain: "тест / обуч.",
+    denseWeightsEmpty: "Веса появятся после первого прохода",
+    learningCurve: "Кривая обучения",
+    regularization: "Регуляризация",
+    regularizationLabels: {
+      none: "Нет",
+      L1: "L1",
+      L2: "L2",
+    },
+    regularizationRate: "Сила регуляризации",
   },
 };
 

@@ -7,7 +7,9 @@ import {
   TF_DATASETS,
   TF_DATASETS_1D_CLASSIFICATION,
   TF_DATASETS_1D_REGRESSION,
+  valueToRgb,
   type Dataset1DId,
+  type LossHistoryPoint,
   type TfAnyDatasetId,
   type TfDataMode,
   type TfDatasetId,
@@ -17,13 +19,17 @@ import {
 import { NetworkInspector } from "./network/NetworkInspector";
 import { NetworkArchitecturePanel } from "./network/NetworkArchitecturePanel";
 import { NetworkPalette } from "./network/NetworkPalette";
+import { NetworkDataPanel } from "./network/NetworkDataPanel";
 import { NetworkTrainingPanel } from "./network/NetworkTrainingPanel";
+import { NetworkLossChart } from "./network/NetworkLossChart";
 import { ReactFlowNetworkGraph } from "./network/ReactFlowNetworkGraph";
 import { paintAllBoundaries, paintAllBoundariesAfterCommit, paintBoundaryNode } from "./network/boundaryPaint";
 import type { CurveStore, TrainingStats } from "./network/NetworkBoundaryContext";
+import type { EdgeVizMode } from "./network/graphAdapter";
 import { useNetworkMessages } from "./network/messages";
 
-const DATASETS_2D: TfDatasetId[] = ["circle", "xor", "gauss", "spiral"];
+const DATASETS_2D_CLASSIFICATION: TfDatasetId[] = ["circle", "xor", "gauss", "spiral"];
+const DATASETS_2D_REGRESSION: TfDatasetId[] = ["sinSin"];
 const DATASETS_1D_CLASSIFICATION: Dataset1DId[] = ["gauss1d", "threshold", "twoClusters"];
 const DATASETS_1D_REGRESSION: Dataset1DId[] = ["sine", "linear", "cubic", "step"];
 
@@ -106,7 +112,25 @@ function DatasetThumbnail({
       return;
     }
 
-    const points = TF_DATASETS[datasetId as TfDatasetId](120, 0);
+    const gen = TF_DATASETS[datasetId as TfDatasetId];
+    if (!gen) return;
+    const isRegression = problemType === "regression";
+    if (isRegression) {
+      // Continuous labels as sparse dots are unreadable in a tiny thumb —
+      // paint a dense target-field heatmap instead (same palette as the canvas).
+      const side = 48;
+      const cell = size / side;
+      const field = gen(side * side, 0);
+      for (const p of field) {
+        const { r, g, b } = valueToRgb(p.label);
+        const px = ((p.x + 6) / 12) * size;
+        const py = ((6 - p.y) / 12) * size;
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillRect(px - cell / 2, py - cell / 2, cell + 0.6, cell + 0.6);
+      }
+      return;
+    }
+    const points = gen(120, 0);
     for (const p of points) {
       const px = ((p.x + 6) / 12) * size;
       const py = ((6 - p.y) / 12) * size;
@@ -167,6 +191,7 @@ type GraphPaneProps = {
   onRemoveNeuron: (layerIdx: number) => void;
   onNormalizeLayout: () => void;
   onLearningRateChange: (learningRate: number) => void;
+  onOptimizerChange: (optimizer: TfPlaygroundConfig["optimizer"]) => void;
   onActivationChange: (activation: TfPlaygroundConfig["activation"]) => void;
   onWeightInitChange: (weightInit: TfPlaygroundConfig["weightInit"]) => void;
   onRegularizationChange: (regularization: TfPlaygroundConfig["regularization"]) => void;
@@ -179,6 +204,12 @@ type GraphPaneProps = {
   onDatasetChange: (dataset: TfAnyDatasetId) => void;
   onProblemTypeChange: (problemType: TfProblemType) => void;
   onResetWeights: () => void;
+  edgeVizMode: EdgeVizMode;
+  onEdgeVizModeChange: (mode: EdgeVizMode) => void;
+  /** Snapshot of loss history — new array reference when the curve should redraw. */
+  lossHistory: LossHistoryPoint[];
+  lossTrain: number;
+  lossTest: number;
 };
 
 const NetworkGraphPane = memo(function NetworkGraphPane({
@@ -208,6 +239,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
   onRemoveNeuron,
   onNormalizeLayout,
   onLearningRateChange,
+  onOptimizerChange,
   onActivationChange,
   onWeightInitChange,
   onRegularizationChange,
@@ -220,6 +252,11 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
   onDatasetChange,
   onProblemTypeChange,
   onResetWeights,
+  edgeVizMode,
+  onEdgeVizModeChange,
+  lossHistory,
+  lossTrain,
+  lossTest,
 }: GraphPaneProps) {
   const engine = engineRef.current!;
   const cfg = engine.config;
@@ -227,6 +264,9 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
   const fitViewKey = engine.graph.inputIds.join(",");
   const datasets1d =
     cfg.problemType === "regression" ? DATASETS_1D_REGRESSION : DATASETS_1D_CLASSIFICATION;
+  const datasets2d =
+    cfg.problemType === "regression" ? DATASETS_2D_REGRESSION : DATASETS_2D_CLASSIFICATION;
+  const datasetIds = cfg.dataMode === "1d" ? datasets1d : datasets2d;
 
   return (
     <ReactFlowNetworkGraph
@@ -241,6 +281,8 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
       trainingLive={playing}
       trainingLiveRef={trainingLiveRef}
       paintGeneration={paintGeneration}
+      edgeVizMode={edgeVizMode}
+      learningRate={cfg.learningRate}
       boundaryRef={boundaryRef}
       curvesRef={curvesRef}
       targetCurveRef={targetCurveRef}
@@ -279,27 +321,43 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
             {t.arrangeLayout}
           </button>
         </div>
-        {cfg.dataMode === "1d" && (
-          <div className="tf-flow-dock-section">
-            <h4 className="tf-flow-dock-title">{t.problemType}</h4>
-            <div className="tf-flat-switch" role="group" aria-label={t.problemType}>
-              {(["classification", "regression"] as TfProblemType[]).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`tf-flat-switch__btn${cfg.problemType === id ? " selected" : ""}`}
-                  onClick={() => onProblemTypeChange(id)}
-                >
-                  {t.problemTypeLabels[id]}
-                </button>
-              ))}
-            </div>
+        <div className="tf-flow-dock-section">
+          <h4 className="tf-flow-dock-title">{t.edgeViz}</h4>
+          <div className="tf-flat-switch" role="group" aria-label={t.edgeViz}>
+            {([
+              ["weight", t.edgeVizWeight],
+              ["gradient", t.edgeVizGradient],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={`tf-flat-switch__btn${edgeVizMode === id ? " selected" : ""}`}
+                onClick={() => onEdgeVizModeChange(id)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
+        <div className="tf-flow-dock-section">
+          <h4 className="tf-flow-dock-title">{t.problemType}</h4>
+          <div className="tf-flat-switch" role="group" aria-label={t.problemType}>
+            {(["classification", "regression"] as TfProblemType[]).map((id) => (
+              <button
+                key={id}
+                type="button"
+                className={`tf-flat-switch__btn${cfg.problemType === id ? " selected" : ""}`}
+                onClick={() => onProblemTypeChange(id)}
+              >
+                {t.problemTypeLabels[id]}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="tf-flow-dock-section">
           <h4 className="tf-flow-dock-title">{t.dataset}</h4>
           <div className="dataset-list dataset-list--compact">
-            {(cfg.dataMode === "1d" ? datasets1d : DATASETS_2D).map((id) => (
+            {datasetIds.map((id) => (
               <DatasetThumbnail
                 key={id}
                 datasetId={id}
@@ -315,6 +373,15 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
               />
             ))}
           </div>
+          <NetworkDataPanel
+            batchSize={cfg.batchSize}
+            noise={cfg.noise}
+            percTrainData={cfg.percTrainData}
+            onBatchSizeChange={onBatchSizeChange}
+            onNoiseChange={onNoiseChange}
+            onTrainRatioChange={onTrainRatioChange}
+            onRegenerateData={onRegenerateData}
+          />
         </div>
         <NetworkInspector
           graph={engine.graph}
@@ -328,27 +395,43 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
         />
       </aside>
       <aside className="tf-flow-dock tf-flow-dock--right">
+        <NetworkLossChart
+          history={lossHistory}
+          title={t.learningCurve}
+          trainLabel={t.trainLoss}
+          testLabel={t.testLoss}
+          lossTrain={lossTrain}
+          lossTest={lossTest}
+        />
         <NetworkTrainingPanel
           learningRate={cfg.learningRate}
+          optimizer={cfg.optimizer}
           activation={cfg.activation}
           weightInit={cfg.weightInit}
           regularization={cfg.regularization}
           regularizationRate={cfg.regularizationRate}
-          batchSize={cfg.batchSize}
-          noise={cfg.noise}
-          percTrainData={cfg.percTrainData}
           discretize={cfg.discretize ?? false}
           onLearningRateChange={onLearningRateChange}
+          onOptimizerChange={onOptimizerChange}
           onActivationChange={onActivationChange}
           onWeightInitChange={onWeightInitChange}
           onRegularizationChange={onRegularizationChange}
           onRegularizationRateChange={onRegularizationRateChange}
-          onBatchSizeChange={onBatchSizeChange}
-          onNoiseChange={onNoiseChange}
-          onTrainRatioChange={onTrainRatioChange}
           onDiscretizeChange={onDiscretizeChange}
-          onRegenerateData={onRegenerateData}
         />
+        <div
+          className="tf-weight-legend tf-weight-legend--dock"
+          role="img"
+          aria-label="Weight color scale from −1 (violet) to +1 (magenta)"
+        >
+          <span className="tf-weight-legend__title">Weight</span>
+          <div className="tf-weight-legend__bar" />
+          <div className="tf-weight-legend__scale">
+            <span>−1</span>
+            <span>0</span>
+            <span>+1</span>
+          </div>
+        </div>
       </aside>
     </ReactFlowNetworkGraph>
   );
@@ -378,6 +461,9 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     lossTrain: engineRef.current.lossTrain,
     lossTest: engineRef.current.lossTest,
   }));
+  const [lossHistory, setLossHistory] = useState<LossHistoryPoint[]>(() =>
+    engineRef.current.lossHistory.map((p) => ({ ...p })),
+  );
   const bump = useCallback(() => setTick((n) => n + 1), []);
   const [paintGeneration, setPaintGeneration] = useState(0);
   const requestPaint = useCallback(() => setPaintGeneration((n) => n + 1), []);
@@ -387,6 +473,9 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   }, [paintGeneration, tick]);
 
   const [playing, setPlaying] = useState(false);
+  const [edgeVizMode, setEdgeVizMode] = useState<EdgeVizMode>("weight");
+  const edgeVizModeRef = useRef<EdgeVizMode>("weight");
+  edgeVizModeRef.current = edgeVizMode;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const wasPlayingRef = useRef(false);
@@ -401,6 +490,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     const next = { epoch: engine.epoch, lossTrain: engine.lossTrain, lossTest: engine.lossTest };
     statsRef.current = next;
     setStats(next);
+    setLossHistory(engine.lossHistory.map((p) => ({ ...p })));
   }, []);
 
   useEffect(() => {
@@ -422,8 +512,15 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     let raf = 0;
     let lastTime = performance.now();
     let lastPaint = 0;
+    let lastTrainLoss = 0;
+    let lastTestLoss = 0;
+    let lastHistory = 0;
     let epochBank = 0;
     const paintIntervalMs = 1000 / 30;
+    /** Learning-curve sample rate — high enough to look continuous while Play runs. */
+    const historyIntervalMs = 1000 / 20;
+    const trainLossIntervalMs = 1000 / 20;
+    const testLossIntervalMs = 1000 / 8;
     const loop = (now: number) => {
       const engine = engineRef.current;
       const dt = Math.min((now - lastTime) / 1000, 0.1);
@@ -447,29 +544,39 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           paintAllBoundaries();
           lastPaint = now;
         }
+
+        if (now - lastTrainLoss >= trainLossIntervalMs) {
+          engine.lossTrain = engine.getLoss(engine.trainData);
+          lastTrainLoss = now;
+        }
+        if (now - lastTestLoss >= testLossIntervalMs) {
+          engine.lossTest = engine.getLoss(engine.testData);
+          lastTestLoss = now;
+        }
+        if (now - lastHistory >= historyIntervalMs) {
+          engine.pushLossHistory();
+          setLossHistory(engine.lossHistory.map((p) => ({ ...p })));
+          lastHistory = now;
+        }
       }
 
       tick++;
-      if (steps > 0 && tick % 16 === 0) {
-        engine.lossTrain = engine.getLoss(engine.trainData);
-      }
-      if (steps > 0 && tick % 32 === 0) {
-        engine.lossTest = engine.getLoss(engine.testData);
-      }
-
       statsRef.current = {
         epoch: engine.epoch,
         lossTrain: engine.lossTrain,
         lossTest: engine.lossTest,
       };
-      if (tick % 8 === 0) {
+      if (tick % 4 === 0) {
         setStats({ ...statsRef.current });
+        // Gradient strokes change every batch — refresh edges without a full
+        // paintGeneration bump (that would remount boundary canvases).
+        if (edgeVizModeRef.current === "gradient") bump();
       }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [playing]);
+  }, [playing, bump]);
 
   useEffect(() => {
     if (wasPlayingRef.current && !playing) {
@@ -483,6 +590,8 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
         lossTest: engine.lossTest,
       };
       setStats({ ...statsRef.current });
+      engine.pushLossHistory();
+      setLossHistory(engine.lossHistory.map((p) => ({ ...p })));
       requestPaint();
       bump();
     }
@@ -519,6 +628,11 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   // Hyperparameters are read live by trainEpoch — no engine reset needed.
   const onLearningRateChange = useCallback((learningRate: number) => {
     engineRef.current.config.learningRate = learningRate;
+    bump();
+  }, [bump]);
+
+  const onOptimizerChange = useCallback((optimizer: TfPlaygroundConfig["optimizer"]) => {
+    engineRef.current.setOptimizer(optimizer);
     bump();
   }, [bump]);
 
@@ -777,6 +891,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           onRemoveNeuron={onRemoveNeuron}
           onNormalizeLayout={onNormalizeLayout}
           onLearningRateChange={onLearningRateChange}
+          onOptimizerChange={onOptimizerChange}
           onActivationChange={onActivationChange}
           onWeightInitChange={onWeightInitChange}
           onRegularizationChange={onRegularizationChange}
@@ -789,6 +904,11 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           onDatasetChange={onDatasetChange}
           onProblemTypeChange={onProblemTypeChange}
           onResetWeights={resetWeights}
+          edgeVizMode={edgeVizMode}
+          onEdgeVizModeChange={setEdgeVizMode}
+          lossHistory={lossHistory}
+          lossTrain={stats.lossTrain}
+          lossTest={stats.lossTest}
         />
       </div>
     </div>

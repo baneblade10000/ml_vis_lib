@@ -33,10 +33,57 @@ export type NetworkNodeData = {
   paintGeneration?: number;
 };
 
+/** What drives edge stroke width / color / opacity. */
+export type EdgeVizMode = "weight" | "gradient";
+
 export type WeightEdgeData = {
   weight: number;
+  /** ∂E/∂w for this link (batch mean when accumulating, else last sample). */
+  gradient: number;
+  /** Current learning rate — used to show Δw = −lr·∂ on hover. */
+  learningRate: number;
   active: boolean;
+  vizMode: EdgeVizMode;
 };
+
+/** Current ∂E/∂w used for visualization (batch mean → last batch → last sample). */
+export function linkPartialDerivative(link: {
+  errorDer: number;
+  accErrorDer: number;
+  numAccumulatedDers: number;
+  lastGradient?: number;
+}): number {
+  if (link.numAccumulatedDers > 0) {
+    return link.accErrorDer / link.numAccumulatedDers;
+  }
+  // After a batch update accumulators are cleared; keep the last mean ∂E/∂w.
+  return link.lastGradient ?? link.errorDer;
+}
+
+function edgeStrokeStyle(
+  value: number,
+  active: boolean,
+  opts?: { alreadyNormalized?: boolean },
+): {
+  stroke: string;
+  strokeWidth: number;
+  strokeOpacity: number;
+} {
+  // Weights use tanh so small values stay legible and large ones saturate.
+  // Gradients are already scaled by max|∂E/∂w|, so map linearly in [-1, 1].
+  const mag = opts?.alreadyNormalized
+    ? Math.min(1, Math.abs(value))
+    : weightMagnitude(value);
+  const stroke = weightColor(
+    opts?.alreadyNormalized ? Math.max(-1, Math.min(1, value)) : weightValueNormalized(value),
+  );
+  return {
+    stroke,
+    // 2px floor for faint values, ~7.5px ceiling at full magnitude.
+    strokeWidth: 2 + mag * 5.5,
+    strokeOpacity: active ? 0.45 + mag * 0.55 : 0.12,
+  };
+}
 
 export function graphToFlow(
   graph: ComputationalGraph,
@@ -49,10 +96,26 @@ export function graphToFlow(
     lossTest?: number;
     lossTrain?: number;
     paintGeneration?: number;
+    edgeVizMode?: EdgeVizMode;
+    learningRate?: number;
   },
 ): { nodes: Node<NetworkNodeData>[]; edges: Edge<WeightEdgeData>[] } {
   const nodes: Node<NetworkNodeData>[] = [];
   const edges: Edge<WeightEdgeData>[] = [];
+  const edgeVizMode = options.edgeVizMode ?? "weight";
+  const learningRate = options.learningRate ?? 0;
+
+  // Relative scale so the largest |∂E/∂w| saturates. sqrt keeps earlier-layer
+  // grads visible in deep nets where the output layer would otherwise dominate.
+  const links = graph.getAllLinks();
+  let maxAbsGrad = 0;
+  const gradients = new Map<string, number>();
+  for (const link of links) {
+    const g = linkPartialDerivative(link);
+    gradients.set(link.id, g);
+    maxAbsGrad = Math.max(maxAbsGrad, Math.abs(g));
+  }
+  const gradScale = maxAbsGrad > 1e-12 ? maxAbsGrad : 1;
 
   for (const id of graph.inputIds) {
     const pos = graph.positions.get(id) ?? { x: 0, y: 0 };
@@ -100,21 +163,32 @@ export function graphToFlow(
     });
   }
 
-  for (const link of graph.getAllLinks()) {
+  for (const link of links) {
     const sourceActive =
       link.source.id in options.enabledFeatures ? options.enabledFeatures[link.source.id] : true;
-    // One normalized scale (tanh) drives color, width and opacity together so a
-    // large weight saturates all three at the same point instead of clamping at
-    // different thresholds.
-    const mag = weightMagnitude(link.weight);
-    const stroke = weightColor(weightValueNormalized(link.weight));
+    const gradient = gradients.get(link.id) ?? 0;
+    const isGradient = edgeVizMode === "gradient";
+    let vizValue = link.weight;
+    if (isGradient) {
+      const ratio = Math.abs(gradient) / gradScale;
+      vizValue = Math.sign(gradient) * Math.sqrt(ratio);
+    }
+    const { stroke, strokeWidth, strokeOpacity } = edgeStrokeStyle(vizValue, sourceActive, {
+      alreadyNormalized: isGradient,
+    });
     edges.push({
       id: link.id,
       source: link.source.id,
       target: link.dest.id,
       type: "weight",
       selected: options.selectedEdgeId === link.id,
-      data: { weight: link.weight, active: sourceActive },
+      data: {
+        weight: link.weight,
+        gradient,
+        learningRate,
+        active: sourceActive,
+        vizMode: edgeVizMode,
+      },
       markerEnd: {
         type: MarkerType.ArrowClosed,
         width: 16,
@@ -125,9 +199,8 @@ export function graphToFlow(
       },
       style: {
         stroke,
-        // 2px floor for faint weights, ~7.5px ceiling once |tanh(w)| → 1.
-        strokeWidth: 2 + mag * 5.5,
-        strokeOpacity: sourceActive ? 0.45 + mag * 0.55 : 0.12,
+        strokeWidth,
+        strokeOpacity,
       },
     });
   }

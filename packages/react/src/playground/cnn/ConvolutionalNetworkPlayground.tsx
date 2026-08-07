@@ -6,17 +6,23 @@ import {
   CNN_DATASET_IDS_1D,
   type CnnActivationId,
   type CnnMode,
+  type CnnRegularizationId,
   type FeatureMapSnapshot,
   type ImageExample,
   type LayerShape,
+  type LossHistoryPoint,
+  type PlaygroundOptimizerId,
   type SignalExample,
 } from "@ml-vis/core";
+import { NetworkLossChart } from "../network/NetworkLossChart";
 import { CnnFlowGraph } from "./CnnFlowGraph";
 import { CnnPalette } from "./CnnPalette";
 import { CnnArchitecturePanel } from "./CnnArchitecturePanel";
 import { CnnTrainingPanel } from "./CnnTrainingPanel";
+import { CnnDataPanel } from "./CnnDataPanel";
 import { CnnInspector } from "./CnnInspector";
 import { CnnGallery } from "./CnnGallery";
+import { formatCnnNodeLabel } from "./cnnAdapter";
 import { useCnnMessages } from "./messages";
 import {
   paintAllFeatureMaps,
@@ -80,6 +86,9 @@ export function ConvolutionalNetworkPlayground({
   trainingLiveRef.current = playing;
 
   const [stats, setStats] = useState<CnnTrainingStats>(() => engineRef.current!.stats());
+  const [lossHistory, setLossHistory] = useState<LossHistoryPoint[]>(() =>
+    engineRef.current!.lossHistory.map((p) => ({ ...p })),
+  );
 
   const engine = engineRef.current!;
 
@@ -87,6 +96,7 @@ export function ConvolutionalNetworkPlayground({
     const e = engineRef.current!;
     statsRef.current = e.stats();
     setStats({ ...statsRef.current });
+    setLossHistory(e.lossHistory.map((p) => ({ ...p })));
     // Refresh feature-map snapshots for the inspected example.
     const maps = e.featureMaps();
     const store: FeatureMapStore = {};
@@ -120,12 +130,14 @@ export function ConvolutionalNetworkPlayground({
         for (let i = 0; i < steps; i++) e.trainEpoch();
         if (now - lastPaint >= paintIntervalMs) {
           e.refreshMetrics();
+          e.pushLossHistory();
           const maps = e.featureMaps();
           const store: FeatureMapStore = {};
           for (const m of maps) store[m.layerId] = m;
           featureMapRef.current = store;
           statsRef.current = e.stats();
           setStats({ ...statsRef.current });
+          setLossHistory(e.lossHistory.map((p) => ({ ...p })));
           paintAllFeatureMaps();
           lastPaint = now;
         }
@@ -141,6 +153,7 @@ export function ConvolutionalNetworkPlayground({
     if (playing) return;
     const e = engineRef.current!;
     e.refreshMetrics();
+    e.pushLossHistory();
     syncState();
     requestPaint();
     bump();
@@ -207,9 +220,24 @@ export function ConvolutionalNetworkPlayground({
     engineRef.current!.setLearningRate(lr);
   }, []);
 
+  const onOptimizerChange = useCallback((optimizer: PlaygroundOptimizerId) => {
+    engineRef.current!.setOptimizer(optimizer);
+    bump();
+  }, [bump]);
+
   const onBatchSizeChange = useCallback((bs: number) => {
     engineRef.current!.setBatchSize(bs);
   }, []);
+
+  const onRegularizationChange = useCallback((regularization: CnnRegularizationId) => {
+    engineRef.current!.setRegularization(regularization);
+    bump();
+  }, [bump]);
+
+  const onRegularizationRateChange = useCallback((rate: number) => {
+    engineRef.current!.setRegularizationRate(rate);
+    bump();
+  }, [bump]);
 
   const onNoiseChange = useCallback(
     (n: number) => {
@@ -380,7 +408,7 @@ export function ConvolutionalNetworkPlayground({
     const outShape = shapes[idx];
     return {
       kind: specKindLabel(layer.kind, t),
-      label: layer.label(),
+      label: formatCnnNodeLabel(layer, t),
       inputShape: inShape ? shapeLabel(inShape) : "—",
       outputShape: outShape ? shapeLabel(outShape) : "—",
       params: layer.paramCount(),
@@ -453,6 +481,7 @@ export function ConvolutionalNetworkPlayground({
           paintGeneration={paintGeneration}
           featureMaps={featureMaps}
           onSelectNode={setSelectedLayerId}
+          onDropLayer={onAddLayer}
           featureMapRef={featureMapRef}
           statsRef={statsRef}
           trainingLiveRef={trainingLiveRef}
@@ -461,7 +490,7 @@ export function ConvolutionalNetworkPlayground({
           fillHeight
         >
           <aside className="tf-flow-dock tf-flow-dock--left tf-flow-dock--wide">
-            <CnnPalette />
+            <CnnPalette onAddLayer={onAddLayer} />
             <CnnArchitecturePanel
               layers={engine.config.layers}
               selectedIndex={selectedSpecIndex}
@@ -469,7 +498,6 @@ export function ConvolutionalNetworkPlayground({
                 const layer = engine.layers[idx + 1];
                 setSelectedLayerId(layer ? layer.id : null);
               }}
-              onAddLayer={onAddLayer}
               onRemoveLayer={onRemoveLayer}
               onSetFilters={onSetFilters}
               onSetKernelSize={onSetKernelSize}
@@ -485,37 +513,68 @@ export function ConvolutionalNetworkPlayground({
                 {t.resetWeights}
               </button>
             </div>
-          </aside>
-          <aside className="tf-flow-dock tf-flow-dock--right">
-            <CnnTrainingPanel
-              learningRate={engine.config.learningRate}
-              activation={engine.config.activation}
-              batchSize={engine.config.batchSize}
-              noise={engine.config.noise}
-              percTrainData={engine.config.percTrainData}
-              onLearningRateChange={onLearningRateChange}
-              onActivationChange={onActivationChange}
-              onBatchSizeChange={onBatchSizeChange}
-              onNoiseChange={onNoiseChange}
-              onTrainRatioChange={onTrainRatioChange}
-              onRegenerateData={onRegenerateData}
-            />
-            <CnnGallery
-              mode={mode}
-              examples={galleryExamples}
-              predictions={galleryPredictions}
-              inspectedIndex={inspectedIdx}
-              onSelectExample={onSelectExample}
-              datasetId={engine.config.dataset}
-              onSelectDataset={onDatasetChange}
-              datasetIds={datasetIds}
-              datasetLabels={datasetLabels}
-            />
+            <div className="tf-flow-dock-section">
+              <CnnGallery
+                mode={mode}
+                examples={galleryExamples}
+                predictions={galleryPredictions}
+                inspectedIndex={inspectedIdx}
+                onSelectExample={onSelectExample}
+                datasetId={engine.config.dataset}
+                onSelectDataset={onDatasetChange}
+                datasetIds={datasetIds}
+                datasetLabels={datasetLabels}
+              />
+              <CnnDataPanel
+                batchSize={engine.config.batchSize}
+                noise={engine.config.noise}
+                percTrainData={engine.config.percTrainData}
+                onBatchSizeChange={onBatchSizeChange}
+                onNoiseChange={onNoiseChange}
+                onTrainRatioChange={onTrainRatioChange}
+                onRegenerateData={onRegenerateData}
+              />
+            </div>
             <CnnInspector
               selectedLayerId={selectedLayerId}
               kernels={kernelSnapshots}
               info={inspectorInfo}
             />
+          </aside>
+          <aside className="tf-flow-dock tf-flow-dock--right">
+            <NetworkLossChart
+              history={lossHistory}
+              title={t.learningCurve}
+              trainLabel={t.trainLoss}
+              testLabel={t.testLoss}
+              lossTrain={stats.lossTrain}
+              lossTest={stats.lossTest}
+            />
+            <CnnTrainingPanel
+              learningRate={engine.config.learningRate}
+              optimizer={engine.config.optimizer}
+              activation={engine.config.activation}
+              regularization={engine.config.regularization}
+              regularizationRate={engine.config.regularizationRate}
+              onLearningRateChange={onLearningRateChange}
+              onOptimizerChange={onOptimizerChange}
+              onActivationChange={onActivationChange}
+              onRegularizationChange={onRegularizationChange}
+              onRegularizationRateChange={onRegularizationRateChange}
+            />
+            <div
+              className="tf-weight-legend tf-weight-legend--dock"
+              role="img"
+              aria-label={t.weightsLegendAria}
+            >
+              <span className="tf-weight-legend__title">{t.weightsLegend}</span>
+              <div className="tf-weight-legend__bar" />
+              <div className="tf-weight-legend__scale">
+                <span>−1</span>
+                <span>0</span>
+                <span>+1</span>
+              </div>
+            </div>
           </aside>
         </CnnFlowGraph>
       </div>

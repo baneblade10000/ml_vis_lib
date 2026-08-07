@@ -22,6 +22,9 @@ export type NetworkMessages = {
   paletteDenseHint: string;
   paletteHint: string;
   arrangeLayout: string;
+  edgeViz: string;
+  edgeVizWeight: string;
+  edgeVizGradient: string;
   network: string;
   hiddenLayers: string;
   layer: string;
@@ -39,7 +42,9 @@ export type NetworkMessages = {
   datasetLabels: Record<TfDatasetId, string>;
   dataset1dLabels: Record<Dataset1DId, string>;
   training: string;
+  learningCurve: string;
   learningRate: string;
+  optimizer: string;
   activation: string;
   weightInit: string;
   weightInitLabels: Record<WeightInitId, string>;
@@ -56,6 +61,7 @@ export type NetworkMessages = {
   inspectorFrom: string;
   inspectorTo: string;
   inspectorWeight: string;
+  inspectorGradient: string;
   inspectorKind: string;
   inspectorOutput: string;
   inspectorBias: string;
@@ -80,6 +86,9 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     paletteDenseHint: "Weighted sum + activation",
     paletteHint: "Drag onto canvas · Connect handles · Del to remove",
     arrangeLayout: "Arrange layout",
+    edgeViz: "Connections",
+    edgeVizWeight: "Weights",
+    edgeVizGradient: "Gradients",
     network: "Network",
     hiddenLayers: "Hidden layers",
     layer: "Layer",
@@ -102,6 +111,7 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
       xor: "XOR",
       gauss: "Gaussian",
       spiral: "Spiral",
+      sinSin: "sin(x)·sin(y)",
     },
     dataset1dLabels: {
       gauss1d: "Two Gaussians",
@@ -113,7 +123,9 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
       step: "Step",
     },
     training: "Training",
+    learningCurve: "Learning curve",
     learningRate: "Learning rate",
+    optimizer: "Optimizer",
     activation: "Activation",
     weightInit: "Weight init",
     weightInitLabels: {
@@ -140,6 +152,7 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     inspectorFrom: "From",
     inspectorTo: "To",
     inspectorWeight: "Weight",
+    inspectorGradient: "∂E/∂w",
     inspectorKind: "Kind",
     inspectorOutput: "Output",
     inspectorBias: "Bias",
@@ -162,6 +175,9 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     paletteDenseHint: "Взвешенная сумма + активация",
     paletteHint: "Перетащите на холст · Соединяйте порты · Del — удалить",
     arrangeLayout: "Выровнять схему",
+    edgeViz: "Связи",
+    edgeVizWeight: "Веса",
+    edgeVizGradient: "Градиенты",
     network: "Сеть",
     hiddenLayers: "Скрытые слои",
     layer: "Слой",
@@ -184,6 +200,7 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
       xor: "XOR",
       gauss: "Гауссианы",
       spiral: "Спираль",
+      sinSin: "sin(x)·sin(y)",
     },
     dataset1dLabels: {
       gauss1d: "Две гауссианы",
@@ -195,7 +212,9 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
       step: "Ступенька",
     },
     training: "Обучение",
+    learningCurve: "Кривая обучения",
     learningRate: "Скорость обучения",
+    optimizer: "Оптимизатор",
     activation: "Активация",
     weightInit: "Инициализация весов",
     weightInitLabels: {
@@ -222,6 +241,7 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     inspectorFrom: "Откуда",
     inspectorTo: "Куда",
     inspectorWeight: "Вес",
+    inspectorGradient: "∂E/∂w",
     inspectorKind: "Тип",
     inspectorOutput: "Выход",
     inspectorBias: "Смещение",

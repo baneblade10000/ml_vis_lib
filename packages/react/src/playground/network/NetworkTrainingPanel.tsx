@@ -1,9 +1,10 @@
-import type { CSSProperties } from "react";
 import {
+  PLAYGROUND_OPTIMIZERS,
   TF_ACTIVATIONS,
   TF_REGULARIZATION_RATES,
   TF_REGULARIZATIONS,
   WEIGHT_INITS,
+  type PlaygroundOptimizerId,
   type TfActivationId,
   type TfRegularizationId,
   type WeightInitId,
@@ -14,46 +15,36 @@ const LEARNING_RATES = [0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 
 
 export interface NetworkTrainingPanelProps {
   learningRate: number;
+  optimizer: PlaygroundOptimizerId;
   activation: TfActivationId;
   weightInit: WeightInitId;
   regularization: TfRegularizationId;
   regularizationRate: number;
-  batchSize: number;
-  noise: number;
-  percTrainData: number;
   discretize: boolean;
   onLearningRateChange: (rate: number) => void;
+  onOptimizerChange: (optimizer: PlaygroundOptimizerId) => void;
   onActivationChange: (activation: TfActivationId) => void;
   onWeightInitChange: (init: WeightInitId) => void;
   onRegularizationChange: (regularization: TfRegularizationId) => void;
   onRegularizationRateChange: (rate: number) => void;
-  onBatchSizeChange: (size: number) => void;
-  onNoiseChange: (noise: number) => void;
-  onTrainRatioChange: (ratio: number) => void;
   onDiscretizeChange: (value: boolean) => void;
-  onRegenerateData: () => void;
 }
 
 export function NetworkTrainingPanel({
   learningRate,
+  optimizer,
   activation,
   weightInit,
   regularization,
   regularizationRate,
-  batchSize,
-  noise,
-  percTrainData,
   discretize,
   onLearningRateChange,
+  onOptimizerChange,
   onActivationChange,
   onWeightInitChange,
   onRegularizationChange,
   onRegularizationRateChange,
-  onBatchSizeChange,
-  onNoiseChange,
-  onTrainRatioChange,
   onDiscretizeChange,
-  onRegenerateData,
 }: NetworkTrainingPanelProps) {
   const t = useNetworkMessages();
 
@@ -72,6 +63,21 @@ export function NetworkTrainingPanel({
             {LEARNING_RATES.map((v) => (
               <option key={v} value={v}>
                 {v}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="tf-training-field">
+          <span className="tf-training-label">{t.optimizer}</span>
+          <select
+            className="tf-select tf-select--dock"
+            value={optimizer}
+            onChange={(e) => onOptimizerChange(e.target.value as PlaygroundOptimizerId)}
+          >
+            {PLAYGROUND_OPTIMIZERS.map((id) => (
+              <option key={id} value={id}>
+                {id}
               </option>
             ))}
           </select>
@@ -150,67 +156,6 @@ export function NetworkTrainingPanel({
           {t.discretize}
         </label>
       </div>
-
-      <div className="tf-slider-group tf-slider-group--dock">
-        <div className="tf-slider">
-          <label>
-            <span className="tf-slider-header">
-              <span className="tf-slider-name">{t.noise}</span>
-              <span className="value">{noise}</span>
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={50}
-              step={1}
-              value={noise}
-              style={{ "--range-progress": `${(noise / 50) * 100}%` } as CSSProperties}
-              onChange={(e) => onNoiseChange(Number(e.target.value))}
-            />
-          </label>
-        </div>
-        <div className="tf-slider">
-          <label>
-            <span className="tf-slider-header">
-              <span className="tf-slider-name">{t.trainRatio}</span>
-              <span className="value">{percTrainData}%</span>
-            </span>
-            <input
-              type="range"
-              min={10}
-              max={90}
-              step={5}
-              value={percTrainData}
-              style={{ "--range-progress": `${((percTrainData - 10) / 80) * 100}%` } as CSSProperties}
-              onChange={(e) => onTrainRatioChange(Number(e.target.value))}
-            />
-          </label>
-        </div>
-        <div className="tf-slider">
-          <label>
-            <span className="tf-slider-header">
-              <span className="tf-slider-name">{t.batchSize}</span>
-              <span className="value">{batchSize}</span>
-            </span>
-            <input
-              type="range"
-              min={1}
-              max={30}
-              step={1}
-              value={batchSize}
-              style={{ "--range-progress": `${((batchSize - 1) / 29) * 100}%` } as CSSProperties}
-              onChange={(e) => onBatchSizeChange(Number(e.target.value))}
-            />
-          </label>
-        </div>
-      </div>
-
-      <button type="button" className="tf-btn tf-btn--secondary tf-data-regen" onClick={onRegenerateData}>
-        <span className="tf-data-regen-icon" aria-hidden="true">
-          ↻
-        </span>
-        {t.regenerateData}
-      </button>
     </div>
   );
 }

@@ -21,8 +21,12 @@ function onDragStart(event: React.DragEvent, kind: CnnDragKind) {
   event.dataTransfer.effectAllowed = "copy";
 }
 
-/** Draggable layer blocks. The drop target appends the layer to the pipeline. */
-export function CnnPalette() {
+export interface CnnPaletteProps {
+  onAddLayer: (kind: CnnDragKind) => void;
+}
+
+/** Clickable / draggable layer blocks that append to the pipeline. */
+export function CnnPalette({ onAddLayer }: CnnPaletteProps) {
   const t = useCnnMessages();
 
   return (
@@ -30,16 +34,18 @@ export function CnnPalette() {
       <div className="tf-flow-dock-title">{t.blocks}</div>
       <div className="cnn-palette-items">
         {PALETTE.map((item) => (
-          <div
+          <button
             key={item.kind}
+            type="button"
             className="cnn-palette-item"
             draggable
             onDragStart={(e) => onDragStart(e, item.kind)}
+            onClick={() => onAddLayer(item.kind)}
             title={t[item.hintKey]}
           >
             <span className={`cnn-palette-icon cnn-palette-icon--${item.kind}`}>{item.icon}</span>
             <span className="cnn-palette-label">{t[item.labelKey]}</span>
-          </div>
+          </button>
         ))}
       </div>
       <p className="cnn-palette-hint">{t.paletteHint}</p>
