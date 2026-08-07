@@ -24,6 +24,8 @@ export interface CnnMessages {
   paletteConvHint: string;
   palettePool: string;
   palettePoolHint: string;
+  paletteGap: string;
+  paletteGapHint: string;
   paletteDense: string;
   paletteDenseHint: string;
   paletteHint: string;
@@ -58,6 +60,8 @@ export interface CnnMessages {
   inspectorParams: string;
   inspectorFilters: string;
   inspectorKernels: string;
+  inspectorBiases: string;
+  inspectorBias: string;
   gallery: string;
   galleryHint: string;
   labelCorrect: string;
@@ -66,6 +70,8 @@ export interface CnnMessages {
   weightsLegend: string;
   weightsLegendAria: string;
   readoutProb: string;
+  class0: string;
+  class1: string;
   lossTestTrain: string;
   denseWeightsEmpty: string;
   learningCurve: string;
@@ -94,6 +100,8 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     paletteConvHint: "Convolution (learnable kernel)",
     palettePool: "Pool",
     palettePoolHint: "2×2 downsampling (max/avg)",
+    paletteGap: "GAP",
+    paletteGapHint: "Global average pooling (per channel)",
     paletteDense: "Dense",
     paletteDenseHint: "Fully-connected layer",
     paletteHint: "Click or drag onto canvas to add a layer",
@@ -136,6 +144,8 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     inspectorParams: "Params",
     inspectorFilters: "Filters",
     inspectorKernels: "Kernels",
+    inspectorBiases: "Biases",
+    inspectorBias: "Bias",
     gallery: "Inputs",
     galleryHint: "Click an example to inspect it",
     labelCorrect: "correct",
@@ -143,7 +153,9 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     arrangeLayout: "Arrange layout",
     weightsLegend: "Weights",
     weightsLegendAria: "Weight color scale from −1 (violet) to +1 (magenta)",
-    readoutProb: "Predicted probability of class 1",
+    readoutProb: "Predicted class probabilities",
+    class0: "Class 0",
+    class1: "Class 1",
     lossTestTrain: "test / train",
     denseWeightsEmpty: "Weights initialize on first forward",
     learningCurve: "Learning curve",
@@ -174,6 +186,8 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     paletteConvHint: "Свёртка (обучаемое ядро)",
     palettePool: "Пулинг",
     palettePoolHint: "Понижение 2×2 (max/avg)",
+    paletteGap: "GAP",
+    paletteGapHint: "Global average pooling (по каналам)",
     paletteDense: "Полносвязный",
     paletteDenseHint: "Полносвязный слой",
     paletteHint: "Клик или перетащите на холст, чтобы добавить слой",
@@ -216,6 +230,8 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     inspectorParams: "Параметры",
     inspectorFilters: "Фильтры",
     inspectorKernels: "Ядра",
+    inspectorBiases: "Смещения",
+    inspectorBias: "Bias",
     gallery: "Входы",
     galleryHint: "Кликните по примеру для просмотра",
     labelCorrect: "верно",
@@ -223,7 +239,9 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     arrangeLayout: "Выровнять схему",
     weightsLegend: "Веса",
     weightsLegendAria: "Цвет весов от −1 (фиолетовый) до +1 (пурпурный)",
-    readoutProb: "Предсказанная вероятность класса 1",
+    readoutProb: "Вероятности классов",
+    class0: "Класс 0",
+    class1: "Класс 1",
     lossTestTrain: "тест / обуч.",
     denseWeightsEmpty: "Веса появятся после первого прохода",
     learningCurve: "Кривая обучения",

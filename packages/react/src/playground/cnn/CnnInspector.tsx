@@ -1,11 +1,17 @@
 import { useLayoutEffect, useRef } from "react";
-import { renderValueMatrix } from "@ml-vis/core";
+import {
+  renderValueMatrix,
+  weightColor,
+  weightValueNormalized,
+} from "@ml-vis/core";
 import { useCnnMessages } from "./messages";
 
 export interface CnnInspectorProps {
   selectedLayerId: string | null;
   /** Kernel display snapshots: layerId → array of per-filter kernel maps/vectors. */
   kernels: Record<string, number[][] | number[][][]>;
+  /** Per-filter biases for conv layers: layerId → biases[filter]. */
+  biases?: Record<string, number[]>;
   info: {
     kind: string;
     label: string;
@@ -15,7 +21,20 @@ export interface CnnInspectorProps {
   } | null;
 }
 
-function KernelThumb({ map, size }: { map: number[][]; size: number }) {
+/** Map kernel cells onto the same tanh-normalized scale as NN edge weights. */
+function normalizeWeightMap(map: number[][]): number[][] {
+  return map.map((row) => row.map((w) => weightValueNormalized(w)));
+}
+
+function KernelThumb({
+  map,
+  size,
+  bias,
+}: {
+  map: number[][];
+  size: number;
+  bias?: number;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heatRef = useRef<HTMLCanvasElement>(null);
   const cols = map[0]?.length ?? 1;
@@ -25,7 +44,10 @@ function KernelThumb({ map, size }: { map: number[][]; size: number }) {
     const canvas = canvasRef.current;
     const heat = heatRef.current;
     if (!canvas || !heat || !map.length) return;
-    renderValueMatrix(heat, map, { layout: "row-major", palette: "gray" });
+    renderValueMatrix(heat, normalizeWeightMap(map), {
+      layout: "row-major",
+      palette: "diverging",
+    });
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.imageSmoothingEnabled = false;
@@ -33,36 +55,49 @@ function KernelThumb({ map, size }: { map: number[][]; size: number }) {
     ctx.drawImage(heat, 0, 0, size, size);
   }, [map, size]);
 
+  const title =
+    typeof bias === "number" ? `bias ${bias.toFixed(3)}` : undefined;
+
   return (
-    <div className="cnn-kernel-thumb" style={{ width: size, height: size }}>
-      <canvas ref={heatRef} width={cols} height={rows} hidden aria-hidden />
-      <canvas ref={canvasRef} width={size} height={size} className="cnn-feature-canvas" />
+    <div className="cnn-kernel-with-bias" title={title}>
+      {typeof bias === "number" && (
+        <span
+          className="cnn-filter-bias"
+          data-sign={bias >= 0 ? "pos" : "neg"}
+          aria-hidden
+          style={{ background: weightColor(weightValueNormalized(bias)) }}
+        />
+      )}
+      <div className="cnn-kernel-thumb" style={{ width: size, height: size }}>
+        <canvas ref={heatRef} width={cols} height={rows} hidden aria-hidden />
+        <canvas ref={canvasRef} width={size} height={size} className="cnn-feature-canvas" />
+      </div>
     </div>
   );
 }
 
-function KernelGrid2D({ maps }: { maps: number[][][] }) {
+function KernelGrid2D({ maps, biases }: { maps: number[][][]; biases?: number[] }) {
   return (
     <div className="cnn-kernel-grid">
       {maps.map((m, i) => (
-        <KernelThumb key={i} map={m} size={36} />
+        <KernelThumb key={i} map={m} size={36} bias={biases?.[i]} />
       ))}
     </div>
   );
 }
 
-function KernelGrid1D({ vectors }: { vectors: number[][] }) {
+function KernelGrid1D({ vectors, biases }: { vectors: number[][]; biases?: number[] }) {
   return (
     <div className="cnn-kernel-grid cnn-kernel-grid--1d">
       {vectors.map((v, i) => (
-        <KernelThumb key={i} map={[v]} size={72} />
+        <KernelThumb key={i} map={[v]} size={72} bias={biases?.[i]} />
       ))}
     </div>
   );
 }
 
 /** Inspector for the selected layer: shapes, param count, and conv kernels. */
-export function CnnInspector({ selectedLayerId, kernels, info }: CnnInspectorProps) {
+export function CnnInspector({ selectedLayerId, kernels, biases, info }: CnnInspectorProps) {
   const t = useCnnMessages();
 
   if (!selectedLayerId || !info) {
@@ -75,6 +110,7 @@ export function CnnInspector({ selectedLayerId, kernels, info }: CnnInspectorPro
   }
 
   const kernelData = kernels[selectedLayerId];
+  const layerBiases = biases?.[selectedLayerId];
   const is2d = kernelData != null && Array.isArray((kernelData as number[][][])[0]?.[0]);
   const is1d = kernelData != null && !is2d;
 
@@ -102,13 +138,34 @@ export function CnnInspector({ selectedLayerId, kernels, info }: CnnInspectorPro
       {is2d && (
         <>
           <span className="nn-flow-dock-title">{t.inspectorKernels}</span>
-          <KernelGrid2D maps={kernelData as number[][][]} />
+          <KernelGrid2D maps={kernelData as number[][][]} biases={layerBiases} />
         </>
       )}
       {is1d && (
         <>
           <span className="nn-flow-dock-title">{t.inspectorKernels}</span>
-          <KernelGrid1D vectors={kernelData as number[][]} />
+          <KernelGrid1D vectors={kernelData as number[][]} biases={layerBiases} />
+        </>
+      )}
+      {layerBiases && layerBiases.length > 0 && (
+        <>
+          <span className="nn-flow-dock-title">{t.inspectorBiases}</span>
+          <div className="cnn-bias-list">
+            {layerBiases.map((b, i) => (
+              <div key={i} className="cnn-bias-list__row">
+                <span
+                  className="cnn-filter-bias cnn-filter-bias--inline"
+                  data-sign={b >= 0 ? "pos" : "neg"}
+                  aria-hidden
+                  style={{ background: weightColor(weightValueNormalized(b)) }}
+                />
+                <span className="cnn-bias-list__label">
+                  {t.inspectorBias} {i + 1}
+                </span>
+                <span className="cnn-bias-list__val">{b.toFixed(4)}</span>
+              </div>
+            ))}
+          </div>
         </>
       )}
     </div>

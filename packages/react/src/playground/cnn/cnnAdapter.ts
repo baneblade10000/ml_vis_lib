@@ -2,6 +2,8 @@ import type { Edge, Node } from "@xyflow/react";
 import { MarkerType } from "@xyflow/react";
 import {
   weightColor,
+  weightMagnitude,
+  weightValueNormalized,
   type CnnLayerView,
   type CnnMode,
   type FeatureMapSnapshot,
@@ -25,8 +27,9 @@ export const CNN_ORIGIN_X = 80;
 export const CNN_NODE_WIDTH = 150;
 
 /** Cap displayed units so Flatten/Dense don't dominate the canvas. */
-export const CNN_MAX_VIS_UNITS = 48;
-export const CNN_MAX_STACK_HEIGHT = 140;
+export const CNN_MAX_VIS_UNITS = 32;
+/** Max pixel height of a Flatten/Dense unit stack — keeps cells readable as squares. */
+export const CNN_MAX_STACK_HEIGHT = 420;
 
 const MAP_PX = 44;
 /** Pixel size of the kernel thumb drawn beside each conv channel. */
@@ -55,19 +58,45 @@ export function downsample1D(values: number[], target: number): number[] {
   return out;
 }
 
-/** Circle stack size shared by Flatten / Dense weight columns. */
+/** Source indices used when downsampling a length-`n` vector to `target` slots. */
+export function sampleIndices(n: number, target: number): number[] {
+  const count = Math.min(Math.max(0, n), Math.max(0, target));
+  if (n <= target) return Array.from({ length: count }, (_, i) => i);
+  const out = new Array<number>(count);
+  for (let i = 0; i < count; i++) {
+    out[i] = Math.min(n - 1, Math.floor(((i + 0.5) * n) / target));
+  }
+  return out;
+}
+
+/** Stroke style matching NN weight edges (signed color + tanh magnitude). */
+export function cnnWeightStroke(weight: number, active = true): {
+  stroke: string;
+  strokeWidth: number;
+  strokeOpacity: number;
+} {
+  const mag = weightMagnitude(weight);
+  return {
+    stroke: weightColor(weightValueNormalized(weight)),
+    strokeWidth: 2 + mag * 5.5,
+    strokeOpacity: active ? 0.45 + mag * 0.55 : 0.12,
+  };
+}
+
+/** Circle/square stack size shared by Flatten / Dense weight columns. */
 export function unitStackSize(
   length: number,
   columns = 1,
 ): { width: number; height: number; visCount: number; d: number; gap: number; gapX: number } {
   const n = Math.max(1, length);
   const visCount = Math.min(n, CNN_MAX_VIS_UNITS);
-  const gap = 1.5;
-  const gapX = 3;
-  let d = Math.max(5.25, Math.min(10.5, (520 / visCount) * 1.5));
+  const gap = 3;
+  const gapX = 6;
+  // Cell diameter ~2× the previous scale (was max 10.5 / min floor 2.5).
+  let d = Math.max(10.5, Math.min(21, (520 / visCount) * 3));
   let height = visCount * d + gap * Math.max(0, visCount - 1);
   if (height > CNN_MAX_STACK_HEIGHT) {
-    d = Math.max(2.5, (CNN_MAX_STACK_HEIGHT - gap * Math.max(0, visCount - 1)) / visCount);
+    d = Math.max(5, (CNN_MAX_STACK_HEIGHT - gap * Math.max(0, visCount - 1)) / visCount);
     height = visCount * d + gap * Math.max(0, visCount - 1);
   }
   return {
@@ -87,21 +116,25 @@ function estimateNodeSize(
   /** Incoming vector length for dense weight columns. */
   inputLength = 64,
 ): { width: number; height: number } {
-  if (kind === "flatten") {
+  if (kind === "flatten" || kind === "gap2d" || kind === "gap1d") {
     const n = shape?.kind === "1d" ? shape.length : 32;
     const stack = unitStackSize(n, 1);
     return { width: Math.max(48, stack.width + 28), height: NODE_CHROME + stack.height + 14 };
   }
   if (kind === "dense") {
+    void inputLength;
+    // One neuron column (weights are drawn as inter-layer edges, NN-style).
     const units = shape?.kind === "1d" ? shape.length : 1;
-    const stack = unitStackSize(Math.max(1, inputLength), Math.max(1, units));
+    const stack = unitStackSize(Math.max(1, units), 1);
+    const cell = Math.max(stack.d, 28);
+    const stackH = stack.visCount * cell + stack.gap * Math.max(0, stack.visCount - 1);
     return {
-      width: Math.max(64, stack.width + 24),
-      height: NODE_CHROME + stack.height + 18,
+      width: Math.max(72, cell + 40),
+      height: NODE_CHROME + stackH + 18,
     };
   }
   if (kind === "output") {
-    return { width: CNN_NODE_WIDTH, height: 132 };
+    return { width: 108, height: 168 };
   }
 
   const channels = Math.max(1, Math.min(16, shape?.channels ?? 1));
@@ -116,13 +149,12 @@ function estimateNodeSize(
     return { width, height: NODE_CHROME + gridH };
   }
   if (isConv) {
+    // .cnn-node is ~150px wide, so kernel+map pairs stack one per row.
     const cellW = convChannelCellW("2d");
-    const perRow = Math.max(1, Math.floor((CONV_GRID_MAX_W + MAP_GAP) / (cellW + MAP_GAP)));
-    const gridRows = Math.ceil(channels / perRow);
-    const gridH = gridRows * MAP_PX + Math.max(0, gridRows - 1) * MAP_GAP;
-    const gridW = Math.min(channels, perRow) * cellW + Math.max(0, Math.min(channels, perRow) - 1) * MAP_GAP;
+    const rowH = Math.max(MAP_PX, KERNEL_PX);
+    const gridH = channels * rowH + Math.max(0, channels - 1) * MAP_GAP;
     return {
-      width: Math.max(CNN_NODE_WIDTH, gridW + 28),
+      width: Math.max(CNN_NODE_WIDTH, cellW + 28),
       height: NODE_CHROME + gridH,
     };
   }
@@ -147,6 +179,9 @@ export function formatCnnNodeLabel(layer: LabelableLayer, t: CnnMessages): strin
       return raw
         .replace(/^Max Pool/, `${t.poolMax} ${t.palettePool}`)
         .replace(/^Avg Pool/, `${t.poolAvg} ${t.palettePool}`);
+    case "gap2d":
+    case "gap1d":
+      return t.paletteGap;
     case "flatten":
       return t.flatten;
     case "dense":
@@ -182,7 +217,12 @@ export type CnnNodeData = {
   paintGeneration?: number;
 };
 
-export type CnnEdgeData = { weightMag: number; active: boolean };
+export type CnnEdgeData = {
+  weightMag: number;
+  active: boolean;
+  /** Signed weight when this is a per-unit dense/output edge (NN-style). */
+  weight?: number;
+};
 
 /** React Flow node-type name per layer kind (avoiding React Flow's reserved "output"). */
 function flowTypeFor(kind: LayerKind): string {
@@ -196,6 +236,8 @@ function flowTypeFor(kind: LayerKind): string {
     case "pool1d":
       return "cnnPool";
     case "flatten":
+    case "gap2d":
+    case "gap1d":
       return "cnnFlatten";
     case "dense":
       return "cnnDense";
@@ -238,7 +280,8 @@ export function cnnPipelineToFlow(
   });
   const maxH = Math.max(1, ...sizes.map((s) => s.height));
 
-  // Pack columns by actual node width so compact Flatten/Dense don't leave huge gaps.
+  // Pack by top-left. Y is a first guess from estimates; CnnFlowGraph re-aligns
+  // to a shared midline after React Flow measures real DOM heights.
   let x = CNN_ORIGIN_X;
   layers.forEach((layer, idx) => {
     const shape = layer.shape;
@@ -252,7 +295,6 @@ export function cnnPipelineToFlow(
       type,
       position: {
         x,
-        // Center every block on a shared horizontal axis.
         y: (maxH - height) / 2,
       },
       width,
@@ -276,20 +318,67 @@ export function cnnPipelineToFlow(
     });
     if (idx > 0) {
       const prev = layers[idx - 1]!;
-      const mag = wMag ?? 0;
-      const stroke = weightColor(mag);
-      const strokeW = 2 + Math.abs(mag) * 5.5;
-      edges.push({
-        id: `${prev.id}->${layer.id}`,
-        source: prev.id,
-        target: layer.id,
-        type: "cnnWeight",
-        data: { weightMag: mag, active: true },
-        markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: stroke },
-        style: { stroke, strokeWidth: strokeW, strokeOpacity: 0.45 + Math.abs(mag) * 0.55 },
-      });
+      const snap = options.featureMaps.find((m) => m.layerId === layer.id);
+      const matrix = snap?.matrix;
+      const prevLen =
+        prev.shape?.kind === "1d"
+          ? prev.shape.length
+          : matrix?.[0]?.length ?? 0;
+      const outLen =
+        layer.shape?.kind === "1d" ? layer.shape.length : matrix?.length ?? 1;
+      const canFanIn =
+        matrix != null &&
+        matrix.length > 0 &&
+        (prev.kind === "flatten" ||
+          prev.kind === "gap2d" ||
+          prev.kind === "gap1d" ||
+          prev.kind === "dense") &&
+        (layer.kind === "dense" || layer.kind === "output");
+
+      if (canFanIn) {
+        const inIdx = sampleIndices(prevLen || matrix[0]!.length, CNN_MAX_VIS_UNITS);
+        const outIdx = sampleIndices(outLen || matrix.length, CNN_MAX_VIS_UNITS);
+        for (let oi = 0; oi < outIdx.length; oi++) {
+          const o = outIdx[oi]!;
+          const row = matrix[o] ?? matrix[0]!;
+          for (let ii = 0; ii < inIdx.length; ii++) {
+            const i = inIdx[ii]!;
+            const w = row[i] ?? 0;
+            const style = cnnWeightStroke(w, true);
+            edges.push({
+              id: `${prev.id}->${layer.id}:${ii}->${oi}`,
+              source: prev.id,
+              target: layer.id,
+              sourceHandle: `s-${ii}`,
+              targetHandle: layer.kind === "output" ? undefined : `t-${oi}`,
+              type: "cnnWeight",
+              // Paint above node chrome so edges aren't washed out by white fills.
+              zIndex: 3,
+              data: { weightMag: weightMagnitude(w), weight: w, active: true },
+              style: {
+                stroke: style.stroke,
+                strokeWidth: style.strokeWidth,
+                strokeOpacity: style.strokeOpacity,
+              },
+            });
+          }
+        }
+      } else {
+        const mag = wMag ?? 0;
+        const stroke = weightColor(mag);
+        const strokeW = 2 + Math.abs(mag) * 5.5;
+        edges.push({
+          id: `${prev.id}->${layer.id}`,
+          source: prev.id,
+          target: layer.id,
+          type: "cnnWeight",
+          data: { weightMag: mag, active: true },
+          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: stroke },
+          style: { stroke, strokeWidth: strokeW, strokeOpacity: 0.45 + Math.abs(mag) * 0.55 },
+        });
+      }
     }
-    const nextW = sizes[idx + 1]?.width ?? width;
+      const nextW = sizes[idx + 1]?.width ?? width;
     x += Math.max(CNN_COL_SPACING, (width + nextW) / 2 + 56);
   });
 

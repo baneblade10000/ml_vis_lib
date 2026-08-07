@@ -14,8 +14,10 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useNodesInitialized,
+  useNodesState,
   useReactFlow,
   type Node,
+  type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { FeatureMapSnapshot } from "@ml-vis/core";
@@ -74,13 +76,14 @@ function viewportForNodes(
   let maxX = -Infinity;
   let maxY = -Infinity;
   for (const node of nodes) {
+    const w = node.width ?? node.measured?.width ?? 0;
+    const h = node.height ?? node.measured?.height ?? 0;
     minX = Math.min(minX, node.position.x);
     minY = Math.min(minY, node.position.y);
-    maxX = Math.max(maxX, node.position.x + (node.width ?? 0));
-    maxY = Math.max(maxY, node.position.y + (node.height ?? 0) + LABEL_MARGIN);
+    maxX = Math.max(maxX, node.position.x + w);
+    maxY = Math.max(maxY, node.position.y + h + LABEL_MARGIN);
   }
 
-  // Left dock is wide (~20.5rem); right dock ~16rem.
   const pad = fillHeight
     ? { top: 28, bottom: 36, left: 352, right: 280 }
     : { top: 32, bottom: 32, left: 48, right: 48 };
@@ -100,6 +103,44 @@ function viewportForNodes(
   };
 }
 
+/** Real content box height in flow coordinates (ignores zoom). */
+function contentHeight(nodeId: string): number | null {
+  const el = document.querySelector(
+    `.react-flow__node[data-id="${CSS.escape(nodeId)}"] .cnn-node`,
+  );
+  if (!(el instanceof HTMLElement)) return null;
+  const h = el.offsetHeight;
+  return h > 0 ? h : null;
+}
+
+/**
+ * Shift every node so the vertical center of its .cnn-node sits on one midline.
+ * Uses DOM heights — RF `measured` / estimates are often too short for conv stacks.
+ */
+function alignNodesToMidline(nodes: Node<CnnNodeData>[]): Node<CnnNodeData>[] {
+  if (!nodes.length) return nodes;
+  const heights = nodes.map(
+    (n) => contentHeight(n.id) ?? n.measured?.height ?? n.height ?? 0,
+  );
+  if (heights.every((h) => h < 1)) return nodes;
+  const maxH = Math.max(...heights);
+  let changed = false;
+  const next = nodes.map((n, i) => {
+    const h = heights[i]!;
+    const y = (maxH - h) / 2;
+    const heightChanged = n.height !== h;
+    const yChanged = Math.abs(n.position.y - y) >= 0.5;
+    if (!heightChanged && !yChanged) return n;
+    changed = true;
+    return {
+      ...n,
+      height: h,
+      position: { x: n.position.x, y },
+    };
+  });
+  return changed ? next : nodes;
+}
+
 function CnnFlowGraphInner(props: CnnFlowGraphProps) {
   const {
     pipeline,
@@ -115,12 +156,9 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
   } = props;
   const t = useCnnMessages();
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const rf = useReactFlow();
   const { setViewport } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
   const [measured, setMeasured] = useState({ width: 0, height: 0 });
-  /** Measured vertical offsets so every node center sits on one axis. */
-  const [centerYs, setCenterYs] = useState<Record<string, number>>({});
   const fittedSizeRef = useRef({ width: 0, height: 0 });
   const topologyFitRef = useRef("");
   const refitViewKeyRef = useRef<number | undefined>(undefined);
@@ -141,8 +179,53 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
   );
 
   const nodeKey = mapped.nodes.map((n) => n.id).join(",");
+  const [nodes, setNodes, onNodesChange] = useNodesState(mapped.nodes);
 
-  // Track measured container size so fit re-runs once layout is real.
+  const realign = useCallback(() => {
+    setNodes((prev) => alignNodesToMidline(prev));
+  }, [setNodes]);
+
+  // Sync pipeline → RF nodes (x from layout), then align Y from DOM heights.
+  useLayoutEffect(() => {
+    setNodes((prev) => {
+      const prevById = new Map(prev.map((n) => [n.id, n]));
+      const merged = mapped.nodes.map((n) => {
+        const cur = prevById.get(n.id);
+        return {
+          ...n,
+          // Keep prior measured box until DOM align overwrites height.
+          measured: cur?.measured,
+          position: { x: n.position.x, y: cur?.position.y ?? n.position.y },
+        };
+      });
+      return alignNodesToMidline(merged);
+    });
+  }, [mapped.nodes, setNodes]);
+
+  // Re-align after RF mount and whenever feature maps repaint (content height changes).
+  useLayoutEffect(() => {
+    if (!nodesInitialized) return;
+    realign();
+    const t1 = window.setTimeout(realign, 32);
+    const t2 = window.setTimeout(realign, 100);
+    const t3 = window.setTimeout(realign, 250);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+    };
+  }, [nodesInitialized, nodeKey, paintGeneration, realign]);
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<Node<CnnNodeData>>[]) => {
+      onNodesChange(changes);
+      if (changes.some((c) => c.type === "dimensions")) {
+        requestAnimationFrame(realign);
+      }
+    },
+    [onNodesChange, realign],
+  );
+
   useEffect(() => {
     if (!wrapperRef.current) return;
     const el = wrapperRef.current;
@@ -162,42 +245,6 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
     return () => ro.disconnect();
   }, []);
 
-  // After React Flow measures real node boxes, re-center on a shared midline.
-  useLayoutEffect(() => {
-    if (!nodesInitialized) return;
-    const align = () => {
-      const live = rf.getNodes();
-      if (!live.length) return;
-      const heights = live.map((n) => n.measured?.height ?? n.height ?? 0);
-      const maxH = Math.max(0, ...heights);
-      if (maxH < 1) return;
-      const next: Record<string, number> = {};
-      for (const n of live) {
-        const h = n.measured?.height ?? n.height ?? 0;
-        next[n.id] = (maxH - h) / 2;
-      }
-      setCenterYs((prev) => {
-        const same =
-          Object.keys(next).length === Object.keys(prev).length &&
-          Object.entries(next).every(([id, y]) => Math.abs((prev[id] ?? NaN) - y) < 0.5);
-        return same ? prev : next;
-      });
-    };
-    align();
-    const timer = window.setTimeout(align, 60);
-    return () => window.clearTimeout(timer);
-  }, [nodesInitialized, nodeKey, featureMaps, rf]);
-
-  const nodes = useMemo(
-    () =>
-      mapped.nodes.map((n) => ({
-        ...n,
-        position: { x: n.position.x, y: centerYs[n.id] ?? n.position.y },
-      })),
-    [mapped.nodes, centerYs],
-  );
-
-  // Fit between docks whenever topology changes, on demand, or after size drift.
   useEffect(() => {
     if (measured.width <= 0 || measured.height <= 0 || !nodes.length) return;
 
@@ -245,6 +292,7 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
           edges={mapped.edges}
           nodeTypes={cnnNodeTypes}
           edgeTypes={cnnEdgeTypes}
+          onNodesChange={handleNodesChange}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           minZoom={MIN_ZOOM}

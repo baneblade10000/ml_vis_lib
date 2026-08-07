@@ -52,6 +52,9 @@ function specKindLabel(kind: string, t: ReturnType<typeof useCnnMessages>): stri
     case "pool2d":
     case "pool1d":
       return t.palettePool;
+    case "gap2d":
+    case "gap1d":
+      return t.paletteGap;
     case "flatten":
       return t.flatten;
     case "dense":
@@ -293,6 +296,15 @@ export function ConvolutionalNetworkPlayground({
     [],
   );
 
+  const featureMaps: FeatureMapSnapshot[] = snapshot?.featureMaps ?? [];
+  const convBiases = useMemo(() => {
+    const out: Record<string, number[]> = {};
+    for (const m of featureMaps) {
+      if (m.biases && m.biases.length > 0) out[m.layerId] = m.biases;
+    }
+    return out;
+  }, [featureMaps]);
+
   if (!snapshot) {
     return (
       <div className="nn-playground nn-playground--immersive">
@@ -312,7 +324,6 @@ export function ConvolutionalNetworkPlayground({
   const galleryExamples = snapshot.galleryExamples as Array<ImageExample | SignalExample>;
   const galleryPredictions = snapshot.galleryPredictions;
   const inspectedIdx = snapshot.inspectedExampleIndex;
-  const featureMaps: FeatureMapSnapshot[] = snapshot.featureMaps;
   const stats = snapshot.stats;
   const lossHistory: LossHistoryPoint[] = snapshot.lossHistory;
   const loss = snapshot.loss;
@@ -454,6 +465,7 @@ export function ConvolutionalNetworkPlayground({
             <CnnInspector
               selectedLayerId={selectedLayerId}
               kernels={snapshot.kernels}
+              biases={convBiases}
               info={inspectorInfo}
             />
           </aside>

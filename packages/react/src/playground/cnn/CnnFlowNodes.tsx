@@ -1,6 +1,7 @@
 import { useCallback, useContext, useLayoutEffect, useRef, type ReactNode } from "react";
 import {
   BaseEdge,
+  getBezierPath,
   getStraightPath,
   Handle,
   Position,
@@ -14,7 +15,8 @@ import {
   CLASS_1_HEX,
   renderValueMatrix,
   reduceMatrix,
-  valueToRgb,
+  weightColor,
+  weightValueNormalized,
   type FeatureMapSnapshot,
 } from "@ml-vis/core";
 import {
@@ -26,7 +28,6 @@ import {
 import {
   FeatureMapRefContext,
   PaintGenerationContext,
-  TrainingStatsRefContext,
   TrainingLiveRefContext,
 } from "./featureMapContext";
 import { registerBoundaryPainter } from "./featureMapPaint";
@@ -104,18 +105,39 @@ function Map2DCanvas({
   );
 }
 
+/** Map kernel cells onto the same tanh-normalized scale as NN edge weights. */
+function normalizeWeightMap(map: number[][]): number[][] {
+  return map.map((row) => row.map((w) => weightValueNormalized(w)));
+}
+
+/** Per-filter bias chip — same diverging palette as NN neuron biases. */
+function ConvBiasIndicator({ bias }: { bias: number }) {
+  return (
+    <span
+      className="cnn-filter-bias"
+      data-sign={bias >= 0 ? "pos" : "neg"}
+      aria-hidden
+      title={`bias ${bias.toFixed(3)}`}
+      style={{ background: weightColor(weightValueNormalized(bias)) }}
+    />
+  );
+}
+
 /**
  * Mini pixelated kernel preview (nearest-neighbor), sized for pairing with a
  * feature-map tile. Accepts a 2-D map or a 1-row wrapper around a 1-D kernel.
+ * Colored with the NN weight palette (violet → orchid → magenta).
  */
 function KernelMini({
   map,
   size,
   label,
+  bias,
 }: {
   map: number[][];
   size: number;
   label?: string;
+  bias?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heatRef = useRef<HTMLCanvasElement>(null);
@@ -126,7 +148,10 @@ function KernelMini({
     const canvas = canvasRef.current;
     const heat = heatRef.current;
     if (!canvas || !heat || !rows || !cols) return;
-    renderValueMatrix(heat, map, { layout: "row-major", palette: "gray" });
+    renderValueMatrix(heat, normalizeWeightMap(map), {
+      layout: "row-major",
+      palette: "diverging",
+    });
     const cell = Math.max(1, Math.floor(size / Math.max(rows, cols)));
     const bw = cols * cell;
     const bh = rows * cell;
@@ -158,10 +183,16 @@ function KernelMini({
     );
   }
 
+  const title =
+    typeof bias === "number" ? `${label ?? "kernel"} · bias ${bias.toFixed(3)}` : label;
+
   return (
-    <div className="cnn-kernel-mini" title={label} style={{ width: size, height: size }}>
-      <canvas ref={heatRef} width={cols} height={rows} hidden aria-hidden />
-      <canvas ref={canvasRef} className="cnn-feature-canvas" />
+    <div className="cnn-kernel-with-bias" title={title}>
+      {typeof bias === "number" && <ConvBiasIndicator bias={bias} />}
+      <div className="cnn-kernel-mini" style={{ width: size, height: size }}>
+        <canvas ref={heatRef} width={cols} height={rows} hidden aria-hidden />
+        <canvas ref={canvasRef} className="cnn-feature-canvas" />
+      </div>
     </div>
   );
 }
@@ -207,66 +238,24 @@ function Signal1DCanvas({ values, px }: { values: number[]; px: number }) {
   );
 }
 
-/** Flattened vector as a compact vertical stack of squares (downsampled when long). */
-function VectorColumnCanvas({ values }: { values: number[] }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const total = values.length;
-
-  const paint = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !values.length) return;
-
-    const stack = unitStackSize(values.length, 1);
-    const shown = downsample1D(values, stack.visCount);
-    const n = shown.length;
-    const { d, gap, width, height } = stack;
-    const radius = Math.min(1.25, d * 0.25);
-
-    const dpr = window.devicePixelRatio || 1;
-    if (canvas.width !== Math.ceil(width * dpr) || canvas.height !== Math.ceil(height * dpr)) {
-      canvas.width = Math.ceil(width * dpr);
-      canvas.height = Math.ceil(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-    }
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-
-    let min = Infinity;
-    let max = -Infinity;
-    for (const v of shown) {
-      if (v < min) min = v;
-      if (v > max) max = v;
-    }
-    if (!Number.isFinite(min) || max - min < 1e-9) {
-      min -= 0.5;
-      max += 0.5;
-    }
-    const span = max - min;
-
-    for (let i = 0; i < n; i++) {
-      const t = Math.min(1, Math.max(0, (shown[i]! - min) / span));
-      const g8 = Math.round(Math.pow(t, 0.85) * 255);
-      const y = i * (d + gap);
-      ctx.fillStyle = `rgb(${g8},${g8},${g8})`;
-      ctx.beginPath();
-      ctx.roundRect(0, y, d, d, radius);
-      ctx.fill();
-    }
-  }, [values]);
-
-  const paintRef = useRef(paint);
-  paintRef.current = paint;
-  useLayoutEffect(() => paintRef.current(), [paint]);
-
-  return (
-    <div className="cnn-feature-cell cnn-feature-cell--vector" title={`${total} units`}>
-      <canvas ref={canvasRef} className="cnn-feature-canvas" />
-      {total > 0 && <span className="cnn-dense-weights__meta">{total}</span>}
-    </div>
-  );
+/** Activation → grayscale fill for flatten unit squares. */
+function activationGray(values: number[]): string[] {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of values) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  if (!Number.isFinite(min) || max - min < 1e-9) {
+    min -= 0.5;
+    max += 0.5;
+  }
+  const span = max - min;
+  return values.map((v) => {
+    const t = Math.min(1, Math.max(0, (v - min) / span));
+    const g8 = Math.round(Math.pow(t, 0.85) * 255);
+    return `rgb(${g8},${g8},${g8})`;
+  });
 }
 
 /** Grid of feature-map tiles for one layer node. */
@@ -303,6 +292,7 @@ function FeatureGrid({
   const signals = snapshot?.signals ?? [];
   const kernels2d = snapshot?.kernels2d ?? [];
   const kernels1d = snapshot?.kernels1d ?? [];
+  const biases = snapshot?.biases ?? [];
   const showCount = Math.min(channels, MAX_TILES);
   const tiles: ReactNode[] = [];
 
@@ -313,7 +303,12 @@ function FeatureGrid({
         const kernel = kernels2d[i] ?? [];
         tiles.push(
           <div key={i} className="cnn-channel-pair" title={`kernel → channel ${i + 1}`}>
-            <KernelMini map={kernel} size={KERNEL_PX} label={`kernel ${i + 1}`} />
+            <KernelMini
+              map={kernel}
+              size={KERNEL_PX}
+              label={`kernel ${i + 1}`}
+              bias={biases[i]}
+            />
             <Map2DCanvas map={map} px={MAP_PX} label={`filter ${i + 1}`} />
           </div>,
         );
@@ -328,7 +323,12 @@ function FeatureGrid({
         const kernel = kernels1d[i] ?? [];
         tiles.push(
           <div key={i} className="cnn-channel-pair cnn-channel-pair--1d" title={`kernel → channel ${i + 1}`}>
-            <KernelMini map={kernel.length ? [kernel] : []} size={KERNEL_PX} label={`kernel ${i + 1}`} />
+            <KernelMini
+              map={kernel.length ? [kernel] : []}
+              size={KERNEL_PX}
+              label={`kernel ${i + 1}`}
+              bias={biases[i]}
+            />
             <Signal1DCanvas values={values} px={MAP_PX} />
           </div>,
         );
@@ -406,137 +406,197 @@ export function CnnPoolNode({ data }: NodeProps<Node<CnnNodeData>>) {
   );
 }
 
+/** Flatten column: grayscale unit squares + per-unit source handles for dense edges. */
 function FlattenVector({ layerId, length }: { layerId: string; length?: number }) {
   const snapshot = useLayerSnapshot(layerId);
   const paintGeneration = useContext(PaintGenerationContext);
   void paintGeneration;
   const values = snapshot?.signals?.[0] ?? [];
   const n = values.length || length || 32;
-  return <VectorColumnCanvas values={values.length ? values : new Array(n).fill(0)} />;
+  const raw = values.length ? values : new Array(n).fill(0);
+  const stack = unitStackSize(raw.length, 1);
+  const shown = downsample1D(raw, stack.visCount);
+  const fills = activationGray(shown);
+  const { d, gap, width, height } = stack;
+
+  return (
+    <div
+      className="cnn-unit-stack cnn-unit-stack--flatten"
+      style={{ width, height }}
+      title={`${raw.length} units`}
+    >
+      {shown.map((_, i) => (
+        <div
+          key={i}
+          className="cnn-unit-row"
+          style={{
+            width: d,
+            height: d,
+            marginBottom: i < shown.length - 1 ? gap : 0,
+          }}
+        >
+          <span
+            className="cnn-unit-sq"
+            style={{ width: d, height: d, background: fills[i] }}
+          />
+          <Handle type="source" position={Position.Right} id={`s-${i}`} className="cnn-handle" />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function CnnFlattenNode({ data }: NodeProps<Node<CnnNodeData>>) {
+  const isGap = data.kind === "gap2d" || data.kind === "gap1d";
   return (
-    <BaseCnnNode data={data} className="cnn-node--flatten">
+    <BaseCnnNode
+      data={data}
+      className={`cnn-node--flatten${isGap ? " cnn-node--gap" : ""}`}
+      hideSource
+    >
       <FlattenVector layerId={data.layerId} length={data.length} />
     </BaseCnnNode>
   );
 }
 
 /**
- * All dense weights W[out][in] as circles, colored like NN edges
- * (violet = negative, magenta = positive).
+ * Dense layer as a column of neurons (NN-style). Weights are drawn as Bezier
+ * edges into/out of these units rather than a weight-circle matrix.
  */
-function DenseWeightMatrix({ layerId, units }: { layerId: string; units: number }) {
+function DenseNeuronColumn({ layerId, units }: { layerId: string; units: number }) {
   const snapshot = useLayerSnapshot(layerId);
   const paintGeneration = useContext(PaintGenerationContext);
   void paintGeneration;
-
-  const matrix = snapshot?.matrix;
-  const rows = matrix?.length || Math.max(1, units);
-  const cols = matrix?.[0]?.length || 0;
-
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
   const t = useCnnMessages();
 
-  const paint = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !matrix || rows === 0 || cols === 0) return;
+  const acts = snapshot?.signals?.[0] ?? [];
+  const biases = snapshot?.biases ?? [];
+  const n = Math.max(1, acts.length || units);
+  const stack = unitStackSize(n, 1);
+  const shownActs = acts.length
+    ? downsample1D(acts, stack.visCount)
+    : new Array(stack.visCount).fill(0);
+  const shownBias = biases.length
+    ? downsample1D(biases, stack.visCount)
+    : new Array(stack.visCount).fill(0);
+  const { d, gap, width, height } = stack;
 
-    // One vertical stack of circles per output unit; downsample long input axes.
-    const stack = unitStackSize(cols, rows);
-    const visIn = stack.visCount;
-    const { d, gap, gapX, width, height } = stack;
-    const r = d / 2;
-    const dpr = window.devicePixelRatio || 1;
-    if (canvas.width !== Math.ceil(width * dpr) || canvas.height !== Math.ceil(height * dpr)) {
-      canvas.width = Math.ceil(width * dpr);
-      canvas.height = Math.ceil(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-    }
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-
-    for (let out = 0; out < rows; out++) {
-      const row = matrix[out]!;
-      const sampled = downsample1D(row, visIn);
-      for (let inn = 0; inn < sampled.length; inn++) {
-        const w = sampled[inn]!;
-        const { r: cr, g: cg, b: cb } = valueToRgb(Math.tanh(w * 2));
-        const cx = out * (d + gapX) + r;
-        const cy = inn * (d + gap) + r;
-        ctx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }, [matrix, rows, cols]);
-
-  const paintRef = useRef(paint);
-  paintRef.current = paint;
-  useLayoutEffect(() => paintRef.current(), [paint]);
-
-  if (!matrix || cols === 0) {
+  if (!snapshot?.matrix?.length && !acts.length) {
     return <div className="cnn-feature-empty" title={t.denseWeightsEmpty} />;
   }
 
+  const cell = Math.max(d, 28);
+  const stackH = shownActs.length * cell + gap * Math.max(0, shownActs.length - 1);
+
   return (
-    <div className="cnn-dense-weights" title={`W: ${rows}×${cols}`}>
-      <canvas ref={canvasRef} className="cnn-feature-canvas" />
-      <span className="cnn-dense-weights__meta">{rows}×{cols}</span>
+    <div
+      className="cnn-unit-stack cnn-unit-stack--dense"
+      style={{ width: cell, height: stackH }}
+      title={`${n} units`}
+    >
+      {shownActs.map((a, i) => {
+        const bias = shownBias[i] ?? 0;
+        const fill = weightColor(weightValueNormalized(a));
+        return (
+          <div
+            key={i}
+            className="cnn-unit-row cnn-unit-row--neuron"
+            style={{
+              width: cell,
+              height: cell,
+              marginBottom: i < shownActs.length - 1 ? gap : 0,
+            }}
+          >
+            <Handle type="target" position={Position.Left} id={`t-${i}`} className="cnn-handle" />
+            <span
+              className="cnn-unit-neuron"
+              style={{ width: cell, height: cell, background: fill }}
+              title={`unit ${i + 1}${biases.length ? ` · bias ${bias.toFixed(3)}` : ""}`}
+            >
+              {biases.length > 0 && (
+                <span
+                  className="cnn-filter-bias"
+                  data-sign={bias >= 0 ? "pos" : "neg"}
+                  aria-hidden
+                  style={{ background: weightColor(weightValueNormalized(bias)) }}
+                />
+              )}
+            </span>
+            <Handle type="source" position={Position.Right} id={`s-${i}`} className="cnn-handle" />
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 export function CnnDenseNode({ data }: NodeProps<Node<CnnNodeData>>) {
   return (
-    <BaseCnnNode data={data} className="cnn-node--dense">
-      <DenseWeightMatrix layerId={data.layerId} units={data.length || 1} />
+    <BaseCnnNode data={data} className="cnn-node--dense" hideSource hideTarget>
+      <DenseNeuronColumn layerId={data.layerId} units={data.length || 1} />
     </BaseCnnNode>
   );
 }
 
 export function CnnReadoutNode({ id, data }: NodeProps<Node<CnnNodeData>>) {
   const t = useCnnMessages();
-  const statsRef = useContext(TrainingStatsRefContext);
-  const lossLabelRef = useRef<HTMLSpanElement>(null);
   const paintGeneration = useContext(PaintGenerationContext);
+  const p1FillRef = useRef<HTMLDivElement>(null);
+  const p0FillRef = useRef<HTMLDivElement>(null);
+  const p1ValRef = useRef<HTMLSpanElement>(null);
+  const p0ValRef = useRef<HTMLSpanElement>(null);
 
-  const paintMeta = useCallback(() => {
-    const stats = statsRef?.current;
-    if (lossLabelRef.current && stats) {
-      lossLabelRef.current.textContent = `${stats.lossTest.toFixed(3)} / ${stats.lossTrain.toFixed(3)}`;
-    }
-  }, [statsRef]);
+  const paintProbs = useCallback(() => {
+    const p1 = Math.min(1, Math.max(0, data.probability ?? 0.5));
+    const p0 = 1 - p1;
+    if (p1FillRef.current) p1FillRef.current.style.height = `${Math.max(2, p1 * 100)}%`;
+    if (p0FillRef.current) p0FillRef.current.style.height = `${Math.max(2, p0 * 100)}%`;
+    if (p1ValRef.current) p1ValRef.current.textContent = p1.toFixed(2);
+    if (p0ValRef.current) p0ValRef.current.textContent = p0.toFixed(2);
+  }, [data.probability]);
 
   useLayoutEffect(() => {
-    paintMeta();
-  }, [paintMeta, paintGeneration, data.loss]);
+    paintProbs();
+  }, [paintProbs, paintGeneration]);
 
-  const prob = data.probability ?? 0.5;
-  const barColor = prob >= 0.5 ? CLASS_1_HEX : CLASS_0_HEX;
+  const p1 = Math.min(1, Math.max(0, data.probability ?? 0.5));
+  const p0 = 1 - p1;
 
   return (
     <BaseCnnNode data={data} className="cnn-node--readout" hideSource>
-      <div className="cnn-readout-body">
-        <div className="cnn-readout-prob" title={t.readoutProb}>
-          <div
-            className="cnn-readout-bar"
-            style={{ width: `${Math.max(2, prob * 100)}%`, background: barColor }}
-          />
-        </div>
-        <div className="cnn-readout-loss">
-          <span ref={lossLabelRef} className="cnn-readout-loss-value">
-            {t.lossTestTrain}
-          </span>
+      <div className="cnn-readout-body" title={t.readoutProb}>
+        <div className="cnn-readout-cols">
+          <div className="cnn-readout-col">
+            <div className="cnn-readout-col__track">
+              <div
+                ref={p0FillRef}
+                className="cnn-readout-col__fill"
+                style={{ height: `${Math.max(2, p0 * 100)}%`, background: CLASS_0_HEX }}
+              />
+            </div>
+            <span ref={p0ValRef} className="cnn-readout-col__val">
+              {p0.toFixed(2)}
+            </span>
+            <span className="cnn-readout-col__label">{t.class0}</span>
+          </div>
+          <div className="cnn-readout-col">
+            <div className="cnn-readout-col__track">
+              <div
+                ref={p1FillRef}
+                className="cnn-readout-col__fill"
+                style={{ height: `${Math.max(2, p1 * 100)}%`, background: CLASS_1_HEX }}
+              />
+            </div>
+            <span ref={p1ValRef} className="cnn-readout-col__val">
+              {p1.toFixed(2)}
+            </span>
+            <span className="cnn-readout-col__label">{t.class1}</span>
+          </div>
         </div>
       </div>
-      <span className="cnn-node-label cnn-node-label--hidden" aria-hidden>{id}</span>
+      <span className="cnn-node-label cnn-node-label--hidden" aria-hidden>
+        {id}
+      </span>
     </BaseCnnNode>
   );
 }
@@ -563,10 +623,11 @@ export const CnnWeightEdge = function CnnWeightEdge({
   style,
 }: EdgeProps<Edge<CnnEdgeData>>) {
   void id;
-  void data;
-  void sourcePosition;
-  void targetPosition;
-  const [path] = getStraightPath({ sourceX, sourceY, targetX, targetY });
+  // Per-weight dense/output edges use Bezier (NN-style); layer hops stay straight.
+  const curved = typeof data?.weight === "number";
+  const [path] = curved
+    ? getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
+    : getStraightPath({ sourceX, sourceY, targetX, targetY });
   return (
     <BaseEdge
       path={path}

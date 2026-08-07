@@ -1,6 +1,7 @@
-/** Diverging palette: dark violet (negative) → magenta (positive), no neutral midpoint. */
+/** Diverging palette: violet (neg) → orchid (0) → magenta (pos). */
 
 export const PALETTE_LOW = { r: 58, g: 48, b: 168 }; // #3a30a8 — dark saturated violet
+export const PALETTE_MID = { r: 168, g: 85, b: 196 }; // #a855c4 — vivid orchid
 export const PALETTE_HIGH = { r: 192, g: 38, b: 112 }; // #c02670 — saturated magenta
 
 export const CLASS_0_HEX = "#3a30a8";
@@ -28,15 +29,16 @@ function interpolateColor(
   };
 }
 
-/** Maps a value in [-1, 1] to an RGB color (direct violet → magenta). */
+/** Maps a value in [-1, 1] to an RGB color (violet → light → magenta). */
 export function valueToRgb(value: number): { r: number; g: number; b: number } {
   const t = (clamp(value, -1, 1) + 1) / 2;
-  return interpolateColor(PALETTE_LOW, PALETTE_HIGH, t);
+  if (t <= 0.5) return interpolateColor(PALETTE_LOW, PALETTE_MID, t * 2);
+  return interpolateColor(PALETTE_MID, PALETTE_HIGH, (t - 0.5) * 2);
 }
 
 /** Maps a probability in [0, 1] to RGBA components (class 0 → class 1). */
-export function probabilityToRgba(probability: number, alpha = 160): [number, number, number, number] {
-  const { r, g, b } = interpolateColor(PALETTE_LOW, PALETTE_HIGH, clamp(probability, 0, 1));
+export function probabilityToRgba(probability: number, alpha = 255): [number, number, number, number] {
+  const { r, g, b } = valueToRgb(clamp(probability, 0, 1) * 2 - 1);
   return [r, g, b, alpha];
 }
 

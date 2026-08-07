@@ -26,6 +26,9 @@ function layerTitle(spec: LayerSpec, t: CnnMessages): string {
     case "pool2d":
     case "pool1d":
       return t.palettePool;
+    case "gap2d":
+    case "gap1d":
+      return t.paletteGap;
     case "flatten":
       return t.flatten;
     case "dense":

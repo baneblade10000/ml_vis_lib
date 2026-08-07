@@ -117,7 +117,9 @@ export function renderValueMatrix(
   const layout = opts.layout ?? "col-major";
   const palette = opts.palette ?? "diverging";
   const discretize = opts.discretize ?? false;
-  const alpha = opts.alpha ?? (palette === "gray" ? 255 : 160);
+  // Diverging heatmaps are opaque so the white node chrome does not wash
+  // midtones into a pale fog (TF Playground also paints solid shades).
+  const alpha = opts.alpha ?? 255;
   const autoscale = opts.autoscale ?? palette === "gray";
 
   const outer = matrix.length;
