@@ -110,21 +110,21 @@ export function CnnGallery({
 
   return (
     <div className="cnn-gallery-panel">
-      <h4 className="tf-flow-dock-title">{t.dataset}</h4>
-      <div className="tf-flat-switch tf-flat-switch--stack" role="group" aria-label={t.dataset}>
+      <h4 className="nn-flow-dock-title">{t.dataset}</h4>
+      <div className="nn-flat-switch nn-flat-switch--stack" role="group" aria-label={t.dataset}>
         {datasetIds.map((id) => (
           <button
             key={id}
             type="button"
-            className={`tf-flat-switch__btn${id === datasetId ? " selected" : ""}`}
+            className={`nn-flat-switch__btn${id === datasetId ? " selected" : ""}`}
             onClick={() => onSelectDataset(id)}
           >
             {datasetLabels[id] ?? id}
           </button>
         ))}
       </div>
-      <h4 className="tf-flow-dock-title">{t.gallery}</h4>
-      <p className="tf-arch-hint">{t.galleryHint}</p>
+      <h4 className="nn-flow-dock-title">{t.gallery}</h4>
+      <p className="nn-arch-hint">{t.galleryHint}</p>
       <div className={`cnn-gallery-grid${mode === "1d" ? " cnn-gallery-grid--signal" : ""}`}>
         {shown.map((ex, i) =>
           mode === "2d" ? (

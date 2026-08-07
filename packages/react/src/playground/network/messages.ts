@@ -1,9 +1,9 @@
 import type {
   Dataset1DId,
   Locale,
-  TfDatasetId,
-  TfProblemType,
-  TfRegularizationId,
+  NetworkDatasetId,
+  NetworkProblemType,
+  NetworkRegularizationId,
   WeightInitId,
 } from "@ml-vis/core";
 import { useLocale } from "../../i18n";
@@ -37,9 +37,9 @@ export type NetworkMessages = {
   mode2D: string;
   mode1D: string;
   problemType: string;
-  problemTypeLabels: Record<TfProblemType, string>;
+  problemTypeLabels: Record<NetworkProblemType, string>;
   dataset: string;
-  datasetLabels: Record<TfDatasetId, string>;
+  datasetLabels: Record<NetworkDatasetId, string>;
   dataset1dLabels: Record<Dataset1DId, string>;
   training: string;
   learningCurve: string;
@@ -49,7 +49,7 @@ export type NetworkMessages = {
   weightInit: string;
   weightInitLabels: Record<WeightInitId, string>;
   regularization: string;
-  regularizationLabels: Record<TfRegularizationId, string>;
+  regularizationLabels: Record<NetworkRegularizationId, string>;
   regularizationRate: string;
   discretize: string;
   noise: string;
@@ -213,7 +213,7 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     },
     training: "Обучение",
     learningCurve: "Кривая обучения",
-    learningRate: "Скорость обучения",
+    learningRate: "Коэффициент обучения",
     optimizer: "Оптимизатор",
     activation: "Активация",
     weightInit: "Инициализация весов",
@@ -230,7 +230,7 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
       L1: "L1",
       L2: "L2",
     },
-    regularizationRate: "Сила регуляризации",
+    regularizationRate: "Коэффициент регуляризации",
     discretize: "Дискретная граница",
     noise: "Шум",
     trainRatio: "Доля обучения",

@@ -209,16 +209,16 @@ function NodeHeatmap({
   }, [paint, paintGeneration]);
 
   return (
-    <div className="tf-flow-node-canvas-wrap" style={{ width: px, height: px }}>
+    <div className="nn-flow-node-canvas-wrap" style={{ width: px, height: px }}>
       <canvas ref={heatmapRef} width={1} height={1} hidden aria-hidden />
       <canvas
         ref={canvasRef}
-        className={dimmed ? "tf-flow-node-canvas dimmed" : "tf-flow-node-canvas"}
+        className={dimmed ? "nn-flow-node-canvas dimmed" : "nn-flow-node-canvas"}
       />
       {trainData && (
         <canvas
           ref={overlayRef}
-          className="tf-flow-node-canvas tf-flow-node-canvas--overlay"
+          className="nn-flow-node-canvas nn-flow-node-canvas--overlay"
           aria-hidden
         />
       )}
@@ -319,10 +319,10 @@ function NodeCurve({
   }, [paint, paintGeneration]);
 
   return (
-    <div className="tf-flow-node-canvas-wrap" style={{ width: px, height: px }}>
+    <div className="nn-flow-node-canvas-wrap" style={{ width: px, height: px }}>
       <canvas
         ref={canvasRef}
-        className={dimmed ? "tf-flow-node-canvas dimmed" : "tf-flow-node-canvas"}
+        className={dimmed ? "nn-flow-node-canvas dimmed" : "nn-flow-node-canvas"}
       />
     </div>
   );
@@ -380,7 +380,7 @@ function BiasIndicator({ bias }: { bias: number }) {
   // grows (tanh-normalized, so small biases stay readable).
   return (
     <span
-      className="tf-flow-bias"
+      className="nn-flow-bias"
       data-sign={bias >= 0 ? "pos" : "neg"}
       aria-hidden
       style={{ background: weightColor(weightValueNormalized(bias)) }}
@@ -405,13 +405,13 @@ function BaseNetworkNode({
 }) {
   return (
     <div
-      className={`tf-flow-node ${className}${data.selected ? " selected" : ""}`}
+      className={`nn-flow-node ${className}${data.selected ? " selected" : ""}`}
       style={{ width: size, height: size }}
     >
-      {!hideTarget && <Handle type="target" position={Position.Left} className="tf-flow-handle" />}
+      {!hideTarget && <Handle type="target" position={Position.Left} className="nn-flow-handle" />}
       {children}
       {typeof data.bias === "number" && <BiasIndicator bias={data.bias} />}
-      {!hideSource && <Handle type="source" position={Position.Right} className="tf-flow-handle" />}
+      {!hideSource && <Handle type="source" position={Position.Right} className="nn-flow-handle" />}
     </div>
   );
 }
@@ -423,7 +423,7 @@ export function FeatureFlowNode({
   return (
     <BaseNetworkNode
       data={data}
-      className={`tf-flow-node--feature${data.active === false ? " inactive" : " active"}`}
+      className={`nn-flow-node--feature${data.active === false ? " inactive" : " active"}`}
       hideTarget
     >
       <NodeViz
@@ -435,7 +435,7 @@ export function FeatureFlowNode({
         coarseTo={NODE_BOUNDARY_DENSITY}
         paintGeneration={data.paintGeneration}
       />
-      <span className="tf-flow-node-label tf-flow-node-label--left">{data.label}</span>
+      <span className="nn-flow-node-label nn-flow-node-label--left">{data.label}</span>
     </BaseNetworkNode>
   );
 }
@@ -445,7 +445,7 @@ export function DenseFlowNode({
   data,
 }: NodeProps<Node<NetworkNodeData>>) {
   return (
-    <BaseNetworkNode data={data} className="tf-flow-node--dense">
+    <BaseNetworkNode data={data} className="nn-flow-node--dense">
       <NodeViz
         nodeId={id}
         discretize={data.discretize}
@@ -463,8 +463,8 @@ export function SumFlowNode({
   data,
 }: NodeProps<Node<NetworkNodeData>>) {
   return (
-    <BaseNetworkNode data={data} className="tf-flow-node--sum">
-      <div className="tf-flow-sum-icon">+</div>
+    <BaseNetworkNode data={data} className="nn-flow-node--sum">
+      <div className="nn-flow-sum-icon">+</div>
       <NodeViz
         nodeId={id}
         discretize={data.discretize}
@@ -489,7 +489,7 @@ function OutputAxisTicks({
   // Y is screen-flipped (top = +6), so reverse the label order for the column.
   const labels = axis === "y" ? [...ticks].reverse() : ticks;
   return (
-    <div className={`tf-flow-axis tf-flow-axis--${axis}`} aria-hidden>
+    <div className={`nn-flow-axis nn-flow-axis--${axis}`} aria-hidden>
       {labels.map((t) => (
         <span key={`${axis}-${t}`}>{t > 0 ? t : t === 0 ? "0" : `−${Math.abs(t)}`}</span>
       ))}
@@ -507,7 +507,7 @@ export function OutputFlowNode({
   return (
     <BaseNetworkNode
       data={data}
-      className="tf-flow-node--output"
+      className="nn-flow-node--output"
       hideSource
       size={OUTPUT_NODE_WIDTH}
     >
@@ -590,7 +590,7 @@ export const WeightFlowEdge = function WeightFlowEdge({
       {showLabel && (
         <EdgeLabelRenderer>
           <div
-            className="tf-edge-label"
+            className="nn-edge-label"
             data-selected={selected ? "" : undefined}
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
@@ -602,7 +602,7 @@ export const WeightFlowEdge = function WeightFlowEdge({
               <>
                 ∂ {signed(value!, digits)}
                 {deltaW !== null && (
-                  <span className="tf-edge-label__delta"> → Δw {signed(deltaW, 3)}</span>
+                  <span className="nn-edge-label__delta"> → Δw {signed(deltaW, 3)}</span>
                 )}
               </>
             ) : (

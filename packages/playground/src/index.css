@@ -7,9 +7,9 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: var(--tf-font, "Inter", system-ui, sans-serif);
-  color: var(--tf-text, #0f172a);
-  background: var(--tf-bg-gradient, #f1f5f9);
+  font-family: var(--nn-font, "Inter", system-ui, sans-serif);
+  color: var(--nn-text, #0f172a);
+  background: var(--nn-bg-gradient, #f1f5f9);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

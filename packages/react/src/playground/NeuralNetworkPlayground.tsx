@@ -2,20 +2,25 @@ import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "
 import {
   CLASS_0_HEX,
   CLASS_1_HEX,
-  DEFAULT_TF_CONFIG,
+  DEFAULT_NETWORK_CONFIG,
   PlaygroundEngine,
-  TF_DATASETS,
-  TF_DATASETS_1D_CLASSIFICATION,
-  TF_DATASETS_1D_REGRESSION,
+  NETWORK_DATASETS,
+  NETWORK_DATASETS_1D_CLASSIFICATION,
+  NETWORK_DATASETS_1D_REGRESSION,
+  TrainWorkerClient,
+  canUseTrainWorkers,
   valueToRgb,
   type Dataset1DId,
   type LossHistoryPoint,
-  type TfAnyDatasetId,
-  type TfDataMode,
-  type TfDatasetId,
-  type TfPlaygroundConfig,
-  type TfProblemType,
+  type NetworkAnyDatasetId,
+  type NetworkDataMode,
+  type NetworkDatasetId,
+  type NetworkPlaygroundConfig,
+  type NetworkProblemType,
+  type NetworkTrainSnapshot,
+  type TrainSnapshot,
 } from "@ml-vis/core";
+import { createNetworkTrainWorker } from "@ml-vis/core/workers/createWorkers";
 import { NetworkInspector } from "./network/NetworkInspector";
 import { NetworkArchitecturePanel } from "./network/NetworkArchitecturePanel";
 import { NetworkPalette } from "./network/NetworkPalette";
@@ -28,8 +33,8 @@ import type { CurveStore, TrainingStats } from "./network/NetworkBoundaryContext
 import type { EdgeVizMode } from "./network/graphAdapter";
 import { useNetworkMessages } from "./network/messages";
 
-const DATASETS_2D_CLASSIFICATION: TfDatasetId[] = ["circle", "xor", "gauss", "spiral"];
-const DATASETS_2D_REGRESSION: TfDatasetId[] = ["sinSin"];
+const DATASETS_2D_CLASSIFICATION: NetworkDatasetId[] = ["circle", "xor", "gauss", "spiral"];
+const DATASETS_2D_REGRESSION: NetworkDatasetId[] = ["sinSin"];
 const DATASETS_1D_CLASSIFICATION: Dataset1DId[] = ["gauss1d", "threshold", "twoClusters"];
 const DATASETS_1D_REGRESSION: Dataset1DId[] = ["sine", "linear", "cubic", "step"];
 
@@ -41,12 +46,12 @@ function DatasetThumbnail({
   mode,
   problemType = "classification",
 }: {
-  datasetId: TfAnyDatasetId;
+  datasetId: NetworkAnyDatasetId;
   label: string;
   selected: boolean;
   onSelect: () => void;
-  mode: TfDataMode;
-  problemType?: TfProblemType;
+  mode: NetworkDataMode;
+  problemType?: NetworkProblemType;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -67,9 +72,9 @@ function DatasetThumbnail({
 
     if (mode === "1d") {
       const gen =
-        datasetId in TF_DATASETS_1D_CLASSIFICATION
-          ? TF_DATASETS_1D_CLASSIFICATION[datasetId as keyof typeof TF_DATASETS_1D_CLASSIFICATION]
-          : TF_DATASETS_1D_REGRESSION[datasetId as keyof typeof TF_DATASETS_1D_REGRESSION];
+        datasetId in NETWORK_DATASETS_1D_CLASSIFICATION
+          ? NETWORK_DATASETS_1D_CLASSIFICATION[datasetId as keyof typeof NETWORK_DATASETS_1D_CLASSIFICATION]
+          : NETWORK_DATASETS_1D_REGRESSION[datasetId as keyof typeof NETWORK_DATASETS_1D_REGRESSION];
       if (!gen) return;
       const points = gen(80, 0);
       // Fit Y to the actual series — a fixed [-1.5, 1.5] clips linear/cubic hard.
@@ -112,7 +117,7 @@ function DatasetThumbnail({
       return;
     }
 
-    const gen = TF_DATASETS[datasetId as TfDatasetId];
+    const gen = NETWORK_DATASETS[datasetId as NetworkDatasetId];
     if (!gen) return;
     const isRegression = problemType === "regression";
     if (isRegression) {
@@ -159,7 +164,7 @@ function DatasetThumbnail({
 }
 
 export interface NeuralNetworkPlaygroundProps {
-  initialConfig?: Partial<TfPlaygroundConfig>;
+  initialConfig?: Partial<NetworkPlaygroundConfig>;
   toolbarStart?: React.ReactNode;
   toolbarEnd?: React.ReactNode;
 }
@@ -191,18 +196,18 @@ type GraphPaneProps = {
   onRemoveNeuron: (layerIdx: number) => void;
   onNormalizeLayout: () => void;
   onLearningRateChange: (learningRate: number) => void;
-  onOptimizerChange: (optimizer: TfPlaygroundConfig["optimizer"]) => void;
-  onActivationChange: (activation: TfPlaygroundConfig["activation"]) => void;
-  onWeightInitChange: (weightInit: TfPlaygroundConfig["weightInit"]) => void;
-  onRegularizationChange: (regularization: TfPlaygroundConfig["regularization"]) => void;
+  onOptimizerChange: (optimizer: NetworkPlaygroundConfig["optimizer"]) => void;
+  onActivationChange: (activation: NetworkPlaygroundConfig["activation"]) => void;
+  onWeightInitChange: (weightInit: NetworkPlaygroundConfig["weightInit"]) => void;
+  onRegularizationChange: (regularization: NetworkPlaygroundConfig["regularization"]) => void;
   onRegularizationRateChange: (regularizationRate: number) => void;
   onBatchSizeChange: (batchSize: number) => void;
   onNoiseChange: (noise: number) => void;
   onTrainRatioChange: (percTrainData: number) => void;
   onDiscretizeChange: (discretize: boolean) => void;
   onRegenerateData: () => void;
-  onDatasetChange: (dataset: TfAnyDatasetId) => void;
-  onProblemTypeChange: (problemType: TfProblemType) => void;
+  onDatasetChange: (dataset: NetworkAnyDatasetId) => void;
+  onProblemTypeChange: (problemType: NetworkProblemType) => void;
   onResetWeights: () => void;
   edgeVizMode: EdgeVizMode;
   onEdgeVizModeChange: (mode: EdgeVizMode) => void;
@@ -302,7 +307,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
       layoutKey={tick}
       discretize={cfg.discretize}
     >
-      <aside className="tf-flow-dock tf-flow-dock--left">
+      <aside className="nn-flow-dock nn-flow-dock--left">
         <NetworkPalette />
         <NetworkArchitecturePanel
           numHiddenLayers={cfg.numHiddenLayers}
@@ -312,18 +317,18 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
           onAddNeuron={onAddNeuron}
           onRemoveNeuron={onRemoveNeuron}
         />
-        <div className="tf-flow-dock-section">
-          <button type="button" className="tf-btn tf-btn--secondary tf-reset-weights" onClick={onResetWeights}>
+        <div className="nn-flow-dock-section">
+          <button type="button" className="nn-btn nn-btn--secondary nn-reset-weights" onClick={onResetWeights}>
             {t.resetWeights}
           </button>
-          <button type="button" className="tf-btn tf-btn--secondary tf-layout-normalize" onClick={onNormalizeLayout}>
-            <span className="tf-layout-normalize-icon" aria-hidden="true">⊞</span>
+          <button type="button" className="nn-btn nn-btn--secondary nn-layout-normalize" onClick={onNormalizeLayout}>
+            <span className="nn-layout-normalize-icon" aria-hidden="true">⊞</span>
             {t.arrangeLayout}
           </button>
         </div>
-        <div className="tf-flow-dock-section">
-          <h4 className="tf-flow-dock-title">{t.edgeViz}</h4>
-          <div className="tf-flat-switch" role="group" aria-label={t.edgeViz}>
+        <div className="nn-flow-dock-section">
+          <h4 className="nn-flow-dock-title">{t.edgeViz}</h4>
+          <div className="nn-flat-switch" role="group" aria-label={t.edgeViz}>
             {([
               ["weight", t.edgeVizWeight],
               ["gradient", t.edgeVizGradient],
@@ -331,7 +336,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
               <button
                 key={id}
                 type="button"
-                className={`tf-flat-switch__btn${edgeVizMode === id ? " selected" : ""}`}
+                className={`nn-flat-switch__btn${edgeVizMode === id ? " selected" : ""}`}
                 onClick={() => onEdgeVizModeChange(id)}
               >
                 {label}
@@ -339,14 +344,14 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
             ))}
           </div>
         </div>
-        <div className="tf-flow-dock-section">
-          <h4 className="tf-flow-dock-title">{t.problemType}</h4>
-          <div className="tf-flat-switch" role="group" aria-label={t.problemType}>
-            {(["classification", "regression"] as TfProblemType[]).map((id) => (
+        <div className="nn-flow-dock-section">
+          <h4 className="nn-flow-dock-title">{t.problemType}</h4>
+          <div className="nn-flat-switch" role="group" aria-label={t.problemType}>
+            {(["classification", "regression"] as NetworkProblemType[]).map((id) => (
               <button
                 key={id}
                 type="button"
-                className={`tf-flat-switch__btn${cfg.problemType === id ? " selected" : ""}`}
+                className={`nn-flat-switch__btn${cfg.problemType === id ? " selected" : ""}`}
                 onClick={() => onProblemTypeChange(id)}
               >
                 {t.problemTypeLabels[id]}
@@ -354,8 +359,8 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
             ))}
           </div>
         </div>
-        <div className="tf-flow-dock-section">
-          <h4 className="tf-flow-dock-title">{t.dataset}</h4>
+        <div className="nn-flow-dock-section">
+          <h4 className="nn-flow-dock-title">{t.dataset}</h4>
           <div className="dataset-list dataset-list--compact">
             {datasetIds.map((id) => (
               <DatasetThumbnail
@@ -364,7 +369,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
                 label={
                   cfg.dataMode === "1d"
                     ? t.dataset1dLabels[id as Dataset1DId]
-                    : t.datasetLabels[id as TfDatasetId]
+                    : t.datasetLabels[id as NetworkDatasetId]
                 }
                 selected={cfg.dataset === id}
                 onSelect={() => onDatasetChange(id)}
@@ -394,7 +399,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
           }}
         />
       </aside>
-      <aside className="tf-flow-dock tf-flow-dock--right">
+      <aside className="nn-flow-dock nn-flow-dock--right">
         <NetworkLossChart
           history={lossHistory}
           title={t.learningCurve}
@@ -420,13 +425,13 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
           onDiscretizeChange={onDiscretizeChange}
         />
         <div
-          className="tf-weight-legend tf-weight-legend--dock"
+          className="nn-weight-legend nn-weight-legend--dock"
           role="img"
           aria-label="Weight color scale from −1 (violet) to +1 (magenta)"
         >
-          <span className="tf-weight-legend__title">Weight</span>
-          <div className="tf-weight-legend__bar" />
-          <div className="tf-weight-legend__scale">
+          <span className="nn-weight-legend__title">Weight</span>
+          <div className="nn-weight-legend__bar" />
+          <div className="nn-weight-legend__scale">
             <span>−1</span>
             <span>0</span>
             <span>+1</span>
@@ -442,7 +447,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   // so it must not execute on every render.
   const engineRef = useRef<PlaygroundEngine>(undefined as unknown as PlaygroundEngine);
   if (!engineRef.current) {
-    engineRef.current = new PlaygroundEngine(initialConfig ?? DEFAULT_TF_CONFIG);
+    engineRef.current = new PlaygroundEngine(initialConfig ?? DEFAULT_NETWORK_CONFIG);
   }
   const t = useNetworkMessages();
   const boundaryRef = useRef(engineRef.current.boundary);
@@ -481,6 +486,9 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   const wasPlayingRef = useRef(false);
   const trainingLiveRef = useRef(false);
   trainingLiveRef.current = playing;
+  const trainClientRef = useRef<TrainWorkerClient | null>(null);
+  const trainReadyRef = useRef<Promise<unknown> | null>(null);
+  const edgeVizBumpRef = useRef(0);
 
   const syncRuntimeRefs = useCallback(() => {
     const engine = engineRef.current;
@@ -493,96 +501,119 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     setLossHistory(engine.lossHistory.map((p) => ({ ...p })));
   }, []);
 
-  useEffect(() => {
-    if (!playing) return;
-    const engine = engineRef.current;
-    engine.refreshOutputBoundaryFast();
-    boundaryRef.current = engine.boundary;
-    curvesRef.current = engine.curves;
-    targetCurveRef.current = engine.targetCurve;
-    paintAllBoundaries();
-  }, [playing]);
-
-  useEffect(() => {
-    if (!playing) return;
-    /** Target training rate during Play (~60–90 epochs/s). */
-    const epochsPerSec = 75;
-    const maxEpochsPerFrame = 2;
-    let tick = 0;
-    let raf = 0;
-    let lastTime = performance.now();
-    let lastPaint = 0;
-    let lastTrainLoss = 0;
-    let lastTestLoss = 0;
-    let lastHistory = 0;
-    let epochBank = 0;
-    const paintIntervalMs = 1000 / 30;
-    /** Learning-curve sample rate — high enough to look continuous while Play runs. */
-    const historyIntervalMs = 1000 / 20;
-    const trainLossIntervalMs = 1000 / 20;
-    const testLossIntervalMs = 1000 / 8;
-    const loop = (now: number) => {
+  const applyNetworkTick = useCallback(
+    (snap: NetworkTrainSnapshot) => {
       const engine = engineRef.current;
-      const dt = Math.min((now - lastTime) / 1000, 0.1);
-      lastTime = now;
-      epochBank = Math.min(epochBank + dt * epochsPerSec, maxEpochsPerFrame);
-      const steps = Math.floor(epochBank);
-      epochBank -= steps;
-
-      if (steps > 0) {
-        for (let i = 0; i < steps; i++) engine.trainEpoch(false);
-        if (now - lastPaint >= paintIntervalMs) {
-          // Hidden nodes are coarse (10×10), so refreshing them every paint
-          // frame is cheap and keeps them in sync with the output node.
-          engine.refreshOutputBoundaryFast();
-          engine.refreshHiddenBoundariesFast();
-          boundaryRef.current = engine.boundary;
-          curvesRef.current = engine.curves;
-          targetCurveRef.current = engine.targetCurve;
-          // Imperative paint only — requestPaint() during Play re-renders React Flow and wipes canvases.
-          paintBoundaryNode(engine.outputNodeId);
-          paintAllBoundaries();
-          lastPaint = now;
-        }
-
-        if (now - lastTrainLoss >= trainLossIntervalMs) {
-          engine.lossTrain = engine.getLoss(engine.trainData);
-          lastTrainLoss = now;
-        }
-        if (now - lastTestLoss >= testLossIntervalMs) {
-          engine.lossTest = engine.getLoss(engine.testData);
-          lastTestLoss = now;
-        }
-        if (now - lastHistory >= historyIntervalMs) {
-          engine.pushLossHistory();
-          setLossHistory(engine.lossHistory.map((p) => ({ ...p })));
-          lastHistory = now;
-        }
-      }
-
-      tick++;
+      engine.applyWorkerViz(snap);
+      boundaryRef.current = engine.boundary;
+      curvesRef.current = engine.curves;
+      targetCurveRef.current = engine.targetCurve;
       statsRef.current = {
         epoch: engine.epoch,
         lossTrain: engine.lossTrain,
         lossTest: engine.lossTest,
       };
-      if (tick % 4 === 0) {
-        setStats({ ...statsRef.current });
-        // Gradient strokes change every batch — refresh edges without a full
-        // paintGeneration bump (that would remount boundary canvases).
-        if (edgeVizModeRef.current === "gradient") bump();
+      setStats({ ...statsRef.current });
+      setLossHistory(engine.lossHistory.map((p) => ({ ...p })));
+      paintBoundaryNode(engine.outputNodeId);
+      paintAllBoundaries();
+      edgeVizBumpRef.current += 1;
+      if (edgeVizModeRef.current === "gradient" && edgeVizBumpRef.current % 4 === 0) {
+        bump();
       }
-      raf = requestAnimationFrame(loop);
+    },
+    [bump],
+  );
+
+  const workerPayload = useCallback(() => {
+    const engine = engineRef.current;
+    return {
+      config: structuredClone(engine.config),
+      graphSnapshot: engine.graph.toSnapshot(),
     };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [playing, bump]);
+  }, []);
+
+  // Boot TF train worker; main engine remains the topology/UI source of truth.
+  useEffect(() => {
+    if (!canUseTrainWorkers()) {
+      console.warn("[network] Web Workers unavailable; falling back to main-thread train");
+      return;
+    }
+    const client = new TrainWorkerClient({
+      createWorker: createNetworkTrainWorker,
+      onTick: (s: TrainSnapshot) => {
+        if (s.kind === "network") applyNetworkTick(s);
+      },
+      onError: (message) => console.error("[network train worker]", message),
+    });
+    trainClientRef.current = client;
+    trainReadyRef.current = client.init(workerPayload()).catch((err) => {
+      console.error("[network train worker] init failed", err);
+    });
+    return () => {
+      client.dispose();
+      trainClientRef.current = null;
+      trainReadyRef.current = null;
+    };
+  }, [applyNetworkTick, workerPayload]);
+
+  const syncWorkerFromMain = useCallback(() => {
+    trainClientRef.current?.rebuild("topology", workerPayload());
+  }, [workerPayload]);
+
+  // Play/pause → worker owns trainEpoch; display engine only applies ticks.
+  useEffect(() => {
+    const client = trainClientRef.current;
+    if (!client) {
+      // Fallback: previous main-thread loop when Workers are missing.
+      if (!playing) return;
+      const epochsPerSec = 75;
+      let raf = 0;
+      let lastTime = performance.now();
+      let epochBank = 0;
+      const loop = (now: number) => {
+        const engine = engineRef.current;
+        const dt = Math.min((now - lastTime) / 1000, 0.1);
+        lastTime = now;
+        epochBank = Math.min(epochBank + dt * epochsPerSec, 2);
+        const steps = Math.floor(epochBank);
+        epochBank -= steps;
+        for (let i = 0; i < steps; i++) engine.trainEpoch(false);
+        if (steps > 0) {
+          engine.refreshOutputBoundaryFast();
+          engine.refreshHiddenBoundariesFast();
+          engine.lossTrain = engine.getLoss(engine.trainData);
+          engine.lossTest = engine.getLoss(engine.testData);
+          engine.pushLossHistory();
+          syncRuntimeRefs();
+          paintBoundaryNode(engine.outputNodeId);
+          paintAllBoundaries();
+        }
+        raf = requestAnimationFrame(loop);
+      };
+      raf = requestAnimationFrame(loop);
+      return () => cancelAnimationFrame(raf);
+    }
+    if (playing) {
+      const ready = trainReadyRef.current ?? Promise.resolve();
+      void ready.then(() => {
+        if (!trainClientRef.current || trainClientRef.current !== client) return;
+        syncWorkerFromMain();
+        client.play(75);
+      });
+    } else {
+      client.pause();
+    }
+  }, [playing, syncWorkerFromMain, syncRuntimeRefs]);
 
   useEffect(() => {
     if (wasPlayingRef.current && !playing) {
       const engine = engineRef.current;
-      engine.refreshMetrics();
-      engine.refreshBoundary();
+      // Prefer last worker tick; refresh locally if worker missing.
+      if (!trainClientRef.current) {
+        engine.refreshMetrics();
+        engine.refreshBoundary();
+      }
       boundaryRef.current = engine.boundary;
       statsRef.current = {
         epoch: engine.epoch,
@@ -590,7 +621,6 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
         lossTest: engine.lossTest,
       };
       setStats({ ...statsRef.current });
-      engine.pushLossHistory();
       setLossHistory(engine.lossHistory.map((p) => ({ ...p })));
       requestPaint();
       bump();
@@ -605,6 +635,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     setSelectedEdgeId(null);
     setRefitViewKey((n) => n + 1);
     syncRuntimeRefs();
+    syncWorkerFromMain();
     requestPaint();
     bump();
   };
@@ -613,60 +644,76 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     engineRef.current.resetWeights();
     setPlaying(false);
     syncRuntimeRefs();
+    syncWorkerFromMain();
     requestPaint();
     bump();
   };
 
   const step = () => {
-    engineRef.current.step();
-    syncRuntimeRefs();
-    paintAllBoundariesAfterCommit();
+    setPlaying(false);
+    const client = trainClientRef.current;
+    if (client) {
+      syncWorkerFromMain();
+      client.step();
+    } else {
+      engineRef.current.step();
+      syncRuntimeRefs();
+      paintAllBoundariesAfterCommit();
+    }
     bump();
     requestPaint();
   };
 
-  // Hyperparameters are read live by trainEpoch — no engine reset needed.
+  // Hyperparameters: update display engine + live worker config during Play.
   const onLearningRateChange = useCallback((learningRate: number) => {
     engineRef.current.config.learningRate = learningRate;
+    trainClientRef.current?.command("setLearningRate", { lr: learningRate });
     bump();
   }, [bump]);
 
-  const onOptimizerChange = useCallback((optimizer: TfPlaygroundConfig["optimizer"]) => {
+  const onOptimizerChange = useCallback((optimizer: NetworkPlaygroundConfig["optimizer"]) => {
     engineRef.current.setOptimizer(optimizer);
+    trainClientRef.current?.command("setOptimizer", { optimizer });
     bump();
   }, [bump]);
 
   const onBatchSizeChange = useCallback((batchSize: number) => {
     engineRef.current.config.batchSize = batchSize;
+    trainClientRef.current?.command("setBatchSize", { bs: batchSize });
     bump();
   }, [bump]);
 
-  const onActivationChange = useCallback((activation: TfPlaygroundConfig["activation"]) => {
+  const onActivationChange = useCallback((activation: NetworkPlaygroundConfig["activation"]) => {
     engineRef.current.setActivation(activation);
+    setPlaying(false);
     syncRuntimeRefs();
+    syncWorkerFromMain();
     requestPaint();
     bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+  }, [bump, requestPaint, syncRuntimeRefs, syncWorkerFromMain]);
 
-  const onWeightInitChange = useCallback((weightInit: TfPlaygroundConfig["weightInit"]) => {
+  const onWeightInitChange = useCallback((weightInit: NetworkPlaygroundConfig["weightInit"]) => {
     engineRef.current.setWeightInit(weightInit);
     setPlaying(false);
     syncRuntimeRefs();
+    syncWorkerFromMain();
     requestPaint();
     bump();
-  }, [bump, requestPaint, syncRuntimeRefs]);
+  }, [bump, requestPaint, syncRuntimeRefs, syncWorkerFromMain]);
 
-  const onRegularizationChange = useCallback((regularization: TfPlaygroundConfig["regularization"]) => {
+  const onRegularizationChange = useCallback((regularization: NetworkPlaygroundConfig["regularization"]) => {
     engineRef.current.setRegularization(regularization);
+    trainClientRef.current?.command("setRegularization", { regularization });
     bump();
   }, [bump]);
 
   const onRegularizationRateChange = useCallback((regularizationRate: number) => {
     engineRef.current.config.regularizationRate = regularizationRate;
+    trainClientRef.current?.command("setRegularizationRate", { rate: regularizationRate });
     bump();
   }, [bump]);
 
-  const onDatasetChange = useCallback((dataset: TfAnyDatasetId) => {
+  const onDatasetChange = useCallback((dataset: NetworkAnyDatasetId) => {
     engineRef.current.setDataset(dataset);
     setPlaying(false);
     syncRuntimeRefs();
@@ -674,7 +721,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     bump();
   }, [bump, requestPaint, syncRuntimeRefs]);
 
-  const onDataModeChange = useCallback((dataMode: TfDataMode) => {
+  const onDataModeChange = useCallback((dataMode: NetworkDataMode) => {
     engineRef.current.setDataMode(dataMode);
     setPlaying(false);
     setSelectedNodeId(null);
@@ -684,7 +731,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     bump();
   }, [bump, requestPaint, syncRuntimeRefs]);
 
-  const onProblemTypeChange = useCallback((problemType: TfProblemType) => {
+  const onProblemTypeChange = useCallback((problemType: NetworkProblemType) => {
     engineRef.current.setProblemType(problemType);
     setPlaying(false);
     syncRuntimeRefs();
@@ -796,34 +843,34 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   }, [bump, requestPaint, syncRuntimeRefs]);
 
   return (
-    <div className="tf-playground tf-playground--immersive">
-      <div className="tf-immersive-toolbar">
-        <div className="tf-toolbar-group tf-toolbar-group--actions">
+    <div className="nn-playground nn-playground--immersive">
+      <div className="nn-immersive-toolbar">
+        <div className="nn-toolbar-group nn-toolbar-group--actions">
           {toolbarStart}
-          <button type="button" className="tf-btn tf-btn--ghost" onClick={reset}>
+          <button type="button" className="nn-btn nn-btn--ghost" onClick={reset}>
             {t.reset}
           </button>
           <button
             type="button"
-            className={`tf-btn tf-btn--primary${playing ? " playing" : ""}`}
+            className={`nn-btn nn-btn--primary${playing ? " playing" : ""}`}
             onClick={() => setPlaying((p) => !p)}
           >
             {playing ? t.pause : t.play}
           </button>
-          <button type="button" className="tf-btn tf-btn--secondary" onClick={step}>
+          <button type="button" className="nn-btn nn-btn--secondary" onClick={step}>
             {t.step}
           </button>
-          <div className="tf-flat-switch" role="group" aria-label={t.mode}>
+          <div className="nn-flat-switch" role="group" aria-label={t.mode}>
             <button
               type="button"
-              className={`tf-flat-switch__btn${engineRef.current.config.dataMode === "1d" ? " selected" : ""}`}
+              className={`nn-flat-switch__btn${engineRef.current.config.dataMode === "1d" ? " selected" : ""}`}
               onClick={() => onDataModeChange("1d")}
             >
               {t.mode1D}
             </button>
             <button
               type="button"
-              className={`tf-flat-switch__btn${engineRef.current.config.dataMode === "2d" ? " selected" : ""}`}
+              className={`nn-flat-switch__btn${engineRef.current.config.dataMode === "2d" ? " selected" : ""}`}
               onClick={() => onDataModeChange("2d")}
             >
               {t.mode2D}
@@ -831,7 +878,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           </div>
         </div>
 
-        <p className="tf-inspired-by">
+        <p className="nn-inspired-by">
           {t.inspiredBy}{" "}
           <a
             href="https://playground.tensorflow.org/"
@@ -842,18 +889,18 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           </a>
         </p>
 
-        <div className="tf-toolbar-group tf-toolbar-group--params">
-          <div className="tf-toolbar-stat">
+        <div className="nn-toolbar-group nn-toolbar-group--params">
+          <div className="nn-toolbar-stat">
             <span className="label">{t.epoch}</span>
             <span className="value">{stats.epoch.toLocaleString()}</span>
           </div>
-          <div className="tf-toolbar-stat">
+          <div className="nn-toolbar-stat">
             <span className="label">{t.testLoss}</span>
             <span className="value" id="loss-test">
               {stats.lossTest.toFixed(3)}
             </span>
           </div>
-          <div className="tf-toolbar-stat tf-toolbar-stat--train">
+          <div className="nn-toolbar-stat nn-toolbar-stat--train">
             <span className="label">{t.trainLoss}</span>
             <span className="value" id="loss-train">
               {stats.lossTrain.toFixed(3)}
@@ -863,7 +910,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
         </div>
       </div>
 
-      <div className="tf-immersive-body">
+      <div className="nn-immersive-body">
         <NetworkGraphPane
           engineRef={engineRef}
           boundaryRef={boundaryRef}

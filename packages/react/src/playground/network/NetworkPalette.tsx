@@ -15,24 +15,24 @@ export function NetworkPalette() {
   const t = useNetworkMessages();
 
   return (
-    <div className="tf-network-palette" data-testid="network-palette">
-      <div className="tf-network-palette-title">{t.blocks}</div>
-      <div className="tf-network-palette-items">
+    <div className="nn-network-palette" data-testid="network-palette">
+      <div className="nn-network-palette-title">{t.blocks}</div>
+      <div className="nn-network-palette-items">
         {PALETTE_KINDS.map((kind) => (
           <div
             key={kind}
-            className="tf-network-palette-item"
+            className="nn-network-palette-item"
             draggable
             data-testid={`network-palette-add-${kind}`}
             onDragStart={(e) => onDragStart(e, kind)}
             title={t.paletteDenseHint}
           >
-            <span className={`tf-network-palette-icon tf-network-palette-icon--${kind}`}>D</span>
-            <span className="tf-network-palette-label">{t.paletteDense}</span>
+            <span className={`nn-network-palette-icon nn-network-palette-icon--${kind}`}>D</span>
+            <span className="nn-network-palette-label">{t.paletteDense}</span>
           </div>
         ))}
       </div>
-      <p className="tf-network-palette-hint">{t.paletteHint}</p>
+      <p className="nn-network-palette-hint">{t.paletteHint}</p>
     </div>
   );
 }

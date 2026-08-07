@@ -202,7 +202,7 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
       pulses: "Один / Два импульса",
     },
     training: "Обучение",
-    learningRate: "Скорость обучения",
+    learningRate: "Коэффициент обучения",
     optimizer: "Оптимизатор",
     activation: "Активация",
     noise: "Шум",
@@ -233,7 +233,7 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
       L1: "L1",
       L2: "L2",
     },
-    regularizationRate: "Сила регуляризации",
+    regularizationRate: "Коэффициент регуляризации",
   },
 };
 

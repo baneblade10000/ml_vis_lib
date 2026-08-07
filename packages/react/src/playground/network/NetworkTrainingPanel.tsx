@@ -1,12 +1,12 @@
 import {
   PLAYGROUND_OPTIMIZERS,
-  TF_ACTIVATIONS,
-  TF_REGULARIZATION_RATES,
-  TF_REGULARIZATIONS,
+  NETWORK_ACTIVATIONS,
+  NETWORK_REGULARIZATION_RATES,
+  NETWORK_REGULARIZATIONS,
   WEIGHT_INITS,
   type PlaygroundOptimizerId,
-  type TfActivationId,
-  type TfRegularizationId,
+  type NetworkActivationId,
+  type NetworkRegularizationId,
   type WeightInitId,
 } from "@ml-vis/core";
 import { useNetworkMessages } from "./messages";
@@ -16,16 +16,16 @@ const LEARNING_RATES = [0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 
 export interface NetworkTrainingPanelProps {
   learningRate: number;
   optimizer: PlaygroundOptimizerId;
-  activation: TfActivationId;
+  activation: NetworkActivationId;
   weightInit: WeightInitId;
-  regularization: TfRegularizationId;
+  regularization: NetworkRegularizationId;
   regularizationRate: number;
   discretize: boolean;
   onLearningRateChange: (rate: number) => void;
   onOptimizerChange: (optimizer: PlaygroundOptimizerId) => void;
-  onActivationChange: (activation: TfActivationId) => void;
+  onActivationChange: (activation: NetworkActivationId) => void;
   onWeightInitChange: (init: WeightInitId) => void;
-  onRegularizationChange: (regularization: TfRegularizationId) => void;
+  onRegularizationChange: (regularization: NetworkRegularizationId) => void;
   onRegularizationRateChange: (rate: number) => void;
   onDiscretizeChange: (value: boolean) => void;
 }
@@ -49,14 +49,14 @@ export function NetworkTrainingPanel({
   const t = useNetworkMessages();
 
   return (
-    <div className="tf-training-panel">
-      <h4 className="tf-flow-dock-title">{t.training}</h4>
+    <div className="network-training-panel">
+      <h4 className="nn-flow-dock-title">{t.training}</h4>
 
-      <div className="tf-training-fields">
-        <label className="tf-training-field">
-          <span className="tf-training-label">{t.learningRate}</span>
+      <div className="network-training-fields">
+        <label className="network-training-field">
+          <span className="network-training-label">{t.learningRate}</span>
           <select
-            className="tf-select tf-select--dock"
+            className="nn-select nn-select--dock"
             value={learningRate}
             onChange={(e) => onLearningRateChange(Number(e.target.value))}
           >
@@ -68,10 +68,10 @@ export function NetworkTrainingPanel({
           </select>
         </label>
 
-        <label className="tf-training-field">
-          <span className="tf-training-label">{t.optimizer}</span>
+        <label className="network-training-field">
+          <span className="network-training-label">{t.optimizer}</span>
           <select
-            className="tf-select tf-select--dock"
+            className="nn-select nn-select--dock"
             value={optimizer}
             onChange={(e) => onOptimizerChange(e.target.value as PlaygroundOptimizerId)}
           >
@@ -83,14 +83,14 @@ export function NetworkTrainingPanel({
           </select>
         </label>
 
-        <label className="tf-training-field">
-          <span className="tf-training-label">{t.activation}</span>
+        <label className="network-training-field">
+          <span className="network-training-label">{t.activation}</span>
           <select
-            className="tf-select tf-select--dock"
+            className="nn-select nn-select--dock"
             value={activation}
-            onChange={(e) => onActivationChange(e.target.value as TfActivationId)}
+            onChange={(e) => onActivationChange(e.target.value as NetworkActivationId)}
           >
-            {Object.keys(TF_ACTIVATIONS).map((id) => (
+            {Object.keys(NETWORK_ACTIVATIONS).map((id) => (
               <option key={id} value={id}>
                 {id}
               </option>
@@ -98,10 +98,10 @@ export function NetworkTrainingPanel({
           </select>
         </label>
 
-        <label className="tf-training-field">
-          <span className="tf-training-label">{t.weightInit}</span>
+        <label className="network-training-field">
+          <span className="network-training-label">{t.weightInit}</span>
           <select
-            className="tf-select tf-select--dock"
+            className="nn-select nn-select--dock"
             value={weightInit}
             onChange={(e) => onWeightInitChange(e.target.value as WeightInitId)}
           >
@@ -113,14 +113,14 @@ export function NetworkTrainingPanel({
           </select>
         </label>
 
-        <label className="tf-training-field">
-          <span className="tf-training-label">{t.regularization}</span>
+        <label className="network-training-field">
+          <span className="network-training-label">{t.regularization}</span>
           <select
-            className="tf-select tf-select--dock"
+            className="nn-select nn-select--dock"
             value={regularization}
-            onChange={(e) => onRegularizationChange(e.target.value as TfRegularizationId)}
+            onChange={(e) => onRegularizationChange(e.target.value as NetworkRegularizationId)}
           >
-            {TF_REGULARIZATIONS.map((id) => (
+            {NETWORK_REGULARIZATIONS.map((id) => (
               <option key={id} value={id}>
                 {t.regularizationLabels[id]}
               </option>
@@ -128,15 +128,15 @@ export function NetworkTrainingPanel({
           </select>
         </label>
 
-        <label className="tf-training-field">
-          <span className="tf-training-label">{t.regularizationRate}</span>
+        <label className="network-training-field">
+          <span className="network-training-label">{t.regularizationRate}</span>
           <select
-            className="tf-select tf-select--dock"
+            className="nn-select nn-select--dock"
             value={regularizationRate}
             disabled={regularization === "none"}
             onChange={(e) => onRegularizationRateChange(Number(e.target.value))}
           >
-            {TF_REGULARIZATION_RATES.map((v) => (
+            {NETWORK_REGULARIZATION_RATES.map((v) => (
               <option key={v} value={v}>
                 {v}
               </option>
@@ -144,14 +144,14 @@ export function NetworkTrainingPanel({
           </select>
         </label>
 
-        <label className="tf-training-toggle">
-          <span className="tf-toggle">
+        <label className="network-training-toggle">
+          <span className="nn-toggle">
             <input
               type="checkbox"
               checked={discretize}
               onChange={(e) => onDiscretizeChange(e.target.checked)}
             />
-            <span className="tf-toggle-track" />
+            <span className="nn-toggle-track" />
           </span>
           {t.discretize}
         </label>

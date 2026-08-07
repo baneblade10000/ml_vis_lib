@@ -215,8 +215,8 @@ function AutogradFlowGraphInner({
   }, [selectedEdgeId, selectedNodeId, onRemoveEdge, onRemoveNode]);
 
   return (
-    <div className="tf-flow-wrap tf-flow-wrap--fill">
-      <div ref={wrapRef} className="tf-flow-canvas">
+    <div className="nn-flow-wrap nn-flow-wrap--fill">
+      <div ref={wrapRef} className="nn-flow-canvas">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -242,11 +242,11 @@ function AutogradFlowGraphInner({
           nodesConnectable
           elementsSelectable
         >
-          <Background gap={20} size={1} color="var(--tf-border)" />
+          <Background gap={20} size={1} color="var(--nn-border)" />
           <Controls showInteractive={false} position="bottom-right" />
         </ReactFlow>
       </div>
-      {children && <div className="tf-flow-overlays">{children}</div>}
+      {children && <div className="nn-flow-overlays">{children}</div>}
     </div>
   );
 }

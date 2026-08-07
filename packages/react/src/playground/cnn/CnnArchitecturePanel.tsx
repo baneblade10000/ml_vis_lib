@@ -71,20 +71,20 @@ function MiniStepper({
   const atMin = value === options[0];
   const atMax = value === options[options.length - 1];
   return (
-    <div className="tf-arch-stepper">
+    <div className="nn-arch-stepper">
       <button
         type="button"
-        className="tf-icon-btn tf-icon-btn--sm"
+        className="nn-icon-btn nn-icon-btn--sm"
         disabled={atMin}
         onClick={() => onChange(stepOption(options, value, -1))}
         aria-label={ariaDec}
       >
         −
       </button>
-      <span className="tf-arch-value">{value}</span>
+      <span className="nn-arch-value">{value}</span>
       <button
         type="button"
-        className="tf-icon-btn tf-icon-btn--sm"
+        className="nn-icon-btn nn-icon-btn--sm"
         disabled={atMax}
         onClick={() => onChange(stepOption(options, value, 1))}
         aria-label={ariaInc}
@@ -109,10 +109,10 @@ export function CnnArchitecturePanel({
   const t = useCnnMessages();
 
   return (
-    <div className="tf-arch-panel cnn-arch-panel">
-      <h4 className="tf-flow-dock-title">{t.network}</h4>
+    <div className="nn-arch-panel cnn-arch-panel">
+      <h4 className="nn-flow-dock-title">{t.network}</h4>
 
-      <div className="tf-arch-stack">
+      <div className="nn-arch-stack">
         {layers.map((spec, idx) => {
           const isConv = spec.kind === "conv2d" || spec.kind === "conv1d";
           const isPool = spec.kind === "pool2d" || spec.kind === "pool1d";
@@ -123,7 +123,7 @@ export function CnnArchitecturePanel({
           return (
             <div
               key={idx}
-              className={`tf-arch-row cnn-arch-row${selected ? " selected" : ""}`}
+              className={`nn-arch-row cnn-arch-row${selected ? " selected" : ""}`}
               onClick={() => onSelectLayer(idx)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -135,7 +135,7 @@ export function CnnArchitecturePanel({
               tabIndex={0}
               aria-pressed={selected}
             >
-              <span className="tf-arch-row-label">{layerTitle(spec, t)}</span>
+              <span className="nn-arch-row-label">{layerTitle(spec, t)}</span>
 
               <div className="cnn-arch-row__controls">
                 {isConv && (
@@ -163,17 +163,17 @@ export function CnnArchitecturePanel({
 
                 {isPool && (
                   <ParamGroup>
-                    <div className="tf-flat-switch" role="group" aria-label={t.poolKind}>
+                    <div className="nn-flat-switch" role="group" aria-label={t.poolKind}>
                       <button
                         type="button"
-                        className={`tf-flat-switch__btn${(spec.poolKind ?? "max") === "max" ? " selected" : ""}`}
+                        className={`nn-flat-switch__btn${(spec.poolKind ?? "max") === "max" ? " selected" : ""}`}
                         onClick={() => onSetPoolKind(idx, "max")}
                       >
                         {t.poolMax}
                       </button>
                       <button
                         type="button"
-                        className={`tf-flat-switch__btn${spec.poolKind === "avg" ? " selected" : ""}`}
+                        className={`nn-flat-switch__btn${spec.poolKind === "avg" ? " selected" : ""}`}
                         onClick={() => onSetPoolKind(idx, "avg")}
                       >
                         {t.poolAvg}
@@ -197,7 +197,7 @@ export function CnnArchitecturePanel({
                 <ParamGroup>
                   <button
                     type="button"
-                    className="tf-icon-btn tf-icon-btn--sm"
+                    className="nn-icon-btn nn-icon-btn--sm"
                     onClick={() => onRemoveLayer(idx)}
                     aria-label={t.removeLayer}
                   >

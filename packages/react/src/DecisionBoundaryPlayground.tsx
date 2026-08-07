@@ -2,27 +2,37 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DecisionBoundaryPlot,
   DEFAULT_CONFIG,
+  TrainWorkerClient,
+  canUseTrainWorkers,
+  frameIndexForEpoch,
   type DecisionBoundaryPayload,
-  type LiveTrainingState,
+  type MlpTrainSnapshot,
   type PlaygroundConfig,
+  type PlaygroundPayload,
+  type TrainSnapshot,
   advanceLiveTraining,
   buildPayload,
   configSignature,
   createLiveTrainingState,
-  frameIndexForEpoch,
   resetLiveTraining,
+  type LiveTrainingState,
 } from "@ml-vis/core";
+import { createMlpTrainWorker } from "@ml-vis/core/workers/createWorkers";
 import { ChartBox, useCanvasChart } from "./useCanvasChart";
 
 export interface DecisionBoundaryChartProps {
-  state: LiveTrainingState;
+  payload: PlaygroundPayload;
+  epoch: number;
   frameIndex?: number;
   height?: number;
   onHover?: (info: { x1: number; x2: number; probability: number } | null) => void;
 }
 
-function payloadForFrame(state: LiveTrainingState, frameIndex: number): DecisionBoundaryPayload {
-  const payload = buildPayload(state);
+function payloadForFrame(
+  payload: PlaygroundPayload,
+  epoch: number,
+  frameIndex: number,
+): DecisionBoundaryPayload {
   const snapshots = payload.snapshots;
   const index = Math.max(0, Math.min(frameIndex, Math.max(snapshots.length - 1, 0)));
   const frame = snapshots[index];
@@ -32,20 +42,26 @@ function payloadForFrame(state: LiveTrainingState, frameIndex: number): Decision
     grid: frame?.grid ?? payload.grid,
     previousGrid: previous?.grid,
     history: payload.history,
-    epoch: frame?.epoch ?? state.epoch,
-    frameLabel: frame ? `epoch ${frame.epoch}` : `epoch ${state.epoch}`,
+    epoch: frame?.epoch ?? epoch,
+    frameLabel: frame ? `epoch ${frame.epoch}` : `epoch ${epoch}`,
   };
 }
 
 export function DecisionBoundaryChart({
-  state,
+  payload,
+  epoch,
   frameIndex,
   height = 420,
   onHover,
 }: DecisionBoundaryChartProps) {
   const plotPayload = useMemo(
-    () => payloadForFrame(state, frameIndex ?? frameIndexForEpoch(buildPayload(state).snapshots, state.epoch)),
-    [state, frameIndex],
+    () =>
+      payloadForFrame(
+        payload,
+        epoch,
+        frameIndex ?? frameIndexForEpoch(payload.snapshots, epoch),
+      ),
+    [payload, epoch, frameIndex],
   );
 
   const plotRef = useRef<DecisionBoundaryPlot | null>(null);
@@ -95,14 +111,17 @@ export function DecisionBoundaryChart({
 
 export interface PlaygroundControlsProps {
   config: PlaygroundConfig;
-  state: LiveTrainingState;
+  payload: PlaygroundPayload;
+  epoch: number;
   frameIndex: number;
   playing: boolean;
   hover: { x1: number; x2: number; probability: number } | null;
+  pending: boolean;
   onConfigChange: (config: PlaygroundConfig) => void;
-  onStateChange: (state: LiveTrainingState) => void;
   onFrameIndexChange: (index: number) => void;
   onPlayingChange: (playing: boolean) => void;
+  onReset: () => void;
+  onStep: () => void;
 }
 
 function parseHiddenLayers(raw: string): number[] {
@@ -115,36 +134,22 @@ function parseHiddenLayers(raw: string): number[] {
 
 export function PlaygroundControls({
   config,
-  state,
+  payload,
+  epoch,
   frameIndex,
   playing,
   hover,
+  pending,
   onConfigChange,
-  onStateChange,
   onFrameIndexChange,
   onPlayingChange,
+  onReset,
+  onStep,
 }: PlaygroundControlsProps) {
-  const payload = useMemo(() => buildPayload(state), [state]);
   const latest = payload.history[payload.history.length - 1];
-  const pending = configSignature(config) !== configSignature(state.config);
-
-  const reset = () => {
-    const next = resetLiveTraining(config);
-    onStateChange(next);
-    onFrameIndexChange(0);
-    onPlayingChange(false);
-  };
-
-  const step = () => {
-    const base = pending ? resetLiveTraining(config) : state;
-    if (pending) onStateChange(base);
-    const next = advanceLiveTraining({ ...base, playing: false }, 1);
-    onStateChange(next);
-    onFrameIndexChange(frameIndexForEpoch(buildPayload(next).snapshots, next.epoch));
-  };
 
   const togglePlay = () => {
-    if (!playing && pending) reset();
+    if (!playing && pending) onReset();
     onPlayingChange(!playing);
   };
 
@@ -224,14 +229,14 @@ export function PlaygroundControls({
         <button type="button" onClick={togglePlay}>
           {playing ? "Pause" : "Play"}
         </button>
-        <button type="button" onClick={step}>
+        <button type="button" onClick={onStep}>
           Step +1
         </button>
-        <button type="button" onClick={reset}>
+        <button type="button" onClick={onReset}>
           Reset & train
         </button>
         <span className="metric-pill">
-          epoch {state.epoch}/{config.epochs}
+          epoch {epoch}/{config.epochs}
         </span>
         <span className="metric-pill">
           val acc {(100 * (latest?.validationAccuracy ?? 0)).toFixed(1)}%
@@ -259,37 +264,95 @@ export function PlaygroundControls({
   );
 }
 
+function isMlpSnapshot(s: TrainSnapshot | null): s is MlpTrainSnapshot {
+  return s?.kind === "mlp";
+}
+
 export function DecisionBoundaryPlayground({ initialConfig }: { initialConfig?: PlaygroundConfig }) {
   const [config, setConfig] = useState<PlaygroundConfig>(initialConfig ?? DEFAULT_CONFIG);
-  const [state, setState] = useState<LiveTrainingState>(() => createLiveTrainingState(initialConfig ?? DEFAULT_CONFIG));
+  const [payload, setPayload] = useState<PlaygroundPayload | null>(null);
+  const [epoch, setEpoch] = useState(0);
+  const [trainedConfig, setTrainedConfig] = useState<PlaygroundConfig>(initialConfig ?? DEFAULT_CONFIG);
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [hover, setHover] = useState<{ x1: number; x2: number; probability: number } | null>(null);
   const configRef = useRef(config);
   configRef.current = config;
-  const pendingRef = useRef(false);
-  pendingRef.current = configSignature(config) !== configSignature(state.config);
+  const clientRef = useRef<TrainWorkerClient | null>(null);
+  const fallbackStateRef = useRef<LiveTrainingState | null>(null);
+  const pending = configSignature(config) !== configSignature(trainedConfig);
+
+  const applySnap = useCallback((snap: MlpTrainSnapshot) => {
+    setPayload(snap.payload);
+    setEpoch(snap.epoch);
+    setTrainedConfig(snap.config);
+    setFrameIndex(frameIndexForEpoch(snap.payload.snapshots, snap.epoch));
+    if (snap.epoch >= snap.config.epochs) setPlaying(false);
+  }, []);
 
   useEffect(() => {
+    const cfg = initialConfig ?? DEFAULT_CONFIG;
+    if (!canUseTrainWorkers()) {
+      const state = createLiveTrainingState(cfg);
+      fallbackStateRef.current = state;
+      setPayload(buildPayload(state));
+      setEpoch(state.epoch);
+      setTrainedConfig(state.config);
+      return;
+    }
+    const client = new TrainWorkerClient({
+      createWorker: createMlpTrainWorker,
+      onTick: (s) => {
+        if (isMlpSnapshot(s)) applySnap(s);
+      },
+      onError: (message) => console.error("[mlp train worker]", message),
+    });
+    clientRef.current = client;
+    void client.init(structuredClone(cfg)).then((s) => {
+      if (isMlpSnapshot(s)) applySnap(s);
+    });
+    return () => {
+      client.dispose();
+      clientRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const client = clientRef.current;
+    if (client) {
+      if (playing) {
+        if (pending) client.rebuild("reset", structuredClone(configRef.current));
+        client.play(16);
+      } else {
+        client.pause();
+      }
+      return;
+    }
+    // Fallback main-thread loop
     if (!playing) return;
     const timer = window.setInterval(() => {
-      setState((current) => {
-        let base = current;
-        if (pendingRef.current) {
-          base = resetLiveTraining(configRef.current);
-          pendingRef.current = false;
-        }
-        if (base.epoch >= configRef.current.epochs) {
-          setPlaying(false);
-          return base;
-        }
-        const next = advanceLiveTraining({ ...base, playing: true }, 1);
-        setFrameIndex(frameIndexForEpoch(buildPayload(next).snapshots, next.epoch));
-        return next;
-      });
+      let base = fallbackStateRef.current;
+      if (!base) return;
+      if (configSignature(configRef.current) !== configSignature(base.config)) {
+        base = resetLiveTraining(configRef.current);
+      }
+      if (base.epoch >= configRef.current.epochs) {
+        setPlaying(false);
+        fallbackStateRef.current = base;
+        setPayload(buildPayload(base));
+        setEpoch(base.epoch);
+        return;
+      }
+      const next = advanceLiveTraining({ ...base, playing: true }, 1);
+      fallbackStateRef.current = next;
+      setPayload(buildPayload(next));
+      setEpoch(next.epoch);
+      setTrainedConfig(next.config);
+      setFrameIndex(frameIndexForEpoch(buildPayload(next).snapshots, next.epoch));
     }, 60);
     return () => window.clearInterval(timer);
-  }, [playing]);
+  }, [playing, pending]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -302,19 +365,59 @@ export function DecisionBoundaryPlayground({ initialConfig }: { initialConfig?: 
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const onReset = useCallback(() => {
+    setPlaying(false);
+    const client = clientRef.current;
+    if (client) {
+      client.rebuild("reset", structuredClone(configRef.current));
+      return;
+    }
+    const next = resetLiveTraining(configRef.current);
+    fallbackStateRef.current = next;
+    setPayload(buildPayload(next));
+    setEpoch(0);
+    setTrainedConfig(next.config);
+    setFrameIndex(0);
+  }, []);
+
+  const onStep = useCallback(() => {
+    setPlaying(false);
+    const client = clientRef.current;
+    if (client) {
+      if (pending) client.rebuild("reset", structuredClone(configRef.current));
+      client.step();
+      return;
+    }
+    let base = fallbackStateRef.current ?? createLiveTrainingState(configRef.current);
+    if (pending) base = resetLiveTraining(configRef.current);
+    const next = advanceLiveTraining({ ...base, playing: false }, 1);
+    fallbackStateRef.current = next;
+    setPayload(buildPayload(next));
+    setEpoch(next.epoch);
+    setTrainedConfig(next.config);
+    setFrameIndex(frameIndexForEpoch(buildPayload(next).snapshots, next.epoch));
+  }, [pending]);
+
+  if (!payload) {
+    return <section className="playground-panel">Loading…</section>;
+  }
+
   return (
     <section className="playground-panel">
-      <DecisionBoundaryChart state={state} frameIndex={frameIndex} onHover={setHover} />
+      <DecisionBoundaryChart payload={payload} epoch={epoch} frameIndex={frameIndex} onHover={setHover} />
       <PlaygroundControls
         config={config}
-        state={state}
+        payload={payload}
+        epoch={epoch}
         frameIndex={frameIndex}
         playing={playing}
         hover={hover}
+        pending={pending}
         onConfigChange={setConfig}
-        onStateChange={setState}
         onFrameIndexChange={setFrameIndex}
         onPlayingChange={setPlaying}
+        onReset={onReset}
+        onStep={onStep}
       />
       <p className="playground-hint">Space — play/pause. Hover — inspect probability. Scrubber — replay boundary snapshots.</p>
     </section>

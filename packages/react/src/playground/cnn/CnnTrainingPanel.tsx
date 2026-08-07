@@ -40,13 +40,13 @@ export function CnnTrainingPanel({
   const t = useCnnMessages();
 
   return (
-    <div className="tf-training-panel">
-      <h4 className="tf-flow-dock-title">{t.training}</h4>
-      <div className="tf-training-fields">
-        <label className="tf-training-field">
-          <span className="tf-training-label">{t.learningRate}</span>
+    <div className="network-training-panel">
+      <h4 className="nn-flow-dock-title">{t.training}</h4>
+      <div className="network-training-fields">
+        <label className="network-training-field">
+          <span className="network-training-label">{t.learningRate}</span>
           <select
-            className="tf-select tf-select--dock"
+            className="nn-select nn-select--dock"
             value={learningRate}
             onChange={(e) => onLearningRateChange(Number(e.target.value))}
           >
@@ -57,10 +57,10 @@ export function CnnTrainingPanel({
             ))}
           </select>
         </label>
-        <label className="tf-training-field">
-          <span className="tf-training-label">{t.optimizer}</span>
+        <label className="network-training-field">
+          <span className="network-training-label">{t.optimizer}</span>
           <select
-            className="tf-select tf-select--dock"
+            className="nn-select nn-select--dock"
             value={optimizer}
             onChange={(e) => onOptimizerChange(e.target.value as PlaygroundOptimizerId)}
           >
@@ -71,10 +71,10 @@ export function CnnTrainingPanel({
             ))}
           </select>
         </label>
-        <label className="tf-training-field">
-          <span className="tf-training-label">{t.activation}</span>
+        <label className="network-training-field">
+          <span className="network-training-label">{t.activation}</span>
           <select
-            className="tf-select tf-select--dock"
+            className="nn-select nn-select--dock"
             value={activation}
             onChange={(e) => onActivationChange(e.target.value as CnnActivationId)}
           >
@@ -85,10 +85,10 @@ export function CnnTrainingPanel({
             ))}
           </select>
         </label>
-        <label className="tf-training-field">
-          <span className="tf-training-label">{t.regularization}</span>
+        <label className="network-training-field">
+          <span className="network-training-label">{t.regularization}</span>
           <select
-            className="tf-select tf-select--dock"
+            className="nn-select nn-select--dock"
             value={regularization}
             onChange={(e) => onRegularizationChange(e.target.value as CnnRegularizationId)}
           >
@@ -99,10 +99,10 @@ export function CnnTrainingPanel({
             ))}
           </select>
         </label>
-        <label className="tf-training-field">
-          <span className="tf-training-label">{t.regularizationRate}</span>
+        <label className="network-training-field">
+          <span className="network-training-label">{t.regularizationRate}</span>
           <select
-            className="tf-select tf-select--dock"
+            className="nn-select nn-select--dock"
             value={regularizationRate}
             disabled={regularization === "none"}
             onChange={(e) => onRegularizationRateChange(Number(e.target.value))}

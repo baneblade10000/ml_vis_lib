@@ -21,33 +21,33 @@ export function NetworkInspector({
 
   if (!node && !edge) {
     return (
-      <div className="tf-network-inspector" id="network-inspector">
-        <div className="tf-network-inspector-empty">{t.inspectorEmpty}</div>
+      <div className="nn-network-inspector" id="network-inspector">
+        <div className="nn-network-inspector-empty">{t.inspectorEmpty}</div>
       </div>
     );
   }
 
   if (edge) {
     return (
-      <div className="tf-network-inspector" id="network-inspector">
-        <div className="tf-network-inspector-title">{t.inspectorEdge}</div>
-        <div className="tf-network-inspector-row">
+      <div className="nn-network-inspector" id="network-inspector">
+        <div className="nn-network-inspector-title">{t.inspectorEdge}</div>
+        <div className="nn-network-inspector-row">
           <span className="label">{t.inspectorFrom}</span>
           <span className="value">{edge.source.id}</span>
         </div>
-        <div className="tf-network-inspector-row">
+        <div className="nn-network-inspector-row">
           <span className="label">{t.inspectorTo}</span>
           <span className="value">{edge.dest.id}</span>
         </div>
-        <div className="tf-network-inspector-row">
+        <div className="nn-network-inspector-row">
           <span className="label">{t.inspectorWeight}</span>
           <span className="value">{edge.weight.toFixed(4)}</span>
         </div>
-        <div className="tf-network-inspector-row">
+        <div className="nn-network-inspector-row">
           <span className="label">{t.inspectorGradient}</span>
           <span className="value">{linkPartialDerivative(edge).toFixed(6)}</span>
         </div>
-        <button type="button" className="tf-btn tf-btn--ghost tf-btn--sm" onClick={() => onRemoveEdge(edge.id)}>
+        <button type="button" className="nn-btn nn-btn--ghost nn-btn--sm" onClick={() => onRemoveEdge(edge.id)}>
           {t.removeEdge}
         </button>
       </div>
@@ -57,24 +57,24 @@ export function NetworkInspector({
   if (!node) return null;
 
   return (
-    <div className="tf-network-inspector" id="network-inspector">
-      <div className="tf-network-inspector-title">{node.label ?? node.kind}</div>
-      <div className="tf-network-inspector-row">
+    <div className="nn-network-inspector" id="network-inspector">
+      <div className="nn-network-inspector-title">{node.label ?? node.kind}</div>
+      <div className="nn-network-inspector-row">
         <span className="label">{t.inspectorKind}</span>
         <span className="value">{node.kind}</span>
       </div>
-      <div className="tf-network-inspector-row">
+      <div className="nn-network-inspector-row">
         <span className="label">{t.inspectorOutput}</span>
         <span className="value">{node.output.toFixed(4)}</span>
       </div>
       {node.kind !== "input" && node.kind !== "sum" && (
-        <div className="tf-network-inspector-row">
+        <div className="nn-network-inspector-row">
           <span className="label">{t.inspectorBias}</span>
           <span className="value">{node.bias.toFixed(4)}</span>
         </div>
       )}
       {node.kind !== "input" && node.kind !== "output" && (
-        <button type="button" className="tf-btn tf-btn--ghost tf-btn--sm" onClick={() => onRemoveNode(node.id)}>
+        <button type="button" className="nn-btn nn-btn--ghost nn-btn--sm" onClick={() => onRemoveNode(node.id)}>
           {t.removeNode}
         </button>
       )}

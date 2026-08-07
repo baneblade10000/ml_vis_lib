@@ -12,13 +12,13 @@ export function AutogradPalette({ onAddOp }: { onAddOp: (op: AutogradOp) => void
   const t = useAutogradMessages();
 
   return (
-    <div className="tf-network-palette ag-palette" data-testid="autograd-palette">
-      <div className="tf-network-palette-title">{t.blocks}</div>
-      <div className="tf-network-palette-items ag-palette-items">
+    <div className="nn-network-palette ag-palette" data-testid="autograd-palette">
+      <div className="nn-network-palette-title">{t.blocks}</div>
+      <div className="nn-network-palette-items ag-palette-items">
         {AUTOGRAD_PALETTE_OPS.map((op) => (
           <div
             key={op}
-            className="tf-network-palette-item ag-palette-item"
+            className="nn-network-palette-item ag-palette-item"
             draggable
             role="button"
             tabIndex={0}
@@ -33,12 +33,12 @@ export function AutogradPalette({ onAddOp }: { onAddOp: (op: AutogradOp) => void
             }}
             title={t.opLabels[op]}
           >
-            <span className="tf-network-palette-icon ag-palette-icon">{OP_SPECS[op].symbol}</span>
-            <span className="tf-network-palette-label">{t.opLabels[op]}</span>
+            <span className="nn-network-palette-icon ag-palette-icon">{OP_SPECS[op].symbol}</span>
+            <span className="nn-network-palette-label">{t.opLabels[op]}</span>
           </div>
         ))}
       </div>
-      <p className="tf-network-palette-hint">{t.paletteHint}</p>
+      <p className="nn-network-palette-hint">{t.paletteHint}</p>
     </div>
   );
 }

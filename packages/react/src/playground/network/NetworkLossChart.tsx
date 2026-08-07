@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { inferYDomain, renderCurve, type LossHistoryPoint } from "@ml-vis/core";
 
-const TRAIN_STROKE = "rgb(148, 163, 184)"; // --tf-text-muted
-const TEST_STROKE = "rgb(15, 23, 42)"; // --tf-text
+const TRAIN_STROKE = "rgb(148, 163, 184)"; // --nn-text-muted
+const TEST_STROKE = "rgb(15, 23, 42)"; // --nn-text
 const CHART_CSS_HEIGHT = 72;
 
 export interface NetworkLossChartProps {
@@ -79,24 +79,24 @@ export function NetworkLossChart({
   }, [history]);
 
   return (
-    <div className="tf-loss-chart-wrap">
-      <div className="tf-loss-chart-label">
+    <div className="nn-loss-chart-wrap">
+      <div className="nn-loss-chart-label">
         <span>{title}</span>
-        <div className="tf-loss-chart-legend">
+        <div className="nn-loss-chart-legend">
           <span className="legend-train">{trainLabel}</span>
           <span className="legend-test">{testLabel}</span>
         </div>
       </div>
       <canvas
         ref={canvasRef}
-        className="tf-linechart"
+        className="nn-linechart"
         role="img"
         aria-label={`${title}: ${trainLabel} ${lossTrain.toFixed(3)}, ${testLabel} ${lossTest.toFixed(3)}`}
       />
-      <div className="tf-loss-chart-values">
-        <span className="tf-loss-chart-values__test">{lossTest.toFixed(3)}</span>
-        <span className="tf-loss-chart-values__sep">/</span>
-        <span className="tf-loss-chart-values__train">{lossTrain.toFixed(3)}</span>
+      <div className="nn-loss-chart-values">
+        <span className="nn-loss-chart-values__test">{lossTest.toFixed(3)}</span>
+        <span className="nn-loss-chart-values__sep">/</span>
+        <span className="nn-loss-chart-values__train">{lossTrain.toFixed(3)}</span>
       </div>
     </div>
   );

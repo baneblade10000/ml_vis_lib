@@ -16,7 +16,7 @@ import {
   type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { ComputationalGraph, GraphNodeKind, TfDataMode, TfProblemType } from "@ml-vis/core";
+import type { ComputationalGraph, GraphNodeKind, NetworkDataMode, NetworkProblemType } from "@ml-vis/core";
 import {
   flowKindFromDrag,
   graphToFlow,
@@ -41,8 +41,8 @@ export interface ReactFlowNetworkGraphProps {
   graph: ComputationalGraph;
   enabledFeatures: Record<string, boolean>;
   discretize?: boolean;
-  dataMode?: TfDataMode;
-  problemType?: TfProblemType;
+  dataMode?: NetworkDataMode;
+  problemType?: NetworkProblemType;
   trainData?: { x: number; y: number; label: number }[];
   lossTest?: number;
   lossTrain?: number;
@@ -198,6 +198,10 @@ function ReactFlowNetworkGraphInner({
 
   const topologyKey = `${graph.inputIds.join(",")};${[...graph.nodes.keys()].sort().join(",")}`;
 
+  // Freeze loss labels while Play runs so flowOptions doesn't rebuild every tick.
+  const displayLossTest = trainingLive ? undefined : lossTest;
+  const displayLossTrain = trainingLive ? undefined : lossTrain;
+
   const flowOptions = useMemo(
     () => ({
       enabledFeatures,
@@ -205,15 +209,24 @@ function ReactFlowNetworkGraphInner({
       selectedNodeId,
       selectedEdgeId,
       trainData,
-      lossTest: trainingLive ? undefined : lossTest,
-      lossTrain: trainingLive ? undefined : lossTrain,
+      lossTest: displayLossTest,
+      lossTrain: displayLossTrain,
       paintGeneration,
       edgeVizMode,
       learningRate,
     }),
-    trainingLive
-      ? [enabledFeatures, discretize, selectedNodeId, selectedEdgeId, trainData, trainingLive, paintGeneration, edgeVizMode, learningRate]
-      : [enabledFeatures, discretize, selectedNodeId, selectedEdgeId, trainData, lossTest, lossTrain, trainingLive, paintGeneration, edgeVizMode, learningRate],
+    [
+      enabledFeatures,
+      discretize,
+      selectedNodeId,
+      selectedEdgeId,
+      trainData,
+      displayLossTest,
+      displayLossTrain,
+      paintGeneration,
+      edgeVizMode,
+      learningRate,
+    ],
   );
 
   const mapped = useMemo(
@@ -441,12 +454,12 @@ function ReactFlowNetworkGraphInner({
 
   return (
     <div
-      className={`tf-flow-wrap${fillHeight ? " tf-flow-wrap--fill" : ""}`}
+      className={`nn-flow-wrap${fillHeight ? " nn-flow-wrap--fill" : ""}`}
       ref={reactFlowWrapper}
       style={fillHeight ? undefined : { height }}
     >
       <div
-        className={`tf-flow-canvas${animateLayout ? " tf-flow-canvas--animate" : ""}`}
+        className={`nn-flow-canvas${animateLayout ? " nn-flow-canvas--animate" : ""}`}
         style={fillHeight ? undefined : { width: "100%", height }}
       >
       <ReactFlow
@@ -475,12 +488,12 @@ function ReactFlowNetworkGraphInner({
         nodesConnectable
         elementsSelectable
       >
-        <Background gap={20} size={1} color="var(--tf-border)" />
+        <Background gap={20} size={1} color="var(--nn-border)" />
         <Controls showInteractive={false} position="bottom-right" />
       </ReactFlow>
       </div>
 
-      {children && <div className="tf-flow-overlays">{children}</div>}
+      {children && <div className="nn-flow-overlays">{children}</div>}
     </div>
   );
 }

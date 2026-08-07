@@ -68,8 +68,8 @@ export function CnnInspector({ selectedLayerId, kernels, info }: CnnInspectorPro
   if (!selectedLayerId || !info) {
     return (
       <div className="cnn-inspector">
-        <h4 className="tf-flow-dock-title">{t.inspectorKind}</h4>
-        <p className="tf-arch-hint">{t.inspectorEmpty}</p>
+        <h4 className="nn-flow-dock-title">{t.inspectorKind}</h4>
+        <p className="nn-arch-hint">{t.inspectorEmpty}</p>
       </div>
     );
   }
@@ -80,7 +80,7 @@ export function CnnInspector({ selectedLayerId, kernels, info }: CnnInspectorPro
 
   return (
     <div className="cnn-inspector">
-      <h4 className="tf-flow-dock-title">{info.label}</h4>
+      <h4 className="nn-flow-dock-title">{info.label}</h4>
       <div className="cnn-inspector-rows">
         <div className="cnn-inspector-row">
           <span className="cnn-inspector-key">{t.inspectorKind}</span>
@@ -101,13 +101,13 @@ export function CnnInspector({ selectedLayerId, kernels, info }: CnnInspectorPro
       </div>
       {is2d && (
         <>
-          <span className="tf-flow-dock-title">{t.inspectorKernels}</span>
+          <span className="nn-flow-dock-title">{t.inspectorKernels}</span>
           <KernelGrid2D maps={kernelData as number[][][]} />
         </>
       )}
       {is1d && (
         <>
-          <span className="tf-flow-dock-title">{t.inspectorKernels}</span>
+          <span className="nn-flow-dock-title">{t.inspectorKernels}</span>
           <KernelGrid1D vectors={kernelData as number[][]} />
         </>
       )}

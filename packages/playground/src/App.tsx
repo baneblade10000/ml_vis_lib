@@ -4,7 +4,7 @@ import { MobileStub } from "./components/MobileStub";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { CatalogPage } from "./pages/CatalogPage";
 import { VizPage } from "./pages/VizPage";
-import "./tf-playground.css";
+import "./network-playground.css";
 
 function AppContent() {
   const location = useLocation();
@@ -16,8 +16,8 @@ function AppContent() {
   }
 
   return (
-    <div className="tf-app">
-      <div className={`tf-page${isCatalog ? "" : " tf-page--compact"}`}>
+    <div className="nn-app">
+      <div className={`nn-page${isCatalog ? "" : " nn-page--compact"}`}>
         <Routes>
           <Route path="/" element={<CatalogPage />} />
           <Route path="/viz/:id" element={<VizPage />} />

@@ -1,22 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  CnnEngine,
-  DEFAULT_CNN_CONFIG,
-  CNN_DATASET_IDS_2D,
   CNN_DATASET_IDS_1D,
+  CNN_DATASET_IDS_2D,
+  DEFAULT_CNN_CONFIG,
+  TrainWorkerClient,
+  canUseTrainWorkers,
   type CnnActivationId,
   type CnnMode,
   type CnnRegularizationId,
+  type CnnTrainSnapshot,
   type FeatureMapSnapshot,
   type ImageExample,
   type LayerShape,
   type LossHistoryPoint,
   type PlaygroundOptimizerId,
   type SignalExample,
+  type TrainSnapshot,
 } from "@ml-vis/core";
+import { createCnnTrainWorker } from "@ml-vis/core/workers/createWorkers";
 import { NetworkLossChart } from "../network/NetworkLossChart";
 import { CnnFlowGraph } from "./CnnFlowGraph";
-import { CnnPalette } from "./CnnPalette";
 import { CnnArchitecturePanel } from "./CnnArchitecturePanel";
 import { CnnTrainingPanel } from "./CnnTrainingPanel";
 import { CnnDataPanel } from "./CnnDataPanel";
@@ -58,394 +61,309 @@ function specKindLabel(kind: string, t: ReturnType<typeof useCnnMessages>): stri
   }
 }
 
+function isCnnSnapshot(s: TrainSnapshot | null): s is CnnTrainSnapshot {
+  return s?.kind === "cnn";
+}
+
 export function ConvolutionalNetworkPlayground({
   initialMode = "2d",
   toolbarStart,
   toolbarEnd,
 }: ConvolutionalNetworkPlaygroundProps) {
-  // Lazy init: engine construction runs dataset generation + a forward pass.
-  const engineRef = useRef<CnnEngine | null>(null);
-  if (engineRef.current === null) {
-    const config = initialMode === "1d" ? DEFAULT_CNN_CONFIG["1d"] : DEFAULT_CNN_CONFIG["2d"];
-    engineRef.current = new CnnEngine(structuredClone(config));
-  }
   const t = useCnnMessages();
+  const initialConfig = initialMode === "1d" ? DEFAULT_CNN_CONFIG["1d"] : DEFAULT_CNN_CONFIG["2d"];
 
-  const [version, setVersion] = useState(0);
-  const bump = useCallback(() => setVersion((n) => n + 1), []);
+  const [snapshot, setSnapshot] = useState<CnnTrainSnapshot | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [paintGeneration, setPaintGeneration] = useState(0);
   const requestPaint = useCallback(() => setPaintGeneration((n) => n + 1), []);
 
-  const [playing, setPlaying] = useState(false);
-  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
-
-  // Refs that ferry mutable engine state to the imperative canvas painters.
   const featureMapRef = useRef<FeatureMapStore>({});
-  const statsRef = useRef<CnnTrainingStats>(engineRef.current.stats());
+  const statsRef = useRef<CnnTrainingStats>({
+    epoch: 0,
+    lossTrain: 0,
+    lossTest: 0,
+    accTrain: 0,
+    accTest: 0,
+  });
   const trainingLiveRef = useRef(false);
   trainingLiveRef.current = playing;
+  const clientRef = useRef<TrainWorkerClient | null>(null);
+  const playingRef = useRef(false);
+  playingRef.current = playing;
 
-  const [stats, setStats] = useState<CnnTrainingStats>(() => engineRef.current!.stats());
-  const [lossHistory, setLossHistory] = useState<LossHistoryPoint[]>(() =>
-    engineRef.current!.lossHistory.map((p) => ({ ...p })),
+  const applySnapshot = useCallback(
+    (snap: CnnTrainSnapshot) => {
+      setSnapshot(snap);
+      statsRef.current = { ...snap.stats };
+      const store: FeatureMapStore = {};
+      for (const m of snap.featureMaps) store[m.layerId] = m;
+      featureMapRef.current = store;
+      requestPaint();
+      paintAllFeatureMaps();
+    },
+    [requestPaint],
   );
 
-  const engine = engineRef.current!;
-
-  const syncState = useCallback(() => {
-    const e = engineRef.current!;
-    statsRef.current = e.stats();
-    setStats({ ...statsRef.current });
-    setLossHistory(e.lossHistory.map((p) => ({ ...p })));
-    // Refresh feature-map snapshots for the inspected example.
-    const maps = e.featureMaps();
-    const store: FeatureMapStore = {};
-    for (const m of maps) store[m.layerId] = m;
-    featureMapRef.current = store;
+  // Boot train worker (or fall back to a same-thread shim via Worker if unavailable — skip).
+  useEffect(() => {
+    if (!canUseTrainWorkers()) {
+      console.warn("[cnn] Web Workers unavailable; CNN playground requires Workers");
+      return;
+    }
+    const client = new TrainWorkerClient({
+      createWorker: createCnnTrainWorker,
+      onTick: (s) => {
+        if (isCnnSnapshot(s)) applySnapshot(s);
+      },
+      onError: (message) => console.error("[cnn train worker]", message),
+    });
+    clientRef.current = client;
+    let cancelled = false;
+    void client.init(structuredClone(initialConfig)).then((s) => {
+      if (!cancelled && isCnnSnapshot(s)) applySnapshot(s);
+    });
+    return () => {
+      cancelled = true;
+      client.dispose();
+      clientRef.current = null;
+    };
+    // Only boot once for the initial mode; mode switches go through commands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Initial paint on mount and whenever the version/paint generation bumps.
   useEffect(() => {
-    syncState();
     paintAllFeatureMapsAfterCommit();
-  }, [version, paintGeneration, syncState]);
+  }, [paintGeneration, snapshot]);
 
-  // Play loop: run a target number of epochs/sec, repainting periodically.
+  // Drive play/pause on the worker.
   useEffect(() => {
-    if (!playing) return;
-    const epochsPerSec = 12;
-    let raf = 0;
-    let lastTime = performance.now();
-    let lastPaint = 0;
-    let epochBank = 0;
-    const paintIntervalMs = 1000 / 20;
-    const loop = (now: number) => {
-      const e = engineRef.current!;
-      const dt = Math.min((now - lastTime) / 1000, 0.1);
-      lastTime = now;
-      epochBank = Math.min(epochBank + dt * epochsPerSec, 2);
-      const steps = Math.floor(epochBank);
-      epochBank -= steps;
-      if (steps > 0) {
-        for (let i = 0; i < steps; i++) e.trainEpoch();
-        if (now - lastPaint >= paintIntervalMs) {
-          e.refreshMetrics();
-          e.pushLossHistory();
-          const maps = e.featureMaps();
-          const store: FeatureMapStore = {};
-          for (const m of maps) store[m.layerId] = m;
-          featureMapRef.current = store;
-          statsRef.current = e.stats();
-          setStats({ ...statsRef.current });
-          setLossHistory(e.lossHistory.map((p) => ({ ...p })));
-          paintAllFeatureMaps();
-          lastPaint = now;
-        }
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    const client = clientRef.current;
+    if (!client) return;
+    if (playing) client.play(12);
+    else client.pause();
   }, [playing]);
 
-  // On pause, refresh full-quality metrics + snapshots.
-  useEffect(() => {
-    if (playing) return;
-    const e = engineRef.current!;
-    e.refreshMetrics();
-    e.pushLossHistory();
-    syncState();
-    requestPaint();
-    bump();
-  }, [playing, syncState, requestPaint, bump]);
+  const cmd = useCallback((name: string, args?: unknown) => {
+    clientRef.current?.command(name, args);
+  }, []);
 
   const reset = useCallback(() => {
-    engineRef.current!.reset();
     setPlaying(false);
     setSelectedLayerId(null);
-    syncState();
-    requestPaint();
-    bump();
-  }, [syncState, requestPaint, bump]);
+    clientRef.current?.rebuild("reset");
+  }, []);
 
   const resetWeights = useCallback(() => {
-    engineRef.current!.resetWeights();
     setPlaying(false);
-    syncState();
-    requestPaint();
-    bump();
-  }, [syncState, requestPaint, bump]);
+    clientRef.current?.rebuild("resetWeights");
+  }, []);
 
   const step = useCallback(() => {
-    engineRef.current!.step();
-    syncState();
-    requestPaint();
-    bump();
-  }, [syncState, requestPaint, bump]);
+    setPlaying(false);
+    clientRef.current?.step();
+  }, []);
 
-  const onModeChange = useCallback(
-    (mode: CnnMode) => {
-      engineRef.current!.setMode(mode);
-      setPlaying(false);
-      setSelectedLayerId(null);
-      syncState();
-      requestPaint();
-      bump();
-    },
-    [syncState, requestPaint, bump],
-  );
+  const onModeChange = useCallback((mode: CnnMode) => {
+    setPlaying(false);
+    setSelectedLayerId(null);
+    clientRef.current?.rebuild("mode", mode);
+  }, []);
 
-  const onDatasetChange = useCallback(
-    (id: string) => {
-      engineRef.current!.setDataset(id as never);
-      setPlaying(false);
-      syncState();
-      requestPaint();
-      bump();
-    },
-    [syncState, requestPaint, bump],
-  );
+  const onDatasetChange = useCallback((id: string) => {
+    setPlaying(false);
+    cmd("setDataset", { dataset: id });
+  }, [cmd]);
 
   const onActivationChange = useCallback(
     (a: CnnActivationId) => {
-      engineRef.current!.setActivation(a);
-      syncState();
-      requestPaint();
-      bump();
+      cmd("setActivation", { activation: a });
     },
-    [syncState, requestPaint, bump],
+    [cmd],
   );
 
-  const onLearningRateChange = useCallback((lr: number) => {
-    engineRef.current!.setLearningRate(lr);
-  }, []);
+  const onLearningRateChange = useCallback(
+    (lr: number) => {
+      cmd("setLearningRate", { lr });
+    },
+    [cmd],
+  );
 
-  const onOptimizerChange = useCallback((optimizer: PlaygroundOptimizerId) => {
-    engineRef.current!.setOptimizer(optimizer);
-    bump();
-  }, [bump]);
+  const onOptimizerChange = useCallback(
+    (optimizer: PlaygroundOptimizerId) => {
+      cmd("setOptimizer", { optimizer });
+    },
+    [cmd],
+  );
 
-  const onBatchSizeChange = useCallback((bs: number) => {
-    engineRef.current!.setBatchSize(bs);
-  }, []);
+  const onBatchSizeChange = useCallback(
+    (bs: number) => {
+      cmd("setBatchSize", { bs });
+    },
+    [cmd],
+  );
 
-  const onRegularizationChange = useCallback((regularization: CnnRegularizationId) => {
-    engineRef.current!.setRegularization(regularization);
-    bump();
-  }, [bump]);
+  const onRegularizationChange = useCallback(
+    (regularization: CnnRegularizationId) => {
+      cmd("setRegularization", { regularization });
+    },
+    [cmd],
+  );
 
-  const onRegularizationRateChange = useCallback((rate: number) => {
-    engineRef.current!.setRegularizationRate(rate);
-    bump();
-  }, [bump]);
+  const onRegularizationRateChange = useCallback(
+    (rate: number) => {
+      cmd("setRegularizationRate", { rate });
+    },
+    [cmd],
+  );
 
   const onNoiseChange = useCallback(
     (n: number) => {
-      engineRef.current!.updateDataParams({ noise: n });
-      syncState();
-      requestPaint();
-      bump();
+      setPlaying(false);
+      cmd("updateDataParams", { noise: n });
     },
-    [syncState, requestPaint, bump],
+    [cmd],
   );
 
   const onTrainRatioChange = useCallback(
     (r: number) => {
-      engineRef.current!.updateDataParams({ percTrainData: r });
-      syncState();
-      requestPaint();
-      bump();
+      setPlaying(false);
+      cmd("updateDataParams", { percTrainData: r });
     },
-    [syncState, requestPaint, bump],
+    [cmd],
   );
 
   const onRegenerateData = useCallback(() => {
-    engineRef.current!.regenerateData();
-    syncState();
-    requestPaint();
-    bump();
-  }, [syncState, requestPaint, bump]);
+    setPlaying(false);
+    cmd("regenerateData");
+  }, [cmd]);
 
-  // Architecture mutators — operate on config layer specs, then rebuild.
   const selectedSpecIndex = useMemo(() => {
-    if (!selectedLayerId) return null;
-    const layer = engine.layers.find((l) => l.id === selectedLayerId);
-    if (!layer) return null;
-    // The visible pipeline = input + config.layers + output; map back to spec idx.
-    const idx = engine.layers.indexOf(layer) - 1;
-    return idx >= 0 && idx < engine.config.layers.length ? idx : null;
-  }, [engine, selectedLayerId]);
-
-  const onAddLayer = useCallback(
-    (kind: "conv" | "pool" | "dense") => {
-      const mode = engineRef.current!.config.mode;
-      const convKind = mode === "2d" ? "conv2d" : "conv1d";
-      const poolKind = mode === "2d" ? "pool2d" : "pool1d";
-      const specKind = kind === "conv" ? convKind : kind === "pool" ? poolKind : "dense";
-      // Insert before the dense/output head if present, else at end.
-      const cfg = engineRef.current!.config;
-      let at = cfg.layers.length;
-      const headIdx = cfg.layers.findIndex((l) => l.kind === "flatten" || l.kind === "dense");
-      if (headIdx >= 0 && (specKind === "conv2d" || specKind === "conv1d" || specKind === "pool2d" || specKind === "pool1d")) {
-        at = headIdx;
-      }
-      const spec =
-        specKind === "conv2d" || specKind === "conv1d"
-          ? { kind: specKind as "conv2d" | "conv1d", filters: 4, kernelSize: mode === "2d" ? 3 : 5, activation: cfg.activation }
-          : specKind === "pool2d" || specKind === "pool1d"
-            ? { kind: specKind as "pool2d" | "pool1d", poolKind: "max" as const }
-            : { kind: "dense" as const, units: 1, activation: "linear" as const };
-      engineRef.current!.addLayer(spec, at);
-      setPlaying(false);
-      syncState();
-      requestPaint();
-      bump();
-    },
-    [syncState, requestPaint, bump],
-  );
+    if (!snapshot || !selectedLayerId) return null;
+    const idx = snapshot.layers.findIndex((l) => l.id === selectedLayerId) - 1;
+    return idx >= 0 && idx < snapshot.config.layers.length ? idx : null;
+  }, [snapshot, selectedLayerId]);
 
   const onRemoveLayer = useCallback(
     (index: number) => {
-      engineRef.current!.removeLayer(index);
-      setSelectedLayerId(null);
       setPlaying(false);
-      syncState();
-      requestPaint();
-      bump();
+      setSelectedLayerId(null);
+      cmd("removeLayer", { index });
     },
-    [syncState, requestPaint, bump],
+    [cmd],
   );
 
   const onSetFilters = useCallback(
     (index: number, filters: number) => {
-      engineRef.current!.setLayerFilters(index, filters);
       setPlaying(false);
-      syncState();
-      requestPaint();
-      bump();
+      cmd("setLayerFilters", { index, filters });
     },
-    [syncState, requestPaint, bump],
+    [cmd],
   );
 
   const onSetKernelSize = useCallback(
     (index: number, kernelSize: number) => {
-      const e = engineRef.current!;
-      const spec = e.config.layers[index];
-      if (!spec) return;
-      spec.kernelSize = kernelSize;
-      e.rebuildAfterSpecEdit(index);
       setPlaying(false);
-      syncState();
-      requestPaint();
-      bump();
+      cmd("setLayerKernelSize", { index, kernelSize });
     },
-    [syncState, requestPaint, bump],
+    [cmd],
   );
 
   const onSetUnits = useCallback(
     (index: number, units: number) => {
-      engineRef.current!.setLayerUnits(index, units);
       setPlaying(false);
-      syncState();
-      requestPaint();
-      bump();
+      cmd("setLayerUnits", { index, units });
     },
-    [syncState, requestPaint, bump],
+    [cmd],
   );
 
   const onSetPoolKind = useCallback(
     (index: number, poolKind: "max" | "avg") => {
-      const e = engineRef.current!;
-      const spec = e.config.layers[index];
-      if (!spec) return;
-      spec.poolKind = poolKind;
-      e.rebuildAfterSpecEdit(index);
       setPlaying(false);
-      syncState();
-      requestPaint();
-      bump();
+      cmd("setLayerPoolKind", { index, poolKind });
     },
-    [syncState, requestPaint, bump],
+    [cmd],
   );
 
   const onSelectExample = useCallback(
     (index: number) => {
-      engineRef.current!.setInspectedExample(index);
-      syncState();
-      requestPaint();
-      bump();
+      clientRef.current?.inspect(index);
     },
-    [syncState, requestPaint, bump],
+    [],
   );
 
-  // Derive display data.
-  const mode = engine.config.mode;
+  if (!snapshot) {
+    return (
+      <div className="nn-playground nn-playground--immersive">
+        <div className="nn-immersive-toolbar">
+          <span className="nn-toolbar-stat">
+            <span className="label">{t.training}</span>
+            <span className="value">…</span>
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const mode = snapshot.config.mode;
   const datasetIds = mode === "2d" ? CNN_DATASET_IDS_2D : CNN_DATASET_IDS_1D;
   const datasetLabels = mode === "2d" ? t.datasetLabels2D : t.datasetLabels1D;
-  const galleryExamples = (engine.testData.length ? engine.testData : engine.trainData) as (
-    ImageExample | SignalExample
-  )[];
-  const galleryPredictions = galleryExamples.map((ex) => engine.predict(ex));
-  const inspectedIdx = engine.inspectedExampleIndex;
+  const galleryExamples = snapshot.galleryExamples as Array<ImageExample | SignalExample>;
+  const galleryPredictions = snapshot.galleryPredictions;
+  const inspectedIdx = snapshot.inspectedExampleIndex;
+  const featureMaps: FeatureMapSnapshot[] = snapshot.featureMaps;
+  const stats = snapshot.stats;
+  const lossHistory: LossHistoryPoint[] = snapshot.lossHistory;
+  const loss = snapshot.loss;
+  const probability = snapshot.probability;
+  const pipeline = { mode, layers: snapshot.layers };
 
-  const featureMaps: FeatureMapSnapshot[] = Object.values(featureMapRef.current);
-  const loss = stats.lossTest;
-  const probability = (() => {
-    const data = engine.trainData;
-    if (!data.length) return 0.5;
-    const idx = Math.min(inspectedIdx, data.length - 1);
-    return engine.predict(data[idx]);
-  })();
-
-  // Inspector info for the selected layer.
-  const inspectorInfo = useMemo(() => {
+  const inspectorInfo = (() => {
     if (!selectedLayerId) return null;
-    const layer = engine.layers.find((l) => l.id === selectedLayerId);
-    if (!layer) return null;
-    const shapes = engine.pipelineShapes();
-    const idx = engine.layers.indexOf(layer);
-    const inShape = shapes[idx - 1];
-    const outShape = shapes[idx];
+    const idx = snapshot.layers.findIndex((l) => l.id === selectedLayerId);
+    if (idx < 0) return null;
+    const layer = snapshot.layers[idx]!;
+    const inShape = snapshot.layers[idx - 1]?.shape;
+    const outShape = layer.shape;
     return {
       kind: specKindLabel(layer.kind, t),
-      label: formatCnnNodeLabel(layer, t),
+      label: formatCnnNodeLabel({ kind: layer.kind, label: () => layer.label }, t),
       inputShape: inShape ? shapeLabel(inShape) : "—",
       outputShape: outShape ? shapeLabel(outShape) : "—",
-      params: layer.paramCount(),
+      params: layer.params,
     };
-  }, [engine, selectedLayerId, t, version]);
-
-  const kernelSnapshots = useMemo(() => engine.kernelSnapshots(), [engine, version]);
+  })();
 
   return (
-    <div className="tf-playground tf-playground--immersive">
-      <div className="tf-immersive-toolbar">
-        <div className="tf-toolbar-group tf-toolbar-group--actions">
+    <div className="nn-playground nn-playground--immersive">
+      <div className="nn-immersive-toolbar">
+        <div className="nn-toolbar-group nn-toolbar-group--actions">
           {toolbarStart}
-          <button type="button" className="tf-btn tf-btn--ghost" onClick={reset}>
+          <button type="button" className="nn-btn nn-btn--ghost" onClick={reset}>
             {t.reset}
           </button>
           <button
             type="button"
-            className={`tf-btn tf-btn--primary${playing ? " playing" : ""}`}
+            className={`nn-btn nn-btn--primary${playing ? " playing" : ""}`}
             onClick={() => setPlaying((p) => !p)}
           >
             {playing ? t.pause : t.play}
           </button>
-          <button type="button" className="tf-btn tf-btn--secondary" onClick={step}>
+          <button type="button" className="nn-btn nn-btn--secondary" onClick={step}>
             {t.step}
           </button>
-          <div className="tf-flat-switch" role="group" aria-label={t.mode}>
+          <div className="nn-flat-switch" role="group" aria-label={t.mode}>
             <button
               type="button"
-              className={`tf-flat-switch__btn${mode === "1d" ? " selected" : ""}`}
+              className={`nn-flat-switch__btn${mode === "1d" ? " selected" : ""}`}
               onClick={() => onModeChange("1d")}
             >
               {t.mode1D}
             </button>
             <button
               type="button"
-              className={`tf-flat-switch__btn${mode === "2d" ? " selected" : ""}`}
+              className={`nn-flat-switch__btn${mode === "2d" ? " selected" : ""}`}
               onClick={() => onModeChange("2d")}
             >
               {t.mode2D}
@@ -453,20 +371,20 @@ export function ConvolutionalNetworkPlayground({
           </div>
         </div>
 
-        <div className="tf-toolbar-group tf-toolbar-group--params">
-          <div className="tf-toolbar-stat">
+        <div className="nn-toolbar-group nn-toolbar-group--params">
+          <div className="nn-toolbar-stat">
             <span className="label">{t.epoch}</span>
             <span className="value">{stats.epoch.toLocaleString()}</span>
           </div>
-          <div className="tf-toolbar-stat">
+          <div className="nn-toolbar-stat">
             <span className="label">{t.testAcc}</span>
             <span className="value">{(stats.accTest * 100).toFixed(0)}%</span>
           </div>
-          <div className="tf-toolbar-stat tf-toolbar-stat--train">
+          <div className="nn-toolbar-stat nn-toolbar-stat--train">
             <span className="label">{t.trainAcc}</span>
             <span className="value">{(stats.accTrain * 100).toFixed(0)}%</span>
           </div>
-          <div className="tf-toolbar-stat">
+          <div className="nn-toolbar-stat">
             <span className="label">{t.testLoss}</span>
             <span className="value">{stats.lossTest.toFixed(3)}</span>
           </div>
@@ -474,14 +392,13 @@ export function ConvolutionalNetworkPlayground({
         </div>
       </div>
 
-      <div className="tf-immersive-body">
+      <div className="nn-immersive-body">
         <CnnFlowGraph
-          engine={engine}
+          pipeline={pipeline}
           selectedNodeId={selectedLayerId}
           paintGeneration={paintGeneration}
           featureMaps={featureMaps}
           onSelectNode={setSelectedLayerId}
-          onDropLayer={onAddLayer}
           featureMapRef={featureMapRef}
           statsRef={statsRef}
           trainingLiveRef={trainingLiveRef}
@@ -489,13 +406,12 @@ export function ConvolutionalNetworkPlayground({
           probability={probability}
           fillHeight
         >
-          <aside className="tf-flow-dock tf-flow-dock--left tf-flow-dock--wide">
-            <CnnPalette onAddLayer={onAddLayer} />
+          <aside className="nn-flow-dock nn-flow-dock--left nn-flow-dock--wide">
             <CnnArchitecturePanel
-              layers={engine.config.layers}
+              layers={snapshot.config.layers}
               selectedIndex={selectedSpecIndex}
               onSelectLayer={(idx) => {
-                const layer = engine.layers[idx + 1];
+                const layer = snapshot.layers[idx + 1];
                 setSelectedLayerId(layer ? layer.id : null);
               }}
               onRemoveLayer={onRemoveLayer}
@@ -504,31 +420,31 @@ export function ConvolutionalNetworkPlayground({
               onSetUnits={onSetUnits}
               onSetPoolKind={onSetPoolKind}
             />
-            <div className="tf-flow-dock-section">
+            <div className="nn-flow-dock-section">
               <button
                 type="button"
-                className="tf-btn tf-btn--secondary tf-reset-weights"
+                className="nn-btn nn-btn--secondary nn-reset-weights"
                 onClick={resetWeights}
               >
                 {t.resetWeights}
               </button>
             </div>
-            <div className="tf-flow-dock-section">
+            <div className="nn-flow-dock-section">
               <CnnGallery
                 mode={mode}
                 examples={galleryExamples}
                 predictions={galleryPredictions}
                 inspectedIndex={inspectedIdx}
                 onSelectExample={onSelectExample}
-                datasetId={engine.config.dataset}
+                datasetId={snapshot.config.dataset}
                 onSelectDataset={onDatasetChange}
                 datasetIds={datasetIds}
                 datasetLabels={datasetLabels}
               />
               <CnnDataPanel
-                batchSize={engine.config.batchSize}
-                noise={engine.config.noise}
-                percTrainData={engine.config.percTrainData}
+                batchSize={snapshot.config.batchSize}
+                noise={snapshot.config.noise}
+                percTrainData={snapshot.config.percTrainData}
                 onBatchSizeChange={onBatchSizeChange}
                 onNoiseChange={onNoiseChange}
                 onTrainRatioChange={onTrainRatioChange}
@@ -537,11 +453,11 @@ export function ConvolutionalNetworkPlayground({
             </div>
             <CnnInspector
               selectedLayerId={selectedLayerId}
-              kernels={kernelSnapshots}
+              kernels={snapshot.kernels}
               info={inspectorInfo}
             />
           </aside>
-          <aside className="tf-flow-dock tf-flow-dock--right">
+          <aside className="nn-flow-dock nn-flow-dock--right">
             <NetworkLossChart
               history={lossHistory}
               title={t.learningCurve}
@@ -551,11 +467,11 @@ export function ConvolutionalNetworkPlayground({
               lossTest={stats.lossTest}
             />
             <CnnTrainingPanel
-              learningRate={engine.config.learningRate}
-              optimizer={engine.config.optimizer}
-              activation={engine.config.activation}
-              regularization={engine.config.regularization}
-              regularizationRate={engine.config.regularizationRate}
+              learningRate={snapshot.config.learningRate}
+              optimizer={snapshot.config.optimizer}
+              activation={snapshot.config.activation}
+              regularization={snapshot.config.regularization}
+              regularizationRate={snapshot.config.regularizationRate}
               onLearningRateChange={onLearningRateChange}
               onOptimizerChange={onOptimizerChange}
               onActivationChange={onActivationChange}
@@ -563,13 +479,13 @@ export function ConvolutionalNetworkPlayground({
               onRegularizationRateChange={onRegularizationRateChange}
             />
             <div
-              className="tf-weight-legend tf-weight-legend--dock"
+              className="nn-weight-legend nn-weight-legend--dock"
               role="img"
               aria-label={t.weightsLegendAria}
             >
-              <span className="tf-weight-legend__title">{t.weightsLegend}</span>
-              <div className="tf-weight-legend__bar" />
-              <div className="tf-weight-legend__scale">
+              <span className="nn-weight-legend__title">{t.weightsLegend}</span>
+              <div className="nn-weight-legend__bar" />
+              <div className="nn-weight-legend__scale">
                 <span>−1</span>
                 <span>0</span>
                 <span>+1</span>

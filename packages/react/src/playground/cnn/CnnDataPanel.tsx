@@ -24,11 +24,11 @@ export function CnnDataPanel({
   const t = useCnnMessages();
 
   return (
-    <div className="tf-data-panel">
-      <div className="tf-slider-group tf-slider-group--dock">
-        <div className="tf-slider">
-          <div className="tf-slider-header">
-            <span className="tf-slider-name">{t.noise}</span>
+    <div className="nn-data-panel">
+      <div className="nn-slider-group nn-slider-group--dock">
+        <div className="nn-slider">
+          <div className="nn-slider-header">
+            <span className="nn-slider-name">{t.noise}</span>
             <span className="value">{noise.toFixed(2)}</span>
           </div>
           <input
@@ -41,9 +41,9 @@ export function CnnDataPanel({
             style={{ "--range-progress": `${(noise / 0.5) * 100}%` } as CSSProperties}
           />
         </div>
-        <div className="tf-slider">
-          <div className="tf-slider-header">
-            <span className="tf-slider-name">{t.trainRatio}</span>
+        <div className="nn-slider">
+          <div className="nn-slider-header">
+            <span className="nn-slider-name">{t.trainRatio}</span>
             <span className="value">{percTrainData}%</span>
           </div>
           <input
@@ -56,9 +56,9 @@ export function CnnDataPanel({
             style={{ "--range-progress": `${((percTrainData - 10) / 80) * 100}%` } as CSSProperties}
           />
         </div>
-        <div className="tf-slider">
-          <div className="tf-slider-header">
-            <span className="tf-slider-name">{t.batchSize}</span>
+        <div className="nn-slider">
+          <div className="nn-slider-header">
+            <span className="nn-slider-name">{t.batchSize}</span>
             <span className="value">{batchSize}</span>
           </div>
           <input
@@ -72,8 +72,8 @@ export function CnnDataPanel({
           />
         </div>
       </div>
-      <button type="button" className="tf-btn tf-btn--secondary tf-data-regen" onClick={onRegenerateData}>
-        <span className="tf-data-regen-icon" aria-hidden>
+      <button type="button" className="nn-btn nn-btn--secondary nn-data-regen" onClick={onRegenerateData}>
+        <span className="nn-data-regen-icon" aria-hidden>
           ↻
         </span>
         {t.regenerateData}

@@ -36,31 +36,31 @@ export function AutogradInspector({
 
   if (!node && !edge) {
     return (
-      <div className="tf-network-inspector">
-        <div className="tf-network-inspector-empty">{t.inspectorEmpty}</div>
+      <div className="nn-network-inspector">
+        <div className="nn-network-inspector-empty">{t.inspectorEmpty}</div>
       </div>
     );
   }
 
   if (edge) {
     return (
-      <div className="tf-network-inspector">
-        <div className="tf-network-inspector-title">{t.inspectorEdge}</div>
-        <div className="tf-network-inspector-row">
+      <div className="nn-network-inspector">
+        <div className="nn-network-inspector-title">{t.inspectorEdge}</div>
+        <div className="nn-network-inspector-row">
           <span className="label">{t.inspectorFrom}</span>
           <span className="value">{graph.getNode(edge.source)?.label ?? edge.source}</span>
         </div>
-        <div className="tf-network-inspector-row">
+        <div className="nn-network-inspector-row">
           <span className="label">{t.inspectorTo}</span>
           <span className="value">{graph.getNode(edge.target)?.label ?? edge.target}</span>
         </div>
         {showGrad && (
-          <div className="tf-network-inspector-row">
+          <div className="nn-network-inspector-row">
             <span className="label">{t.inspectorLocalDer}</span>
             <span className="value">{fmt(edge.localDer)}</span>
           </div>
         )}
-        <button type="button" className="tf-btn tf-btn--ghost tf-btn--sm" onClick={() => onRemoveEdge(edge.id)}>
+        <button type="button" className="nn-btn nn-btn--ghost nn-btn--sm" onClick={() => onRemoveEdge(edge.id)}>
           {t.removeEdge}
         </button>
       </div>
@@ -72,9 +72,9 @@ export function AutogradInspector({
   const isOutput = graph.outputId === node.id;
 
   return (
-    <div className="tf-network-inspector">
-      <div className="tf-network-inspector-title">{node.label ?? OP_SPECS[node.op].label}</div>
-      <div className="tf-network-inspector-row">
+    <div className="nn-network-inspector">
+      <div className="nn-network-inspector-title">{node.label ?? OP_SPECS[node.op].label}</div>
+      <div className="nn-network-inspector-row">
         <span className="label">{t.inspectorOp}</span>
         <span className="value">{t.opLabels[node.op]}</span>
       </div>
@@ -85,14 +85,14 @@ export function AutogradInspector({
           <input
             type="number"
             step="0.1"
-            className="tf-select tf-select--dock ag-value-input"
+            className="nn-select nn-select--dock ag-value-input"
             value={Number.isFinite(node.value) ? node.value : 0}
             onChange={(e) => onSetNodeValue(node.id, Number(e.target.value))}
           />
         </label>
       ) : (
         showValues && (
-          <div className="tf-network-inspector-row">
+          <div className="nn-network-inspector-row">
             <span className="label">{t.value}</span>
             <span className="value">{fmt(node.value)}</span>
           </div>
@@ -100,18 +100,18 @@ export function AutogradInspector({
       )}
 
       {showGrad && (
-        <div className="tf-network-inspector-row">
+        <div className="nn-network-inspector-row">
           <span className="label">{t.grad}</span>
           <span className="value">{fmt(node.grad)}</span>
         </div>
       )}
 
       {!isOutput && !node.isLeaf && (
-        <button type="button" className="tf-btn tf-btn--ghost tf-btn--sm" onClick={() => onSetOutput(node.id)}>
+        <button type="button" className="nn-btn nn-btn--ghost nn-btn--sm" onClick={() => onSetOutput(node.id)}>
           {t.setAsOutput}
         </button>
       )}
-      <button type="button" className="tf-btn tf-btn--ghost tf-btn--sm" onClick={() => onRemoveNode(node.id)}>
+      <button type="button" className="nn-btn nn-btn--ghost nn-btn--sm" onClick={() => onRemoveNode(node.id)}>
         {t.removeNode}
       </button>
     </div>

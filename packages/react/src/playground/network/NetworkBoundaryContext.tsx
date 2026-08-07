@@ -1,5 +1,5 @@
 import { createContext, useContext, type RefObject } from "react";
-import type { TfDataMode, TfProblemType } from "@ml-vis/core";
+import type { NetworkDataMode, NetworkProblemType } from "@ml-vis/core";
 
 export type BoundaryStore = Record<string, number[][]>;
 export type CurveStore = Record<string, number[]>;
@@ -11,8 +11,8 @@ export type TrainingStats = {
 };
 
 export type NetworkVizMode = {
-  dataMode: TfDataMode;
-  problemType: TfProblemType;
+  dataMode: NetworkDataMode;
+  problemType: NetworkProblemType;
 };
 
 export const NetworkBoundaryRefContext = createContext<RefObject<BoundaryStore> | null>(null);

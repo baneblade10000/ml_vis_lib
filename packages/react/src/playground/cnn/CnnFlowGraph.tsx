@@ -18,14 +18,12 @@ import {
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { CnnEngine, FeatureMapSnapshot } from "@ml-vis/core";
+import type { FeatureMapSnapshot } from "@ml-vis/core";
 import {
   cnnPipelineToFlow,
-  flowDragFromKind,
   formatCnnNodeLabel,
-  PALETTE_DRAG_TYPE,
-  type CnnDragKind,
   type CnnNodeData,
+  type CnnPipelineView,
 } from "./cnnAdapter";
 import { cnnEdgeTypes, cnnNodeTypes } from "./CnnFlowNodes";
 import {
@@ -39,13 +37,11 @@ import {
 import { useCnnMessages } from "./messages";
 
 export interface CnnFlowGraphProps {
-  engine: CnnEngine;
+  pipeline: CnnPipelineView;
   selectedNodeId: string | null;
   paintGeneration: number;
   featureMaps: FeatureMapSnapshot[];
   onSelectNode: (nodeId: string | null) => void;
-  /** Palette drop / click → append a layer to the pipeline. */
-  onDropLayer?: (kind: CnnDragKind) => void;
   featureMapRef: RefObject<FeatureMapStore>;
   statsRef: RefObject<CnnTrainingStats>;
   trainingLiveRef: RefObject<boolean>;
@@ -106,12 +102,11 @@ function viewportForNodes(
 
 function CnnFlowGraphInner(props: CnnFlowGraphProps) {
   const {
-    engine,
+    pipeline,
     selectedNodeId,
     paintGeneration,
     featureMaps,
     onSelectNode,
-    onDropLayer,
     loss,
     probability,
     fillHeight = false,
@@ -134,7 +129,7 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
 
   const mapped = useMemo(
     () =>
-      cnnPipelineToFlow(engine, {
+      cnnPipelineToFlow(pipeline, {
         selectedNodeId,
         paintGeneration,
         featureMaps,
@@ -142,7 +137,7 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
         probability,
         labelFor,
       }),
-    [engine, selectedNodeId, paintGeneration, featureMaps, loss, probability, labelFor],
+    [pipeline, selectedNodeId, paintGeneration, featureMaps, loss, probability, labelFor],
   );
 
   const nodeKey = mapped.nodes.map((n) => n.id).join(",");
@@ -233,38 +228,16 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
   };
   const onPaneClick = () => onSelectNode(null);
 
-  const onDragOver = useCallback(
-    (event: React.DragEvent) => {
-      if (!onDropLayer) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-    },
-    [onDropLayer],
-  );
-
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      if (!onDropLayer) return;
-      event.preventDefault();
-      const raw =
-        event.dataTransfer.getData(PALETTE_DRAG_TYPE) || event.dataTransfer.getData("text/plain");
-      const kind = flowDragFromKind(raw, engine.config.mode);
-      if (!kind) return;
-      onDropLayer(kind);
-    },
-    [onDropLayer, engine.config.mode],
-  );
-
   const canvasHeight = fillHeight ? measured.height || height : height;
 
   return (
     <div
-      className={`tf-flow-wrap${fillHeight ? " tf-flow-wrap--fill" : ""}`}
+      className={`nn-flow-wrap${fillHeight ? " nn-flow-wrap--fill" : ""}`}
       ref={wrapperRef}
       style={fillHeight ? undefined : { height: canvasHeight }}
     >
       <div
-        className="tf-flow-canvas"
+        className="nn-flow-canvas"
         style={{ width: "100%", height: fillHeight ? "100%" : canvasHeight }}
       >
         <ReactFlow
@@ -274,8 +247,6 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
           edgeTypes={cnnEdgeTypes}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
-          onDrop={onDropLayer ? onDrop : undefined}
-          onDragOver={onDropLayer ? onDragOver : undefined}
           minZoom={MIN_ZOOM}
           maxZoom={MAX_ZOOM}
           proOptions={{ hideAttribution: true }}
@@ -283,11 +254,11 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
           nodesConnectable={false}
           elementsSelectable
         >
-          <Background gap={20} size={1} color="var(--tf-border)" />
+          <Background gap={20} size={1} color="var(--nn-border)" />
           <Controls showInteractive={false} position="bottom-right" />
         </ReactFlow>
       </div>
-      {props.children && <div className="tf-flow-overlays">{props.children}</div>}
+      {props.children && <div className="nn-flow-overlays">{props.children}</div>}
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import type { Edge, Node } from "@xyflow/react";
 import { MarkerType } from "@xyflow/react";
 import {
-  CnnEngine,
   weightColor,
+  type CnnLayerView,
   type CnnMode,
   type FeatureMapSnapshot,
   type LayerKind,
@@ -12,6 +12,12 @@ import type { CnnMessages } from "./messages";
 
 /** Minimal layer surface needed for localized titles. */
 type LabelableLayer = { kind: LayerKind; label: () => string };
+
+/** Pipeline view for React Flow (from train-worker snapshot or live engine). */
+export type CnnPipelineView = {
+  mode: CnnMode;
+  layers: CnnLayerView[];
+};
 
 /** Pixel geometry for the CNN flow graph. */
 export const CNN_COL_SPACING = 200;
@@ -23,9 +29,20 @@ export const CNN_MAX_VIS_UNITS = 48;
 export const CNN_MAX_STACK_HEIGHT = 140;
 
 const MAP_PX = 44;
+/** Pixel size of the kernel thumb drawn beside each conv channel. */
+const KERNEL_PX = 36;
 const MAP_GAP = 3;
+const PAIR_GAP = 4;
 const MAP_GRID_MAX_W = 140;
+/** Wider wrap for conv nodes: kernel + activation side by side. */
+const CONV_GRID_MAX_W = 280;
 const NODE_CHROME = 38; // label + padding + gaps
+
+/** Width of one conv channel cell: kernel thumb + gap + feature map. */
+function convChannelCellW(mode: "2d" | "1d"): number {
+  if (mode === "1d") return KERNEL_PX + PAIR_GAP + MAP_PX;
+  return KERNEL_PX + PAIR_GAP + MAP_PX;
+}
 
 /** Evenly sample a 1-D series down to `target` samples. */
 export function downsample1D(values: number[], target: number): number[] {
@@ -88,10 +105,26 @@ function estimateNodeSize(
   }
 
   const channels = Math.max(1, Math.min(16, shape?.channels ?? 1));
+  const isConv = kind === "conv2d" || kind === "conv1d";
   if (mode === "1d" || shape?.kind === "1d") {
     const rows = channels;
-    const gridH = rows * 8 + Math.max(0, rows - 1) * MAP_GAP;
-    return { width: CNN_NODE_WIDTH, height: NODE_CHROME + gridH };
+    const rowH = isConv ? Math.max(8, KERNEL_PX) : 8;
+    const gridH = rows * rowH + Math.max(0, rows - 1) * MAP_GAP;
+    const width = isConv
+      ? Math.max(CNN_NODE_WIDTH, convChannelCellW("1d") + 28)
+      : CNN_NODE_WIDTH;
+    return { width, height: NODE_CHROME + gridH };
+  }
+  if (isConv) {
+    const cellW = convChannelCellW("2d");
+    const perRow = Math.max(1, Math.floor((CONV_GRID_MAX_W + MAP_GAP) / (cellW + MAP_GAP)));
+    const gridRows = Math.ceil(channels / perRow);
+    const gridH = gridRows * MAP_PX + Math.max(0, gridRows - 1) * MAP_GAP;
+    const gridW = Math.min(channels, perRow) * cellW + Math.max(0, Math.min(channels, perRow) - 1) * MAP_GAP;
+    return {
+      width: Math.max(CNN_NODE_WIDTH, gridW + 28),
+      height: NODE_CHROME + gridH,
+    };
   }
   const perRow = Math.max(1, Math.floor((MAP_GRID_MAX_W + MAP_GAP) / (MAP_PX + MAP_GAP)));
   const gridRows = Math.ceil(channels / perRow);
@@ -176,35 +209,29 @@ function channelCount(shape: LayerShape | undefined): number {
   return shape.channels;
 }
 
-/** Compute the aggregate weight magnitude for the edge feeding `layerId`. */
-function edgeWeightMag(engine: CnnEngine, layerId: string): number | null {
-  const layer = engine.layers.find((l) => l.id === layerId);
-  if (!layer) return null;
-  return layer.weightMagnitude();
-}
-
 export function cnnPipelineToFlow(
-  engine: CnnEngine,
+  pipeline: CnnPipelineView,
   options: {
     selectedNodeId: string | null;
     paintGeneration?: number;
     featureMaps: FeatureMapSnapshot[];
     loss?: number;
     probability?: number;
-    /** Localized node titles; defaults to engine `layer.label()`. */
+    /** Localized node titles; defaults to layer.label string. */
     labelFor?: (layer: LabelableLayer) => string;
   },
 ): { nodes: Node<CnnNodeData>[]; edges: Edge<CnnEdgeData>[] } {
-  const shapes = engine.pipelineShapes();
-  const layers = engine.layers;
+  const layers = pipeline.layers;
   const nodes: Node<CnnNodeData>[] = [];
   const edges: Edge<CnnEdgeData>[] = [];
-  const mode = engine.config.mode;
-  const labelFor = options.labelFor ?? ((layer: LabelableLayer) => layer.label());
+  const mode = pipeline.mode;
+  const labelFor =
+    options.labelFor ??
+    ((layer: LabelableLayer) => layer.label());
 
   const sizes = layers.map((layer, idx) => {
-    const shape = shapes[idx];
-    const prev = shapes[idx - 1];
+    const shape = layer.shape;
+    const prev = layers[idx - 1]?.shape;
     const inputLength =
       prev?.kind === "1d" ? prev.length : prev?.kind === "2d" ? prev.rows * prev.cols * prev.channels : 64;
     return estimateNodeSize(layer.kind, shape, mode, inputLength);
@@ -214,11 +241,12 @@ export function cnnPipelineToFlow(
   // Pack columns by actual node width so compact Flatten/Dense don't leave huge gaps.
   let x = CNN_ORIGIN_X;
   layers.forEach((layer, idx) => {
-    const shape = shapes[idx];
+    const shape = layer.shape;
     const type = flowTypeFor(layer.kind);
     const isOutput = layer.kind === "output";
-    const wMag = edgeWeightMag(engine, layer.id);
+    const wMag = layer.weightMag;
     const { width, height } = sizes[idx]!;
+    const labelable: LabelableLayer = { kind: layer.kind, label: () => layer.label };
     nodes.push({
       id: layer.id,
       type,
@@ -232,13 +260,13 @@ export function cnnPipelineToFlow(
       data: {
         layerId: layer.id,
         kind: layer.kind,
-        label: labelFor(layer),
+        label: labelFor(labelable),
         mode,
         channels: channelCount(shape),
         rows: shape?.kind === "2d" ? shape.rows : undefined,
         cols: shape?.kind === "2d" ? shape.cols : undefined,
         length: shape?.kind === "1d" ? shape.length : undefined,
-        params: layer.paramCount(),
+        params: layer.params,
         weightMag: wMag,
         loss: isOutput ? options.loss : undefined,
         probability: isOutput ? options.probability : undefined,
@@ -267,16 +295,3 @@ export function cnnPipelineToFlow(
 
   return { nodes, edges };
 }
-
-/** Drag kinds supported by the palette → inserted layer spec kind. */
-export type CnnDragKind = "conv" | "pool" | "dense";
-
-export function flowDragFromKind(kind: string, mode: CnnMode): CnnDragKind | null {
-  if (kind === "conv" || kind === "pool" || kind === "dense") return kind;
-  // Normalize "conv2d"/"conv1d" from a dropped source label.
-  if (kind === "conv2d" || kind === "conv1d") return "conv";
-  void mode;
-  return null;
-}
-
-export const PALETTE_DRAG_TYPE = "application/reactflow-cnn";

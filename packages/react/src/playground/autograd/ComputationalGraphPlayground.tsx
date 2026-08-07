@@ -153,23 +153,23 @@ export function ComputationalGraphPlayground({
   const outputNode = engine.graph.getNode(engine.graph.outputId);
 
   return (
-    <div className="tf-playground tf-playground--immersive">
-      <div className="tf-immersive-toolbar">
-        <div className="tf-toolbar-group tf-toolbar-group--actions">
+    <div className="nn-playground nn-playground--immersive">
+      <div className="nn-immersive-toolbar">
+        <div className="nn-toolbar-group nn-toolbar-group--actions">
           {toolbarStart}
-          <button type="button" className="tf-btn tf-btn--ghost" onClick={onReset}>
+          <button type="button" className="nn-btn nn-btn--ghost" onClick={onReset}>
             {t.reset}
           </button>
-          <button type="button" className="tf-btn tf-btn--primary" onClick={onForward}>
+          <button type="button" className="nn-btn nn-btn--primary" onClick={onForward}>
             {t.forward}
           </button>
-          <button type="button" className="tf-btn tf-btn--secondary" onClick={onBackward}>
+          <button type="button" className="nn-btn nn-btn--secondary" onClick={onBackward}>
             {t.backward}
           </button>
-          <label className="tf-training-field ag-toolbar-preset">
-            <span className="tf-training-label">{t.preset}</span>
+          <label className="network-training-field ag-toolbar-preset">
+            <span className="network-training-label">{t.preset}</span>
             <select
-              className="tf-select tf-select--dock"
+              className="nn-select nn-select--dock"
               value={preset}
               onChange={(e) => onPresetChange(e.target.value as AutogradPresetId)}
             >
@@ -182,8 +182,8 @@ export function ComputationalGraphPlayground({
           </label>
         </div>
 
-        <div className="tf-toolbar-group tf-toolbar-group--params">
-          <div className="tf-toolbar-stat">
+        <div className="nn-toolbar-group nn-toolbar-group--params">
+          <div className="nn-toolbar-stat">
             <span className="label">{t.value}</span>
             <span className="value">
               {valuesVisible && outputNode ? fmt(outputNode.value) : "—"}
@@ -193,7 +193,7 @@ export function ComputationalGraphPlayground({
         </div>
       </div>
 
-      <div className="tf-immersive-body">
+      <div className="nn-immersive-body">
         <AutogradFlowGraph
           graph={engine.graph}
           version={version}
@@ -210,7 +210,7 @@ export function ComputationalGraphPlayground({
           onRemoveNode={onRemoveNode}
           onRemoveEdge={onRemoveEdge}
         >
-          <aside className="tf-flow-dock tf-flow-dock--left">
+          <aside className="nn-flow-dock nn-flow-dock--left">
             <AutogradPalette onAddOp={onAddOp} />
             <AutogradInspector
               graph={engine.graph}

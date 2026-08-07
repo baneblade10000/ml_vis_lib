@@ -24,26 +24,26 @@ export function NetworkArchitecturePanel({
   const t = useNetworkMessages();
 
   return (
-    <div className="tf-arch-panel">
-      <h4 className="tf-flow-dock-title">{t.network}</h4>
+    <div className="nn-arch-panel">
+      <h4 className="nn-flow-dock-title">{t.network}</h4>
 
-      <div className="tf-arch-stack">
-        <div className="tf-arch-row tf-arch-row--header">
-          <span className="tf-arch-row-label">{t.hiddenLayers}</span>
-          <div className="tf-arch-stepper">
+      <div className="nn-arch-stack">
+        <div className="nn-arch-row nn-arch-row--header">
+          <span className="nn-arch-row-label">{t.hiddenLayers}</span>
+          <div className="nn-arch-stepper">
             <button
               type="button"
-              className="tf-icon-btn tf-icon-btn--sm"
+              className="nn-icon-btn nn-icon-btn--sm"
               onClick={onRemoveLayer}
               disabled={numHiddenLayers <= 0}
               aria-label={t.removeHiddenLayer}
             >
               −
             </button>
-            <span className="tf-arch-value">{numHiddenLayers}</span>
+            <span className="nn-arch-value">{numHiddenLayers}</span>
             <button
               type="button"
-              className="tf-icon-btn tf-icon-btn--sm"
+              className="nn-icon-btn nn-icon-btn--sm"
               onClick={onAddLayer}
               disabled={numHiddenLayers >= maxHiddenLayers}
               aria-label={t.addHiddenLayer}
@@ -56,22 +56,22 @@ export function NetworkArchitecturePanel({
         {Array.from({ length: numHiddenLayers }).map((_, layerIdx) => {
           const count = networkShape[layerIdx] ?? 0;
           return (
-            <div key={layerIdx} className="tf-arch-row">
-              <span className="tf-arch-row-label">{`${t.layer} ${layerIdx + 1}`}</span>
-              <div className="tf-arch-stepper">
+            <div key={layerIdx} className="nn-arch-row">
+              <span className="nn-arch-row-label">{`${t.layer} ${layerIdx + 1}`}</span>
+              <div className="nn-arch-stepper">
                 <button
                   type="button"
-                  className="tf-icon-btn tf-icon-btn--sm"
+                  className="nn-icon-btn nn-icon-btn--sm"
                   onClick={() => onRemoveNeuron(layerIdx)}
                   disabled={count <= 1}
                   aria-label={`${t.removeNeuron} ${layerIdx + 1}`}
                 >
                   −
                 </button>
-                <span className="tf-arch-value">{count}</span>
+                <span className="nn-arch-value">{count}</span>
                 <button
                   type="button"
-                  className="tf-icon-btn tf-icon-btn--sm"
+                  className="nn-icon-btn nn-icon-btn--sm"
                   onClick={() => onAddNeuron(layerIdx)}
                   disabled={count >= maxNeuronsPerLayer}
                   aria-label={`${t.addNeuron} ${layerIdx + 1}`}
@@ -83,7 +83,7 @@ export function NetworkArchitecturePanel({
           );
         })}
 
-        {numHiddenLayers === 0 && <p className="tf-arch-hint">{t.noHiddenLayers}</p>}
+        {numHiddenLayers === 0 && <p className="nn-arch-hint">{t.noHiddenLayers}</p>}
       </div>
     </div>
   );
