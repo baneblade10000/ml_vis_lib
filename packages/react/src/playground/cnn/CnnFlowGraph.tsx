@@ -29,10 +29,12 @@ import {
 } from "./cnnAdapter";
 import { cnnEdgeTypes, cnnNodeTypes } from "./CnnFlowNodes";
 import {
+  CnnPlayVizRefContext,
   FeatureMapRefContext,
   PaintGenerationContext,
   TrainingLiveRefContext,
   TrainingStatsRefContext,
+  type CnnPlayViz,
   type CnnTrainingStats,
   type FeatureMapStore,
 } from "./featureMapContext";
@@ -47,6 +49,7 @@ export interface CnnFlowGraphProps {
   featureMapRef: RefObject<FeatureMapStore>;
   statsRef: RefObject<CnnTrainingStats>;
   trainingLiveRef: RefObject<boolean>;
+  playVizRef: RefObject<CnnPlayViz>;
   loss?: number;
   probability?: number;
   height?: number;
@@ -145,7 +148,6 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
   const {
     pipeline,
     selectedNodeId,
-    paintGeneration,
     featureMaps,
     onSelectNode,
     loss,
@@ -165,17 +167,18 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
 
   const labelFor = useCallback((layer: Parameters<typeof formatCnnNodeLabel>[0]) => formatCnnNodeLabel(layer, t), [t]);
 
+  // paintGeneration is delivered via context — keep it out of RF node data so
+  // Play ticks don't rebuild the whole graph every frame.
   const mapped = useMemo(
     () =>
       cnnPipelineToFlow(pipeline, {
         selectedNodeId,
-        paintGeneration,
         featureMaps,
         loss,
         probability,
         labelFor,
       }),
-    [pipeline, selectedNodeId, paintGeneration, featureMaps, loss, probability, labelFor],
+    [pipeline, selectedNodeId, featureMaps, loss, probability, labelFor],
   );
 
   const nodeKey = mapped.nodes.map((n) => n.id).join(",");
@@ -202,7 +205,7 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
     });
   }, [mapped.nodes, setNodes]);
 
-  // Re-align after RF mount and whenever feature maps repaint (content height changes).
+  // Re-align after RF mount / topology change — not on every paint tick.
   useLayoutEffect(() => {
     if (!nodesInitialized) return;
     realign();
@@ -214,7 +217,7 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
       window.clearTimeout(t2);
       window.clearTimeout(t3);
     };
-  }, [nodesInitialized, nodeKey, paintGeneration, realign]);
+  }, [nodesInitialized, nodeKey, realign]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<Node<CnnNodeData>>[]) => {
@@ -316,11 +319,13 @@ export function CnnFlowGraph(props: CnnFlowGraphProps) {
     <FeatureMapRefContext.Provider value={props.featureMapRef}>
       <TrainingStatsRefContext.Provider value={props.statsRef}>
         <TrainingLiveRefContext.Provider value={props.trainingLiveRef}>
-          <PaintGenerationContext.Provider value={props.paintGeneration}>
-            <ReactFlowProvider>
-              <CnnFlowGraphInner {...props} />
-            </ReactFlowProvider>
-          </PaintGenerationContext.Provider>
+          <CnnPlayVizRefContext.Provider value={props.playVizRef}>
+            <PaintGenerationContext.Provider value={props.paintGeneration}>
+              <ReactFlowProvider>
+                <CnnFlowGraphInner {...props} />
+              </ReactFlowProvider>
+            </PaintGenerationContext.Provider>
+          </CnnPlayVizRefContext.Provider>
         </TrainingLiveRefContext.Provider>
       </TrainingStatsRefContext.Provider>
     </FeatureMapRefContext.Provider>

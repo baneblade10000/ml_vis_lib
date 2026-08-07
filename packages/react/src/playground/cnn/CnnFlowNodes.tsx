@@ -26,6 +26,7 @@ import {
   type CnnEdgeData,
 } from "./cnnAdapter";
 import {
+  CnnPlayVizRefContext,
   FeatureMapRefContext,
   PaintGenerationContext,
   TrainingLiveRefContext,
@@ -264,12 +265,15 @@ function FeatureGrid({
   channels,
   mode,
   showKernels = false,
+  vertical = false,
 }: {
   layerId: string;
   channels: number;
   mode: "2d" | "1d";
   /** When true (conv layers), draw each filter kernel beside its channel output. */
   showKernels?: boolean;
+  /** Stack channel tiles in a column (pool layers). */
+  vertical?: boolean;
 }) {
   const snapshot = useLayerSnapshot(layerId);
   const paintGeneration = useContext(PaintGenerationContext);
@@ -343,7 +347,13 @@ function FeatureGrid({
   }
   return (
     <div
-      className={`cnn-feature-grid${showKernels ? " cnn-feature-grid--with-kernels" : ""}`}
+      className={[
+        "cnn-feature-grid",
+        showKernels ? "cnn-feature-grid--with-kernels" : "",
+        vertical ? "cnn-feature-grid--vertical" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       ref={groupRef}
     >
       {tiles}
@@ -401,7 +411,12 @@ export function CnnConvNode({ data }: NodeProps<Node<CnnNodeData>>) {
 export function CnnPoolNode({ data }: NodeProps<Node<CnnNodeData>>) {
   return (
     <BaseCnnNode data={data} className="cnn-node--pool">
-      <FeatureGrid layerId={data.layerId} channels={data.channels} mode={data.mode} />
+      <FeatureGrid
+        layerId={data.layerId}
+        channels={data.channels}
+        mode={data.mode}
+        vertical
+      />
     </BaseCnnNode>
   );
 }
@@ -541,19 +556,21 @@ export function CnnDenseNode({ data }: NodeProps<Node<CnnNodeData>>) {
 export function CnnReadoutNode({ id, data }: NodeProps<Node<CnnNodeData>>) {
   const t = useCnnMessages();
   const paintGeneration = useContext(PaintGenerationContext);
+  const playVizRef = useContext(CnnPlayVizRefContext);
   const p1FillRef = useRef<HTMLDivElement>(null);
   const p0FillRef = useRef<HTMLDivElement>(null);
   const p1ValRef = useRef<HTMLSpanElement>(null);
   const p0ValRef = useRef<HTMLSpanElement>(null);
 
   const paintProbs = useCallback(() => {
-    const p1 = Math.min(1, Math.max(0, data.probability ?? 0.5));
+    const live = playVizRef?.current?.probability;
+    const p1 = Math.min(1, Math.max(0, live ?? data.probability ?? 0.5));
     const p0 = 1 - p1;
     if (p1FillRef.current) p1FillRef.current.style.height = `${Math.max(2, p1 * 100)}%`;
     if (p0FillRef.current) p0FillRef.current.style.height = `${Math.max(2, p0 * 100)}%`;
     if (p1ValRef.current) p1ValRef.current.textContent = p1.toFixed(2);
     if (p0ValRef.current) p0ValRef.current.textContent = p0.toFixed(2);
-  }, [data.probability]);
+  }, [data.probability, playVizRef]);
 
   useLayoutEffect(() => {
     paintProbs();

@@ -27,11 +27,8 @@ import { CnnInspector } from "./CnnInspector";
 import { CnnGallery } from "./CnnGallery";
 import { formatCnnNodeLabel } from "./cnnAdapter";
 import { useCnnMessages } from "./messages";
-import {
-  paintAllFeatureMaps,
-  paintAllFeatureMapsAfterCommit,
-} from "./featureMapPaint";
-import type { CnnTrainingStats, FeatureMapStore } from "./featureMapContext";
+import { paintAllFeatureMapsAfterCommit } from "./featureMapPaint";
+import type { CnnPlayViz, CnnTrainingStats, FeatureMapStore } from "./featureMapContext";
 
 export interface ConvolutionalNetworkPlaygroundProps {
   initialMode?: CnnMode;
@@ -90,23 +87,45 @@ export function ConvolutionalNetworkPlayground({
     accTrain: 0,
     accTest: 0,
   });
+  const playVizRef = useRef<CnnPlayViz>({ probability: 0.5, loss: 0 });
   const trainingLiveRef = useRef(false);
   trainingLiveRef.current = playing;
   const clientRef = useRef<TrainWorkerClient | null>(null);
   const playingRef = useRef(false);
   playingRef.current = playing;
+  const lastReactFlushRef = useRef(0);
+  const epochValRef = useRef<HTMLSpanElement>(null);
+  const testAccValRef = useRef<HTMLSpanElement>(null);
+  const trainAccValRef = useRef<HTMLSpanElement>(null);
+  const testLossValRef = useRef<HTMLSpanElement>(null);
+
+  const flushToolbarDom = useCallback((stats: CnnTrainingStats) => {
+    if (epochValRef.current) epochValRef.current.textContent = stats.epoch.toLocaleString();
+    if (testAccValRef.current) testAccValRef.current.textContent = `${(stats.accTest * 100).toFixed(0)}%`;
+    if (trainAccValRef.current) trainAccValRef.current.textContent = `${(stats.accTrain * 100).toFixed(0)}%`;
+    if (testLossValRef.current) testLossValRef.current.textContent = stats.lossTest.toFixed(3);
+  }, []);
 
   const applySnapshot = useCallback(
     (snap: CnnTrainSnapshot) => {
-      setSnapshot(snap);
       statsRef.current = { ...snap.stats };
+      playVizRef.current = { probability: snap.probability, loss: snap.loss };
       const store: FeatureMapStore = {};
       for (const m of snap.featureMaps) store[m.layerId] = m;
       featureMapRef.current = store;
+      flushToolbarDom(statsRef.current);
+
+      // During Play, keep React (RF graph / docks) at ~4 Hz; canvases update via
+      // paintGeneration + refs every worker tick.
+      const now = performance.now();
+      const playingNow = playingRef.current;
+      if (!playingNow || now - lastReactFlushRef.current >= 250) {
+        lastReactFlushRef.current = now;
+        setSnapshot(snap);
+      }
       requestPaint();
-      paintAllFeatureMaps();
     },
-    [requestPaint],
+    [flushToolbarDom, requestPaint],
   );
 
   // Boot train worker (or fall back to a same-thread shim via Worker if unavailable — skip).
@@ -138,7 +157,7 @@ export function ConvolutionalNetworkPlayground({
 
   useEffect(() => {
     paintAllFeatureMapsAfterCommit();
-  }, [paintGeneration, snapshot]);
+  }, [paintGeneration]);
 
   // Drive play/pause on the worker.
   useEffect(() => {
@@ -385,19 +404,27 @@ export function ConvolutionalNetworkPlayground({
         <div className="nn-toolbar-group nn-toolbar-group--params">
           <div className="nn-toolbar-stat">
             <span className="label">{t.epoch}</span>
-            <span className="value">{stats.epoch.toLocaleString()}</span>
+            <span ref={epochValRef} className="value">
+              {stats.epoch.toLocaleString()}
+            </span>
           </div>
           <div className="nn-toolbar-stat">
             <span className="label">{t.testAcc}</span>
-            <span className="value">{(stats.accTest * 100).toFixed(0)}%</span>
+            <span ref={testAccValRef} className="value">
+              {(stats.accTest * 100).toFixed(0)}%
+            </span>
           </div>
           <div className="nn-toolbar-stat nn-toolbar-stat--train">
             <span className="label">{t.trainAcc}</span>
-            <span className="value">{(stats.accTrain * 100).toFixed(0)}%</span>
+            <span ref={trainAccValRef} className="value">
+              {(stats.accTrain * 100).toFixed(0)}%
+            </span>
           </div>
           <div className="nn-toolbar-stat">
             <span className="label">{t.testLoss}</span>
-            <span className="value">{stats.lossTest.toFixed(3)}</span>
+            <span ref={testLossValRef} className="value">
+              {stats.lossTest.toFixed(3)}
+            </span>
           </div>
           {toolbarEnd}
         </div>
@@ -413,6 +440,7 @@ export function ConvolutionalNetworkPlayground({
           featureMapRef={featureMapRef}
           statsRef={statsRef}
           trainingLiveRef={trainingLiveRef}
+          playVizRef={playVizRef}
           loss={loss}
           probability={probability}
           fillHeight

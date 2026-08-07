@@ -2384,6 +2384,14 @@
   gap: 5px;
 }
 
+/* Pool layers: one feature map per row (vertical stack). */
+.cnn-feature-grid--vertical {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  max-width: none;
+  align-items: center;
+}
+
 /* Conv channel: kernel (left) + activation map (right) */
 .cnn-channel-pair {
   display: flex;

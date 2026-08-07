@@ -17,10 +17,17 @@ export type CnnTrainingStats = {
   accTest: number;
 };
 
+/** Live readout values updated every paint tick without React Flow remounts. */
+export type CnnPlayViz = {
+  probability: number;
+  loss: number;
+};
+
 /** Ref to the latest per-layer feature-map snapshots for the inspected example. */
 export const FeatureMapRefContext = createContext<RefObject<FeatureMapStore> | null>(null);
 export const TrainingStatsRefContext = createContext<RefObject<CnnTrainingStats> | null>(null);
 export const TrainingLiveRefContext = createContext<RefObject<boolean> | null>(null);
+export const CnnPlayVizRefContext = createContext<RefObject<CnnPlayViz> | null>(null);
 /** Incremented when node canvases should repaint from the feature-map ref. */
 export const PaintGenerationContext = createContext(0);
 
