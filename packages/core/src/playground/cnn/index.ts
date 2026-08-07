@@ -64,6 +64,8 @@ export type { PoolKind2D } from "./layers/pool2d";
 export { Conv1DLayer } from "./layers/conv1d";
 export { Pool1DLayer } from "./layers/pool1d";
 export { FlattenLayer } from "./layers/flatten";
+export { GlobalAvgPool2DLayer } from "./layers/gap2d";
+export { GlobalAvgPool1DLayer } from "./layers/gap1d";
 export { DenseLayer } from "./layers/dense";
 export { OutputLayer } from "./layers/output";
 

@@ -12,6 +12,8 @@ export type LayerKind =
   | "pool2d"
   | "conv1d"
   | "pool1d"
+  | "gap2d"
+  | "gap1d"
   | "flatten"
   | "dense"
   | "output";

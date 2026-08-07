@@ -189,6 +189,10 @@ export class OutputLayer extends Layer {
     return this.weights.slice();
   }
 
+  snapshotBias(): number {
+    return this.bias;
+  }
+
   snapshotOutput(): Signal {
     return cloneSignal(this.output as Signal);
   }

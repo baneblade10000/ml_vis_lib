@@ -163,6 +163,23 @@ describe("CnnEngine (2D)", () => {
     expect(maps.length).toBe(engine.layers.length);
     expect(maps[0].maps2d).toBeDefined();
     expect((maps[0].maps2d!.length)).toBe(1);
+    const conv = maps.find((m) => m.kernels2d != null);
+    expect(conv).toBeDefined();
+    expect(conv!.biases).toBeDefined();
+    expect(conv!.biases!.length).toBe(conv!.kernels2d!.length);
+  });
+
+  it("uses global average pooling instead of a second pool+flatten", () => {
+    const engine = new CnnEngine({ ...DEFAULT_CNN_CONFIG_2D });
+    const kinds = engine.layers.map((l) => l.kind);
+    expect(kinds).toContain("gap2d");
+    expect(kinds.filter((k) => k === "pool2d")).toHaveLength(1);
+    expect(kinds).not.toContain("flatten");
+    const shapes = engine.pipelineShapes();
+    const gapIdx = engine.layers.findIndex((l) => l.kind === "gap2d");
+    const gapShape = shapes[gapIdx]!;
+    expect(gapShape.kind).toBe("1d");
+    if (gapShape.kind === "1d") expect(gapShape.length).toBe(8);
   });
 
   it("reduces loss after training a few epochs on a 1D dataset", () => {

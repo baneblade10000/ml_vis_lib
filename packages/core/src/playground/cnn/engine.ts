@@ -17,6 +17,8 @@ import { Pool2DLayer, type PoolKind2D } from "./layers/pool2d";
 import { Conv1DLayer } from "./layers/conv1d";
 import { Pool1DLayer } from "./layers/pool1d";
 import { FlattenLayer } from "./layers/flatten";
+import { GlobalAvgPool2DLayer } from "./layers/gap2d";
+import { GlobalAvgPool1DLayer } from "./layers/gap1d";
 import { DenseLayer } from "./layers/dense";
 import { OutputLayer } from "./layers/output";
 import { Losses } from "./loss";
@@ -36,7 +38,7 @@ const LOSS_HISTORY_MAX = 1200;
 
 /** Declarative spec for one layer — the editable description of the network. */
 export interface LayerSpec {
-  kind: "conv2d" | "pool2d" | "conv1d" | "pool1d" | "flatten" | "dense";
+  kind: "conv2d" | "pool2d" | "conv1d" | "pool1d" | "gap2d" | "gap1d" | "flatten" | "dense";
   filters?: number;
   kernelSize?: number;
   poolKind?: PoolKind2D;
@@ -68,8 +70,7 @@ export const DEFAULT_CNN_CONFIG_2D: CnnConfig = {
     { kind: "conv2d", filters: 4, kernelSize: 3, activation: "relu" },
     { kind: "pool2d", poolKind: "max" },
     { kind: "conv2d", filters: 8, kernelSize: 3, activation: "relu" },
-    { kind: "pool2d", poolKind: "max" },
-    { kind: "flatten" },
+    { kind: "gap2d" },
     { kind: "dense", units: 1, activation: "linear" },
   ],
   learningRate: 0.1,
@@ -89,8 +90,7 @@ export const DEFAULT_CNN_CONFIG_1D: CnnConfig = {
     { kind: "conv1d", filters: 4, kernelSize: 5, activation: "relu" },
     { kind: "pool1d", poolKind: "max" },
     { kind: "conv1d", filters: 8, kernelSize: 5, activation: "relu" },
-    { kind: "pool1d", poolKind: "max" },
-    { kind: "flatten" },
+    { kind: "gap1d" },
     { kind: "dense", units: 1, activation: "linear" },
   ],
   learningRate: 0.1,
@@ -136,6 +136,10 @@ export interface FeatureMapSnapshot {
    * Index-aligned with {@link signals}.
    */
   kernels1d?: number[][];
+  /**
+   * Per-filter biases for conv layers (index-aligned with kernels / feature maps).
+   */
+  biases?: number[];
 }
 
 /**
@@ -307,6 +311,12 @@ export class CnnEngine {
         }
         case "pool1d":
           layers.push(new Pool1DLayer(id, spec.poolKind ?? "max", 2));
+          break;
+        case "gap2d":
+          layers.push(new GlobalAvgPool2DLayer(id));
+          break;
+        case "gap1d":
+          layers.push(new GlobalAvgPool1DLayer(id));
           break;
         case "flatten":
           layers.push(new FlattenLayer(id));
@@ -537,6 +547,7 @@ export class CnnEngine {
       const snap: FeatureMapSnapshot = { layerId: layer.id, maps2d };
       if (layer instanceof Conv2DLayer && layer.kernels.length > 0) {
         snap.kernels2d = layer.featureKernels();
+        snap.biases = layer.biases.slice();
       }
       return snap;
     }
@@ -547,9 +558,16 @@ export class CnnEngine {
     };
     if (layer instanceof DenseLayer && layer.weights.length > 0) {
       snap.matrix = layer.weights.map((row) => row.slice());
+      snap.biases = layer.biases.slice();
+    }
+    if (layer instanceof OutputLayer && layer.snapshotWeights().length > 0) {
+      // One row: output unit ← incoming activations (same layout as Dense).
+      snap.matrix = [layer.snapshotWeights()];
+      snap.biases = [layer.snapshotBias()];
     }
     if (layer instanceof Conv1DLayer && layer.kernels.length > 0) {
       snap.kernels1d = layer.featureKernels();
+      snap.biases = layer.biases.slice();
     }
     return snap;
   }
