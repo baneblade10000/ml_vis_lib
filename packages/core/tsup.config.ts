@@ -1,14 +1,15 @@
 import { defineConfig } from "tsup";
 
-// Two configs run in parallel; only the first may `clean`, otherwise workers
-// (or index) briefly vanish and Vite HMR dies mid-reload.
+// Both configs run in parallel — never `clean` here. package.json runs
+// `rm -rf dist` first so one config can't wipe the other's output mid-build
+// (that race dropped createWorkers.d.ts in CI and broke @ml-vis/react dts).
 export default defineConfig([
   {
     entry: ["src/index.ts"],
     format: ["esm", "cjs"],
     dts: true,
     sourcemap: true,
-    clean: true,
+    clean: false,
     treeshake: true,
   },
   {
