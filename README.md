@@ -43,9 +43,12 @@ Health check: `curl http://localhost:8080/health`
 
 Push to `master` publishes `packages/playground/dist` to the `gh-pages` branch.
 
-Open the demo (correct `text/html` MIME; jsDelivr serves HTML as plain text):
+raw.githack caches the **branch** URL aggressively, so after a deploy open the
+**commit-pinned** URL (tip of `gh-pages`, from the Actions “deploy: &lt;sha&gt;” commit):
 
-https://raw.githack.com/baneblade10000/ml_vis_lib/gh-pages/index.html
+https://raw.githack.com/baneblade10000/ml_vis_lib/8e9d9fc/index.html
+
+(Branch URL may stay stale for hours: `…/gh-pages/index.html`.)
 
 Workflow: https://github.com/baneblade10000/ml_vis_lib/actions/workflows/pages.yml
 
