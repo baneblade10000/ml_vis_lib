@@ -397,6 +397,7 @@ export class CnnEngine {
     const { batchSize, learningRate } = this.config;
     const data = this.trainData;
     let inBatch = 0;
+    let lossSum = 0;
     const flushBatch = () => {
       if (inBatch > 0) {
         this.applyUpdate(learningRate, inBatch);
@@ -410,12 +411,18 @@ export class CnnEngine {
       const example = data[i];
       this.forwardExample(example);
       this.outputLayer.setTarget(example.label);
+      lossSum += this.outputLayer.loss(example.label);
       this.backwardExample();
       inBatch++;
       if (inBatch >= batchSize) flushBatch();
     }
     flushBatch(); // trailing partial batch
+    if (data.length > 0) this.lossTrain = lossSum / data.length;
+    // Fresh (sampled) test loss each epoch — avoids a flat stale line that then cliffs
+    // when Play finally refreshes full metrics.
+    this.lossTest = this.sampleLoss(this.testData, 8);
     this.epoch++;
+    this.pushLossHistory();
   }
 
   /** Total trainable parameter count (flat layout for DP). */
@@ -505,6 +512,20 @@ export class CnnEngine {
     return total / data.length;
   }
 
+  /** Strided subset loss — keeps the learning-curve test trace honest during Play. */
+  sampleLoss(data: ImageExample[] | SignalExample[], maxSamples = 8): number {
+    if (data.length === 0) return 0;
+    if (data.length <= maxSamples) return this.getLoss(data);
+    let total = 0;
+    const step = data.length / maxSamples;
+    for (let i = 0; i < maxSamples; i++) {
+      const ex = data[Math.floor(i * step)]!;
+      this.forwardExample(ex);
+      total += this.outputLayer.loss(ex.label);
+    }
+    return total / maxSamples;
+  }
+
   getAccuracy(data: ImageExample[] | SignalExample[]): number {
     if (data.length === 0) return 0;
     let correct = 0;
@@ -514,6 +535,21 @@ export class CnnEngine {
       if (predicted === ex.label) correct++;
     }
     return correct / data.length;
+  }
+
+  /** Strided subset accuracy — cheap enough to refresh on every Play paint tick. */
+  sampleAccuracy(data: ImageExample[] | SignalExample[], maxSamples = 12): number {
+    if (data.length === 0) return 0;
+    if (data.length <= maxSamples) return this.getAccuracy(data);
+    let correct = 0;
+    const step = data.length / maxSamples;
+    for (let i = 0; i < maxSamples; i++) {
+      const ex = data[Math.floor(i * step)]!;
+      this.forwardExample(ex);
+      const predicted = this.outputLayer.probability >= 0.5 ? 1 : 0;
+      if (predicted === ex.label) correct++;
+    }
+    return correct / maxSamples;
   }
 
   refreshMetrics(): void {
@@ -543,6 +579,12 @@ export class CnnEngine {
     this.lossTest = this.getLoss(test);
     this.accTrain = this.getAccuracy(train);
     this.accTest = this.getAccuracy(test);
+  }
+
+  /** Update only accuracies (toolbar) without rewriting the learning-curve losses. */
+  refreshAccuracySampled(maxSamples = 12): void {
+    this.accTrain = this.sampleAccuracy(this.trainData, maxSamples);
+    this.accTest = this.sampleAccuracy(this.testData, maxSamples);
   }
 
   /** Recompute feature maps for the inspected example (cheap, for display). */

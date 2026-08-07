@@ -77,6 +77,9 @@ export function ConvolutionalNetworkPlayground({
   const [playing, setPlaying] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [paintGeneration, setPaintGeneration] = useState(0);
+  /** Curve + scalars — updated every worker tick (not throttled with RF snapshot). */
+  const [lossHistory, setLossHistory] = useState<LossHistoryPoint[]>([]);
+  const [chartLoss, setChartLoss] = useState({ train: 0, test: 0 });
   const requestPaint = useCallback(() => setPaintGeneration((n) => n + 1), []);
 
   const featureMapRef = useRef<FeatureMapStore>({});
@@ -115,8 +118,11 @@ export function ConvolutionalNetworkPlayground({
       featureMapRef.current = store;
       flushToolbarDom(statsRef.current);
 
-      // During Play, keep React (RF graph / docks) at ~4 Hz; canvases update via
-      // paintGeneration + refs every worker tick.
+      // Learning curve must track every tick — don't wait on the RF snapshot throttle.
+      setLossHistory(snap.lossHistory);
+      setChartLoss({ train: snap.stats.lossTrain, test: snap.stats.lossTest });
+
+      // During Play, keep React Flow / docks at ~4 Hz; feature maps via refs.
       const now = performance.now();
       const playingNow = playingRef.current;
       if (!playingNow || now - lastReactFlushRef.current >= 250) {
@@ -163,7 +169,8 @@ export function ConvolutionalNetworkPlayground({
   useEffect(() => {
     const client = clientRef.current;
     if (!client) return;
-    if (playing) client.play(12);
+    // Match local train throughput (~40+ eps on the default 2D net).
+    if (playing) client.play(48);
     else client.pause();
   }, [playing]);
 
@@ -344,7 +351,6 @@ export function ConvolutionalNetworkPlayground({
   const galleryPredictions = snapshot.galleryPredictions;
   const inspectedIdx = snapshot.inspectedExampleIndex;
   const stats = snapshot.stats;
-  const lossHistory: LossHistoryPoint[] = snapshot.lossHistory;
   const loss = snapshot.loss;
   const probability = snapshot.probability;
   const pipeline = { mode, layers: snapshot.layers };
@@ -503,8 +509,8 @@ export function ConvolutionalNetworkPlayground({
               title={t.learningCurve}
               trainLabel={t.trainLoss}
               testLabel={t.testLoss}
-              lossTrain={stats.lossTrain}
-              lossTest={stats.lossTest}
+              lossTrain={chartLoss.train}
+              lossTest={chartLoss.test}
             />
             <CnnTrainingPanel
               learningRate={snapshot.config.learningRate}

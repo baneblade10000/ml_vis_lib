@@ -1,4 +1,4 @@
-import { cloneSignal, zerosVolume, type Signal, type Volume } from "../tensor";
+import { acquireVolume, cloneSignal, type Signal, type Volume } from "../tensor";
 import { Layer, type LayerShape } from "./base";
 
 /**
@@ -9,6 +9,8 @@ export class GlobalAvgPool2DLayer extends Layer {
   private inChannels = 0;
   private inRows = 0;
   private inCols = 0;
+  private scratchOut: number[] = [];
+  private scratchGradIn: Volume = [];
 
   constructor(id: string) {
     super(id, "gap2d", "1d");
@@ -28,7 +30,10 @@ export class GlobalAvgPool2DLayer extends Layer {
     this.inRows = input[0]?.length ?? 0;
     this.inCols = input[0]?.[0]?.length ?? 0;
     const denom = Math.max(1, this.inRows * this.inCols);
-    const out = new Array<number>(this.inChannels);
+    if (this.scratchOut.length !== this.inChannels) {
+      this.scratchOut = new Array(this.inChannels);
+    }
+    const out = this.scratchOut;
     for (let c = 0; c < this.inChannels; c++) {
       let sum = 0;
       const ch = input[c]!;
@@ -45,13 +50,14 @@ export class GlobalAvgPool2DLayer extends Layer {
   backward(gradOut: Signal): Volume {
     const g = gradOut[0] ?? [];
     const denom = Math.max(1, this.inRows * this.inCols);
-    const gradIn = zerosVolume(this.inChannels, this.inRows, this.inCols);
+    const gradIn = acquireVolume(this.scratchGradIn, this.inChannels, this.inRows, this.inCols);
+    this.scratchGradIn = gradIn;
     for (let c = 0; c < this.inChannels; c++) {
       const each = (g[c] ?? 0) / denom;
+      const ch = gradIn[c]!;
       for (let r = 0; r < this.inRows; r++) {
-        for (let col = 0; col < this.inCols; col++) {
-          gradIn[c]![r]![col]! += each;
-        }
+        const row = ch[r]!;
+        for (let col = 0; col < this.inCols; col++) row[col] = each;
       }
     }
     this.inputGrad = gradIn;

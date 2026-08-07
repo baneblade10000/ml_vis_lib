@@ -1,4 +1,4 @@
-import { cloneVolume, zerosVolume, type Volume } from "../tensor";
+import { acquireVolume, cloneVolume, type Volume } from "../tensor";
 import { Layer, type LayerShape } from "./base";
 
 export type PoolKind2D = "max" | "avg";
@@ -10,10 +10,14 @@ export type PoolKind2D = "max" | "avg";
 export class Pool2DLayer extends Layer {
   readonly poolSize: number;
   readonly poolKind: PoolKind2D;
-  /** For max-pooling: the input position (per channel) that won each output cell. */
-  private argmax: { r: number; c: number }[][][] = [];
+  /** Flat argmax row/col per output cell: index = ((c*outRows)+or)*outCols+oc. */
+  private argmaxR: Int32Array = new Int32Array(0);
+  private argmaxC: Int32Array = new Int32Array(0);
+  private outRows = 0;
+  private outCols = 0;
   private inRows = 0;
   private inCols = 0;
+  private scratchGradIn: Volume = [];
 
   constructor(id: string, poolKind: PoolKind2D = "max", poolSize = 2) {
     super(id, "pool2d", "2d");
@@ -38,23 +42,35 @@ export class Pool2DLayer extends Layer {
     this.inCols = input[0][0].length;
     const outRows = Math.floor(this.inRows / this.poolSize);
     const outCols = Math.floor(this.inCols / this.poolSize);
-    const out = zerosVolume(channels, outRows, outCols);
-    this.argmax = new Array(channels);
+    this.outRows = outRows;
+    this.outCols = outCols;
+    const out = acquireVolume((this.output as Volume) ?? [], channels, outRows, outCols);
+    const cells = channels * outRows * outCols;
+    if (this.argmaxR.length !== cells) {
+      this.argmaxR = new Int32Array(cells);
+      this.argmaxC = new Int32Array(cells);
+    }
+    const ps = this.poolSize;
+    const isMax = this.poolKind === "max";
+    const denom = ps * ps;
 
     for (let c = 0; c < channels; c++) {
-      this.argmax[c] = new Array(outRows);
+      const inCh = input[c]!;
+      const outCh = out[c]!;
+      const baseIdx = c * outRows * outCols;
       for (let or = 0; or < outRows; or++) {
-        this.argmax[c][or] = new Array(outCols);
         for (let oc = 0; oc < outCols; oc++) {
-          const baseR = or * this.poolSize;
-          const baseC = oc * this.poolSize;
-          if (this.poolKind === "max") {
+          const baseR = or * ps;
+          const baseC = oc * ps;
+          const idx = baseIdx + or * outCols + oc;
+          if (isMax) {
             let best = -Infinity;
             let bestR = baseR;
             let bestC = baseC;
-            for (let kr = 0; kr < this.poolSize; kr++) {
-              for (let kc = 0; kc < this.poolSize; kc++) {
-                const v = input[c][baseR + kr][baseC + kc];
+            for (let kr = 0; kr < ps; kr++) {
+              const row = inCh[baseR + kr]!;
+              for (let kc = 0; kc < ps; kc++) {
+                const v = row[baseC + kc]!;
                 if (v > best) {
                   best = v;
                   bestR = baseR + kr;
@@ -62,17 +78,18 @@ export class Pool2DLayer extends Layer {
                 }
               }
             }
-            out[c][or][oc] = best;
-            this.argmax[c][or][oc] = { r: bestR, c: bestC };
+            outCh[or]![oc] = best;
+            this.argmaxR[idx] = bestR;
+            this.argmaxC[idx] = bestC;
           } else {
             let sum = 0;
-            for (let kr = 0; kr < this.poolSize; kr++) {
-              for (let kc = 0; kc < this.poolSize; kc++) {
-                sum += input[c][baseR + kr][baseC + kc];
-              }
+            for (let kr = 0; kr < ps; kr++) {
+              const row = inCh[baseR + kr]!;
+              for (let kc = 0; kc < ps; kc++) sum += row[baseC + kc]!;
             }
-            out[c][or][oc] = sum / (this.poolSize * this.poolSize);
-            this.argmax[c][or][oc] = { r: baseR, c: baseC };
+            outCh[or]![oc] = sum / denom;
+            this.argmaxR[idx] = baseR;
+            this.argmaxC[idx] = baseC;
           }
         }
       }
@@ -83,26 +100,31 @@ export class Pool2DLayer extends Layer {
 
   backward(gradOut: Volume): Volume {
     const channels = gradOut.length;
-    const gradIn = zerosVolume(channels, this.inRows, this.inCols);
-    const outRows = gradOut[0].length;
-    const outCols = gradOut[0][0].length;
+    const gradIn = acquireVolume(this.scratchGradIn, channels, this.inRows, this.inCols);
+    this.scratchGradIn = gradIn;
+    const outRows = this.outRows;
+    const outCols = this.outCols;
     const denom = this.poolSize * this.poolSize;
+    const ps = this.poolSize;
+    const isMax = this.poolKind === "max";
 
     for (let c = 0; c < channels; c++) {
+      const gCh = gradOut[c]!;
+      const inCh = gradIn[c]!;
+      const baseIdx = c * outRows * outCols;
       for (let or = 0; or < outRows; or++) {
         for (let oc = 0; oc < outCols; oc++) {
-          const g = gradOut[c][or][oc];
-          if (this.poolKind === "max") {
-            const pos = this.argmax[c][or][oc];
-            gradIn[c][pos.r][pos.c] += g;
+          const g = gCh[or]![oc]!;
+          const idx = baseIdx + or * outCols + oc;
+          if (isMax) {
+            inCh[this.argmaxR[idx]!]![this.argmaxC[idx]!]! += g;
           } else {
             const each = g / denom;
-            const baseR = or * this.poolSize;
-            const baseC = oc * this.poolSize;
-            for (let kr = 0; kr < this.poolSize; kr++) {
-              for (let kc = 0; kc < this.poolSize; kc++) {
-                gradIn[c][baseR + kr][baseC + kc] += each;
-              }
+            const baseR = or * ps;
+            const baseC = oc * ps;
+            for (let kr = 0; kr < ps; kr++) {
+              const row = inCh[baseR + kr]!;
+              for (let kc = 0; kc < ps; kc++) row[baseC + kc]! += each;
             }
           }
         }

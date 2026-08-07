@@ -156,6 +156,7 @@ export class Conv2DLayer extends Layer {
     this.paddedInput = padded;
 
     const fn = activationById(this.activationId);
+    const act = fn.output.bind(fn);
     const z = acquireVolume(this.z, this.filters, outRows, outCols);
     const out = acquireVolume(
       (this.output as Volume) ?? [],
@@ -167,32 +168,45 @@ export class Conv2DLayer extends Layer {
     const k = this.kernelSize;
     const pRows = padded[0].length;
     const pCols = padded[0][0].length;
+    // Geometry from outputShape guarantees windows fit inside padded input.
+    const tight =
+      outRows > 0 &&
+      outCols > 0 &&
+      (outRows - 1) * s + k <= pRows &&
+      (outCols - 1) * s + k <= pCols;
 
     for (let o = 0; o < this.filters; o++) {
       const wBank = this.kernels[o];
       const b = this.biases[o];
+      const zCh = z[o]!;
+      const outCh = out[o]!;
       for (let or = 0; or < outRows; or++) {
         for (let oc = 0; oc < outCols; oc++) {
           let acc = b;
           const baseR = or * s;
           const baseC = oc * s;
           for (let i = 0; i < inChannels; i++) {
-            const w = wBank[i];
-            const inCh = padded[i];
+            const w = wBank[i]!;
+            const inCh = padded[i]!;
             for (let kr = 0; kr < k; kr++) {
-              const r = baseR + kr;
-              if (r >= pRows) continue;
-              const inRow = inCh[r];
-              const wRow = w[kr];
-              for (let kc = 0; kc < k; kc++) {
-                const c = baseC + kc;
-                if (c >= pCols) continue;
-                acc += wRow[kc] * inRow[c];
+              const wRow = w[kr]!;
+              if (tight) {
+                const inRow = inCh[baseR + kr]!;
+                for (let kc = 0; kc < k; kc++) acc += wRow[kc]! * inRow[baseC + kc]!;
+              } else {
+                const r = baseR + kr;
+                if (r >= pRows) continue;
+                const inRow = inCh[r]!;
+                for (let kc = 0; kc < k; kc++) {
+                  const c = baseC + kc;
+                  if (c >= pCols) continue;
+                  acc += wRow[kc]! * inRow[c]!;
+                }
               }
             }
           }
-          z[o][or][oc] = acc;
-          out[o][or][oc] = fn.output(acc);
+          zCh[or]![oc] = acc;
+          outCh[or]![oc] = act(acc);
         }
       }
     }
@@ -209,72 +223,92 @@ export class Conv2DLayer extends Layer {
     const outRows = out.length ? out[0].length : 0;
     const outCols = outRows ? out[0][0].length : 0;
     const fn = activationById(this.activationId);
+    const der = fn.der.bind(fn);
     const s = this.stride;
     const k = this.kernelSize;
+    const tight =
+      outRows > 0 &&
+      outCols > 0 &&
+      (outRows - 1) * s + k <= pRows &&
+      (outCols - 1) * s + k <= pCols;
 
     // dZ = gradOut ⊙ activation'(z)
     const dZ = acquireVolume(this.scratchDZ, this.filters, outRows, outCols);
     this.scratchDZ = dZ;
     for (let o = 0; o < this.filters; o++) {
+      const gCh = gradOut[o]!;
+      const zCh = this.z[o]!;
+      const dCh = dZ[o]!;
       for (let r = 0; r < outRows; r++) {
         for (let c = 0; c < outCols; c++) {
-          dZ[o][r][c] = gradOut[o][r][c] * fn.der(this.z[o][r][c]);
+          dCh[r]![c] = gCh[r]![c]! * der(zCh[r]![c]!);
         }
       }
     }
 
     // gradW and gradB — accumulate (zeroGrads() was called once per batch).
     for (let o = 0; o < this.filters; o++) {
-      const wBank = this.gradKernels[o];
+      const wBank = this.gradKernels[o]!;
+      const dCh = dZ[o]!;
       let gb = 0;
       for (let r = 0; r < outRows; r++) {
         for (let c = 0; c < outCols; c++) {
-          const g = dZ[o][r][c];
+          const g = dCh[r]![c]!;
           gb += g;
           const baseR = r * s;
           const baseC = c * s;
           for (let i = 0; i < inChannels; i++) {
-            const gw = wBank[i];
-            const inCh = this.paddedInput[i];
+            const gw = wBank[i]!;
+            const inCh = this.paddedInput[i]!;
             for (let kr = 0; kr < k; kr++) {
-              const rr = baseR + kr;
-              if (rr >= pRows) continue;
-              const inRow = inCh[rr];
-              const gwRow = gw[kr];
-              for (let kc = 0; kc < k; kc++) {
-                const cc = baseC + kc;
-                if (cc >= pCols) continue;
-                gwRow[kc] += g * inRow[cc];
+              const gwRow = gw[kr]!;
+              if (tight) {
+                const inRow = inCh[baseR + kr]!;
+                for (let kc = 0; kc < k; kc++) gwRow[kc]! += g * inRow[baseC + kc]!;
+              } else {
+                const rr = baseR + kr;
+                if (rr >= pRows) continue;
+                const inRow = inCh[rr]!;
+                for (let kc = 0; kc < k; kc++) {
+                  const cc = baseC + kc;
+                  if (cc >= pCols) continue;
+                  gwRow[kc]! += g * inRow[cc]!;
+                }
               }
             }
           }
         }
       }
-      this.gradBiases[o] += gb;
+      this.gradBiases[o]! += gb;
     }
 
-    // gradIn (full convolution of dZ with the flipped kernel)
+    // gradIn — scatter dZ through the same (unflipped) kernel indices.
     const gradPadded = acquireVolume(this.scratchGradPadded, inChannels, pRows, pCols);
     this.scratchGradPadded = gradPadded;
     for (let i = 0; i < inChannels; i++) {
+      const gInCh = gradPadded[i]!;
       for (let o = 0; o < this.filters; o++) {
-        const wBank = this.kernels[o];
-        const w = wBank[i];
+        const w = this.kernels[o]![i]!;
+        const dCh = dZ[o]!;
         for (let r = 0; r < outRows; r++) {
           for (let c = 0; c < outCols; c++) {
-            const g = dZ[o][r][c];
+            const g = dCh[r]![c]!;
             const baseR = r * s;
             const baseC = c * s;
             for (let kr = 0; kr < k; kr++) {
-              const rr = baseR + kr;
-              if (rr >= pRows) continue;
-              const gRow = gradPadded[i][rr];
-              for (let kc = 0; kc < k; kc++) {
-                const cc = baseC + kc;
-                if (cc >= pCols) continue;
-                // No flip: forward is cross-correlation, so the transpose uses the
-                // same kernel indexing, scattering gradOut back to its input cell.
-                gRow[cc] += g * w[kr][kc];
+              const wRow = w[kr]!;
+              if (tight) {
+                const gRow = gInCh[baseR + kr]!;
+                for (let kc = 0; kc < k; kc++) gRow[baseC + kc]! += g * wRow[kc]!;
+              } else {
+                const rr = baseR + kr;
+                if (rr >= pRows) continue;
+                const gRow = gInCh[rr]!;
+                for (let kc = 0; kc < k; kc++) {
+                  const cc = baseC + kc;
+                  if (cc >= pCols) continue;
+                  gRow[cc]! += g * wRow[kc]!;
+                }
               }
             }
           }
