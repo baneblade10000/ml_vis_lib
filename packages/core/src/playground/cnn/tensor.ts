@@ -41,6 +41,35 @@ export function zerosVolume(channels: number, rows: number, cols: number): Volum
   return out;
 }
 
+/** Zero every cell of an existing volume (no reallocation). */
+export function clearVolume(volume: Volume): void {
+  for (let c = 0; c < volume.length; c++) {
+    const ch = volume[c]!;
+    for (let r = 0; r < ch.length; r++) ch[r]!.fill(0);
+  }
+}
+
+/**
+ * Reuse `cache` when shape matches (cleared); otherwise allocate a fresh volume.
+ * Cuts GC traffic in hot conv forward/backward loops.
+ */
+export function acquireVolume(
+  cache: Volume,
+  channels: number,
+  rows: number,
+  cols: number,
+): Volume {
+  if (
+    cache.length === channels &&
+    cache[0]?.length === rows &&
+    cache[0]?.[0]?.length === cols
+  ) {
+    clearVolume(cache);
+    return cache;
+  }
+  return zerosVolume(channels, rows, cols);
+}
+
 export function clone2D(map: Map2D): Map2D {
   return map.map((row) => row.slice());
 }
@@ -85,6 +114,18 @@ export function zerosSignal(channels: number, length: number): Signal {
   const out: Signal = new Array(channels);
   for (let c = 0; c < channels; c++) out[c] = zeros1D(length);
   return out;
+}
+
+export function clearSignal(signal: Signal): void {
+  for (let c = 0; c < signal.length; c++) signal[c]!.fill(0);
+}
+
+export function acquireSignal(cache: Signal, channels: number, length: number): Signal {
+  if (cache.length === channels && cache[0]?.length === length) {
+    clearSignal(cache);
+    return cache;
+  }
+  return zerosSignal(channels, length);
 }
 
 export function clone1D(row: number[]): number[] {

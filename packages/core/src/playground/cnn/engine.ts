@@ -490,6 +490,11 @@ export class CnnEngine {
     return this.outputLayer.probability;
   }
 
+  /** Output probability from the most recent forward (e.g. after {@link forwardInspected}). */
+  currentProbability(): number {
+    return this.outputLayer.probability;
+  }
+
   getLoss(data: ImageExample[] | SignalExample[]): number {
     if (data.length === 0) return 0;
     let total = 0;
@@ -518,6 +523,28 @@ export class CnnEngine {
     this.accTest = this.getAccuracy(this.testData);
   }
 
+  /**
+   * Approximate train/test loss+acc on a strided subset — for Play paint ticks
+   * where a full-dataset sweep would dominate the train epoch itself.
+   */
+  refreshMetricsSampled(maxSamples = 24): void {
+    const sample = (
+      data: ImageExample[] | SignalExample[],
+    ): ImageExample[] | SignalExample[] => {
+      if (data.length <= maxSamples) return data;
+      const out: Array<ImageExample | SignalExample> = [];
+      const step = data.length / maxSamples;
+      for (let i = 0; i < maxSamples; i++) out.push(data[Math.floor(i * step)]!);
+      return out as ImageExample[] | SignalExample[];
+    };
+    const train = sample(this.trainData);
+    const test = sample(this.testData);
+    this.lossTrain = this.getLoss(train);
+    this.lossTest = this.getLoss(test);
+    this.accTrain = this.getAccuracy(train);
+    this.accTest = this.getAccuracy(test);
+  }
+
   /** Recompute feature maps for the inspected example (cheap, for display). */
   forwardInspected(): void {
     const data = this.trainData.length ? this.trainData : this.testData;
@@ -537,6 +564,11 @@ export class CnnEngine {
   /** Snapshot of every layer's current output (the inspected example). */
   featureMaps(): FeatureMapSnapshot[] {
     this.forwardInspected();
+    return this.snapshotFeatureMaps();
+  }
+
+  /** Clone current layer outputs; caller must have already run a forward pass. */
+  snapshotFeatureMaps(): FeatureMapSnapshot[] {
     return this.layers.map((layer) => this.snapshotLayer(layer));
   }
 

@@ -1,7 +1,7 @@
 import {
+  acquireSignal,
   cloneKernel1D,
   zeros1D,
-  zerosSignal,
   type Kernel1D,
   type Signal,
 } from "../tensor";
@@ -40,6 +40,10 @@ export class Conv1DLayer extends Layer {
   biases: number[];
   private z: Signal = [];
   private paddedInput: Signal = [];
+  private scratchPadded: Signal = [];
+  private scratchDZ: Signal = [];
+  private scratchGradPadded: Signal = [];
+  private scratchUnpad: Signal = [];
   private gradKernels: Kernel1D;
   private gradBiases: number[];
   private optKernels: OptState[][][] = [];
@@ -124,8 +128,8 @@ export class Conv1DLayer extends Layer {
     const pLen = padded[0].length;
 
     const fn = activationById(this.activationId);
-    const z = zerosSignal(this.filters, outLen);
-    const out = zerosSignal(this.filters, outLen);
+    const z = acquireSignal(this.z, this.filters, outLen);
+    const out = acquireSignal((this.output as Signal) ?? [], this.filters, outLen);
     const s = this.stride;
     const k = this.kernelSize;
 
@@ -161,7 +165,8 @@ export class Conv1DLayer extends Layer {
     const s = this.stride;
     const k = this.kernelSize;
 
-    const dZ = zerosSignal(this.filters, outLen);
+    const dZ = acquireSignal(this.scratchDZ, this.filters, outLen);
+    this.scratchDZ = dZ;
     for (let o = 0; o < this.filters; o++) {
       for (let p = 0; p < outLen; p++) {
         dZ[o][p] = gradOut[o][p] * fn.der(this.z[o][p]);
@@ -188,7 +193,8 @@ export class Conv1DLayer extends Layer {
       this.gradBiases[o] += gb;
     }
 
-    const gradPadded = zerosSignal(inChannels, pLen);
+    const gradPadded = acquireSignal(this.scratchGradPadded, inChannels, pLen);
+    this.scratchGradPadded = gradPadded;
     for (let i = 0; i < inChannels; i++) {
       for (let o = 0; o < this.filters; o++) {
         const w = this.kernels[o][i];
@@ -355,17 +361,29 @@ export class Conv1DLayer extends Layer {
   }
 
   private pad(input: Signal, pad: number): Signal {
-    if (pad === 0) return input.map((row) => row.slice());
     const channels = input.length;
-    const out = new Array(channels);
+    const inLen = input[0]!.length;
+    const out = acquireSignal(this.scratchPadded, channels, inLen + 2 * pad);
+    this.scratchPadded = out;
     for (let i = 0; i < channels; i++) {
-      out[i] = new Array(pad).fill(0).concat(input[i]).concat(new Array(pad).fill(0));
+      const src = input[i]!;
+      const dst = out[i]!;
+      for (let p = 0; p < inLen; p++) dst[p + pad] = src[p]!;
     }
     return out;
   }
 
   private unpad(padded: Signal, pad: number): Signal {
     if (pad === 0) return padded;
-    return padded.map((row) => row.slice(pad, row.length - pad));
+    const channels = padded.length;
+    const outLen = padded[0]!.length - 2 * pad;
+    const out = acquireSignal(this.scratchUnpad, channels, outLen);
+    this.scratchUnpad = out;
+    for (let i = 0; i < channels; i++) {
+      const src = padded[i]!;
+      const dst = out[i]!;
+      for (let p = 0; p < outLen; p++) dst[p] = src[p + pad]!;
+    }
+    return out;
   }
 }

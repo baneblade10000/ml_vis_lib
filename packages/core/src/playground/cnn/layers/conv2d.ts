@@ -1,8 +1,7 @@
 import {
+  acquireVolume,
   cloneKernel2D,
-  cloneVolume,
   zeros2D,
-  zerosVolume,
   type Kernel2D,
   type Map2D,
   type Volume,
@@ -53,6 +52,11 @@ export class Conv2DLayer extends Layer {
   private z: Volume = [];
   /** Cached padded input (input to the weight gradient). */
   private paddedInput: Volume = [];
+  /** Scratch buffers reused across forward/backward to cut GC pressure. */
+  private scratchPadded: Volume = [];
+  private scratchDZ: Volume = [];
+  private scratchGradPadded: Volume = [];
+  private scratchUnpad: Volume = [];
 
   private gradKernels: Kernel2D;
   private gradBiases: number[];
@@ -152,8 +156,13 @@ export class Conv2DLayer extends Layer {
     this.paddedInput = padded;
 
     const fn = activationById(this.activationId);
-    const z = zerosVolume(this.filters, outRows, outCols);
-    const out = zerosVolume(this.filters, outRows, outCols);
+    const z = acquireVolume(this.z, this.filters, outRows, outCols);
+    const out = acquireVolume(
+      (this.output as Volume) ?? [],
+      this.filters,
+      outRows,
+      outCols,
+    );
     const s = this.stride;
     const k = this.kernelSize;
     const pRows = padded[0].length;
@@ -204,7 +213,8 @@ export class Conv2DLayer extends Layer {
     const k = this.kernelSize;
 
     // dZ = gradOut ⊙ activation'(z)
-    const dZ = zerosVolume(this.filters, outRows, outCols);
+    const dZ = acquireVolume(this.scratchDZ, this.filters, outRows, outCols);
+    this.scratchDZ = dZ;
     for (let o = 0; o < this.filters; o++) {
       for (let r = 0; r < outRows; r++) {
         for (let c = 0; c < outCols; c++) {
@@ -244,7 +254,8 @@ export class Conv2DLayer extends Layer {
     }
 
     // gradIn (full convolution of dZ with the flipped kernel)
-    const gradPadded = zerosVolume(inChannels, pRows, pCols);
+    const gradPadded = acquireVolume(this.scratchGradPadded, inChannels, pRows, pCols);
+    this.scratchGradPadded = gradPadded;
     for (let i = 0; i < inChannels; i++) {
       for (let o = 0; o < this.filters; o++) {
         const wBank = this.kernels[o];
@@ -451,13 +462,13 @@ export class Conv2DLayer extends Layer {
   }
 
   private pad(input: Volume, pad: number): Volume {
-    if (pad === 0) return cloneVolume(input);
     const inChannels = input.length;
     const inRows = input[0].length;
     const inCols = input[0][0].length;
     const outRows = inRows + 2 * pad;
     const outCols = inCols + 2 * pad;
-    const out = zerosVolume(inChannels, outRows, outCols);
+    const out = acquireVolume(this.scratchPadded, inChannels, outRows, outCols);
+    this.scratchPadded = out;
     for (let i = 0; i < inChannels; i++) {
       for (let r = 0; r < inRows; r++) {
         for (let c = 0; c < inCols; c++) {
@@ -475,7 +486,8 @@ export class Conv2DLayer extends Layer {
     const pCols = padded[0][0].length;
     const outRows = pRows - 2 * pad;
     const outCols = pCols - 2 * pad;
-    const out = zerosVolume(inChannels, outRows, outCols);
+    const out = acquireVolume(this.scratchUnpad, inChannels, outRows, outCols);
+    this.scratchUnpad = out;
     for (let i = 0; i < inChannels; i++) {
       for (let r = 0; r < outRows; r++) {
         for (let c = 0; c < outCols; c++) {

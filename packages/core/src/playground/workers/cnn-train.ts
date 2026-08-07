@@ -1,14 +1,22 @@
 /// <reference lib="webworker" />
 import { CnnEngine, type CnnConfig } from "../cnn/engine";
+import type { ImageExample, SignalExample } from "../cnn/gallery";
 import type { CnnLayerView, CnnTrainSnapshot, FromTrainWorker, ToTrainWorker } from "./protocol";
 import { createPlayLoop } from "./runPlayLoop";
 import { ShardPool } from "./ShardPool";
+import { defaultShardCount } from "./shardCount";
 
 declare const self: DedicatedWorkerGlobalScope;
 
 let engine: CnnEngine | null = null;
 let play: ReturnType<typeof createPlayLoop> | null = null;
 let pool: ShardPool | null = null;
+
+/** Cached across play ticks so we don't re-predict the gallery at paintHz. */
+let cachedGalleryExamples: Array<ImageExample | SignalExample> = [];
+let cachedGalleryPredictions: number[] = [];
+let cachedLayers: CnnLayerView[] | null = null;
+let cachedConfig: CnnConfig | null = null;
 
 function post(msg: FromTrainWorker): void {
   self.postMessage(msg);
@@ -18,11 +26,9 @@ function createGradShardWorker(): Worker {
   return new Worker(new URL("./grad-shard.js", import.meta.url), { type: "module" });
 }
 
-function buildSnapshot(e: CnnEngine): CnnTrainSnapshot {
-  e.refreshMetrics();
-  e.forwardInspected();
+function buildLayerViews(e: CnnEngine): CnnLayerView[] {
   const shapes = e.pipelineShapes();
-  const layers: CnnLayerView[] = e.layers.map((layer, idx) => ({
+  return e.layers.map((layer, idx) => ({
     id: layer.id,
     kind: layer.kind,
     label: layer.label(),
@@ -30,33 +36,83 @@ function buildSnapshot(e: CnnEngine): CnnTrainSnapshot {
     params: layer.paramCount(),
     weightMag: layer.weightMagnitude(),
   }));
-  const featureMaps = e.featureMaps();
-  const gallerySource = (e.testData.length ? e.testData : e.trainData).slice();
-  const galleryExamples = gallerySource.slice(0, 48);
-  const galleryPredictions = galleryExamples.map((ex) => e.predict(ex));
-  const data = e.trainData;
-  const idx = Math.min(e.inspectedExampleIndex, Math.max(0, data.length - 1));
-  const probability = data.length ? e.predict(data[idx]!) : 0.5;
+}
+
+function kernelsFromFeatureMaps(
+  featureMaps: ReturnType<CnnEngine["snapshotFeatureMaps"]>,
+): Record<string, number[][] | number[][][]> {
+  const kernels: Record<string, number[][] | number[][][]> = {};
+  for (const m of featureMaps) {
+    if (m.kernels2d) kernels[m.layerId] = m.kernels2d;
+    else if (m.kernels1d) kernels[m.layerId] = m.kernels1d;
+  }
+  return kernels;
+}
+
+/**
+ * @param full — pause/step/init: full metrics + gallery. Play ticks use a cheap path.
+ */
+function buildSnapshot(e: CnnEngine, full: boolean): CnnTrainSnapshot {
+  if (full) {
+    e.refreshMetrics();
+  } else {
+    e.refreshMetricsSampled(24);
+  }
+  e.forwardInspected();
+  const featureMaps = e.snapshotFeatureMaps();
+  const kernels = kernelsFromFeatureMaps(featureMaps);
+
+  if (full || cachedGalleryExamples.length === 0) {
+    const gallerySource = (e.testData.length ? e.testData : e.trainData).slice();
+    cachedGalleryExamples = gallerySource.slice(0, 48);
+    cachedGalleryPredictions = cachedGalleryExamples.map((ex) => e.predict(ex));
+  }
+
+  if (full || !cachedLayers || !cachedConfig) {
+    cachedLayers = buildLayerViews(e);
+    cachedConfig = structuredClone(e.config);
+  } else {
+    // Refresh weight magnitudes cheaply; topology is unchanged during Play.
+    for (let i = 0; i < cachedLayers.length; i++) {
+      const layer = e.layers[i];
+      if (layer) cachedLayers[i]!.weightMag = layer.weightMagnitude();
+    }
+  }
+
+  const probability = e.trainData.length || e.testData.length ? e.currentProbability() : 0.5;
+
   return {
     kind: "cnn",
-    config: structuredClone(e.config),
+    config: full ? structuredClone(e.config) : cachedConfig!,
     stats: e.stats(),
     lossHistory: e.lossHistory.map((p) => ({ ...p })),
-    layers,
+    layers: cachedLayers!,
     featureMaps,
-    kernels: e.kernelSnapshots(),
-    galleryExamples,
-    galleryPredictions,
+    kernels,
+    galleryExamples: cachedGalleryExamples,
+    galleryPredictions: cachedGalleryPredictions,
     inspectedExampleIndex: e.inspectedExampleIndex,
     loss: e.lossTest,
     probability,
   };
 }
 
+function invalidateSnapshotCache(): void {
+  cachedGalleryExamples = [];
+  cachedGalleryPredictions = [];
+  cachedLayers = null;
+  cachedConfig = null;
+}
+
 async function syncPool(): Promise<void> {
   if (!engine) return;
   if (!pool) {
-    pool = new ShardPool({ createShardWorker: createGradShardWorker, kind: "cnn" });
+    // Cap shards: tiny CNN batches make DP coordination cost more than the math.
+    pool = new ShardPool({
+      createShardWorker: createGradShardWorker,
+      kind: "cnn",
+      shardCount: Math.min(4, defaultShardCount()),
+    });
   }
   await pool.init(structuredClone(engine.config));
   pool.setTrainData(engine.trainData);
@@ -66,7 +122,14 @@ async function trainEpochDp(): Promise<void> {
   const e = engine!;
   const { batchSize, learningRate } = e.config;
   const n = e.trainData.length;
-  if (!pool || pool.shardCount <= 1 || n === 0) {
+  // Fall back to local path when shards would each get too few examples.
+  const minPerShard = 4;
+  if (
+    !pool ||
+    pool.shardCount <= 1 ||
+    n === 0 ||
+    batchSize < pool.shardCount * minPerShard
+  ) {
     e.trainEpoch();
     return;
   }
@@ -74,7 +137,15 @@ async function trainEpochDp(): Promise<void> {
     const indices: number[] = [];
     for (let i = start; i < Math.min(start + batchSize, n); i++) indices.push(i);
     const weights = e.flattenParams();
-    const result = await pool.computeGrads(weights, indices);
+    let result: { grads: Float64Array; count: number } | null = null;
+    try {
+      result = await pool.computeGrads(weights, indices);
+    } catch {
+      e.zeroAllGrads();
+      e.accumulateGradIndices(indices);
+      e.applyUpdate(learningRate, indices.length);
+      continue;
+    }
     if (!result || result.count === 0) {
       e.zeroAllGrads();
       e.accumulateGradIndices(indices);
@@ -94,10 +165,11 @@ function ensurePlay(): ReturnType<typeof createPlayLoop> {
       onPaint: () => {
         if (!engine) return;
         engine.pushLossHistory();
-        post({ type: "tick", snapshot: buildSnapshot(engine) });
+        post({ type: "tick", snapshot: buildSnapshot(engine, false) });
       },
       maxEpochsPerFrame: 2,
-      paintHz: 20,
+      // 10 Hz is plenty for feature-map viz; full metrics were the real bottleneck.
+      paintHz: 10,
     });
   }
   return play;
@@ -177,27 +249,30 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
       play?.stop();
       pool?.dispose();
       pool = null;
+      invalidateSnapshotCache();
       engine = new CnnEngine(structuredClone(msg.config as CnnConfig));
       await syncPool();
-      post({ type: "ready", snapshot: buildSnapshot(engine) });
+      post({ type: "ready", snapshot: buildSnapshot(engine, true) });
       break;
     }
     case "setConfig": {
       if (!engine) return;
       Object.assign(engine.config, msg.patch);
-      post({ type: "tick", snapshot: buildSnapshot(engine) });
+      invalidateSnapshotCache();
+      post({ type: "tick", snapshot: buildSnapshot(engine, true) });
       break;
     }
     case "rebuild": {
       if (!engine) return;
       play?.pause();
+      invalidateSnapshotCache();
       if (msg.reason === "reset") engine.reset();
       else if (msg.reason === "resetWeights") engine.resetWeights();
       else if (msg.reason === "mode" && msg.payload) engine.setMode(msg.payload as never);
       else if (msg.reason === "dataset" && msg.payload) engine.setDataset(msg.payload as never);
       await syncPool();
       {
-        const snapshot = buildSnapshot(engine);
+        const snapshot = buildSnapshot(engine, true);
         post({ type: "tick", snapshot });
         post({ type: "rebuilt", reason: msg.reason, snapshot });
       }
@@ -212,7 +287,8 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
       play?.pause();
       if (engine) {
         engine.pushLossHistory();
-        post({ type: "tick", snapshot: buildSnapshot(engine) });
+        invalidateSnapshotCache();
+        post({ type: "tick", snapshot: buildSnapshot(engine, true) });
       }
       break;
     }
@@ -221,7 +297,8 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
       play?.pause();
       await trainEpochDp();
       engine.pushLossHistory();
-      post({ type: "tick", snapshot: buildSnapshot(engine) });
+      invalidateSnapshotCache();
+      post({ type: "tick", snapshot: buildSnapshot(engine, true) });
       break;
     }
     case "inspect": {
@@ -230,12 +307,14 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
         engine.inspectedExampleIndex = msg.exampleIndex;
       }
       engine.forwardInspected();
-      post({ type: "tick", snapshot: buildSnapshot(engine) });
+      // Keep gallery cache; only refresh maps for the new example.
+      post({ type: "tick", snapshot: buildSnapshot(engine, false) });
       break;
     }
     case "command": {
       if (!engine) return;
       handleCommand(msg.name, msg.args);
+      invalidateSnapshotCache();
       if (
         msg.name === "regenerateData" ||
         msg.name === "setDataset" ||
@@ -251,7 +330,7 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
       } else {
         pool?.setTrainData(engine.trainData);
       }
-      post({ type: "tick", snapshot: buildSnapshot(engine) });
+      post({ type: "tick", snapshot: buildSnapshot(engine, true) });
       break;
     }
     case "dispose": {
@@ -260,6 +339,7 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
       pool?.dispose();
       pool = null;
       engine = null;
+      invalidateSnapshotCache();
       break;
     }
   }

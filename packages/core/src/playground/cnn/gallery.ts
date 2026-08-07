@@ -290,12 +290,18 @@ export function makeSignalDataset(
   return examples;
 }
 
-/** Wrap a single image (h×w) as a one-channel {@link import("./tensor").Volume}. */
+/**
+ * Wrap a single image (h×w) as a one-channel volume.
+ * Returns a view (no row copy) — layers must not mutate the example pixels.
+ */
 export function imageToVolume(pixels: Map2D): Map2D[] {
-  return [pixels.map((row) => row.slice())];
+  return [pixels];
 }
 
-/** Wrap a signal as a one-channel {@link import("./tensor").Signal}. */
+/**
+ * Wrap a signal as a one-channel input.
+ * Returns a view (no copy) — layers must not mutate the example values.
+ */
 export function signalToInput(values: number[]): number[][] {
-  return [values.slice()];
+  return [values];
 }
