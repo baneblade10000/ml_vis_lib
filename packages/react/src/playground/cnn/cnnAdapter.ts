@@ -139,6 +139,7 @@ function estimateNodeSize(
 
   const channels = Math.max(1, Math.min(16, shape?.channels ?? 1));
   const isConv = kind === "conv2d" || kind === "conv1d";
+  const isPool = kind === "pool2d" || kind === "pool1d";
   if (mode === "1d" || shape?.kind === "1d") {
     const rows = channels;
     const rowH = isConv ? Math.max(8, KERNEL_PX) : 8;
@@ -157,6 +158,11 @@ function estimateNodeSize(
       width: Math.max(CNN_NODE_WIDTH, cellW + 28),
       height: NODE_CHROME + gridH,
     };
+  }
+  if (isPool) {
+    // Pool tiles are stacked in a single column (FeatureGrid vertical).
+    const gridH = channels * MAP_PX + Math.max(0, channels - 1) * MAP_GAP;
+    return { width: CNN_NODE_WIDTH, height: NODE_CHROME + gridH };
   }
   const perRow = Math.max(1, Math.floor((MAP_GRID_MAX_W + MAP_GAP) / (MAP_PX + MAP_GAP)));
   const gridRows = Math.ceil(channels / perRow);

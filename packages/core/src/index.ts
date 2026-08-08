@@ -89,6 +89,41 @@ export type {
   TrainWorkerErrorHandler,
 } from "./playground";
 
+export {
+  addSignals,
+  buildSignal,
+  convolve,
+  convolveViaFft,
+  correlate,
+  defaultSignalParams,
+  dftMagnitude,
+  fft,
+  fftRadix2,
+  getSignalPresetSpec,
+  ifft,
+  makeComplex,
+  makeSignal,
+  nextPow2,
+  SIGNAL_PRESET_IDS,
+  SIGNAL_PRESETS,
+  toComplex,
+  zeros,
+} from "./signal";
+export type {
+  ComplexArray,
+  ConvolutionViaFftResult,
+  Signal,
+  SignalParamId,
+  SignalParamSpec,
+  SignalParams,
+  SignalPresetId,
+  SignalPresetSpec,
+  Spectrum,
+} from "./signal";
+
+export { SignalPlot } from "./charts/signal-plot";
+export type { SignalMarker, SignalPlotSeries, SignalPlotPayload } from "./charts/signal-plot";
+
 export { DecisionBoundaryPlot } from "./charts/decision-boundary-plot";
 export type { DecisionBoundaryPayload } from "./charts/decision-boundary-plot";
 

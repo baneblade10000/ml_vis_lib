@@ -16,11 +16,20 @@ export interface SignalExample {
  * Educational CNN datasets — binary classification, tiny resolution for
  * interactive browser training. Prefer recognizable shapes over abstract blobs.
  */
-export type CnnDatasetId2D = "digits" | "circles-squares" | "bars";
+export type CnnDatasetId2D =
+  | "digits"
+  | "circles-squares"
+  | "two-three-loops"
+  | "three-four-loops";
 export type CnnDatasetId1D = "heartbeat" | "tones" | "pulses";
 export type CnnDatasetId = CnnDatasetId2D | CnnDatasetId1D;
 
-export const CNN_DATASET_IDS_2D: CnnDatasetId2D[] = ["digits", "circles-squares", "bars"];
+export const CNN_DATASET_IDS_2D: CnnDatasetId2D[] = [
+  "digits",
+  "circles-squares",
+  "two-three-loops",
+  "three-four-loops",
+];
 export const CNN_DATASET_IDS_1D: CnnDatasetId1D[] = ["heartbeat", "tones", "pulses"];
 
 /** Slightly larger than before so digits stay readable after 2× pooling. */
@@ -170,26 +179,80 @@ function generateCirclesSquares(label: 0 | 1, noise: number): Map2D {
   return finishImage(img, noise);
 }
 
-/** Class 1: horizontal bar. Class 0: vertical bar — edge-orientation toy task. */
-function generateBars(label: 0 | 1, noise: number): Map2D {
-  const img = zeros2D(IMAGE_SIZE, IMAGE_SIZE);
-  const thick = uniform(1.2, 2.4);
-  const pos = uniform(4, IMAGE_SIZE - 5);
-  const len0 = uniform(2, 4);
-  const len1 = IMAGE_SIZE - 1 - uniform(2, 4);
-
-  if (label === 1) {
-    drawLine(img, pos, len0, pos + uniform(-0.6, 0.6), len1, thick);
-  } else {
-    drawLine(img, len0, pos, len1, pos + uniform(-0.6, 0.6), thick);
+/**
+ * One petal (teardrop loop) rooted at junction (jy, jx), tip along `angle`.
+ * Outline is pinched at the junction — not a free ellipse/circle.
+ */
+function drawPetal(
+  img: Map2D,
+  jy: number,
+  jx: number,
+  angle: number,
+  length: number,
+  width: number,
+  thickness: number,
+): void {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const steps = Math.max(36, Math.ceil(length * 6));
+  for (let i = 0; i <= steps; i++) {
+    const φ = (i / steps) * Math.PI * 2;
+    // u = 0 at junction (φ = 0, π), u = length at the tip (φ = π/2).
+    const u = length * Math.sin(φ) * Math.sin(φ);
+    const v = width * Math.sin(φ) * Math.cos(φ);
+    const r = jy + u * sin - v * cos;
+    const c = jx + u * cos + v * sin;
+    brush(img, r, c, thickness);
   }
+}
+
+/** `count` petals sharing one junction, evenly spaced in angle. */
+function drawPetalFlower(img: Map2D, count: 2 | 3 | 4, thickness: number): void {
+  const jx = IMAGE_SIZE * 0.5 + uniform(-0.7, 0.7);
+  const jy = IMAGE_SIZE * 0.5 + uniform(-0.7, 0.7);
+  // Pack tighter as petal count grows so the flower stays on 16×16.
+  const length =
+    count === 2 ? uniform(5.2, 6.4) : count === 3 ? uniform(4.4, 5.4) : uniform(3.8, 4.8);
+  const width =
+    count === 2 ? uniform(2.4, 3.2) : count === 3 ? uniform(2.0, 2.7) : uniform(1.6, 2.2);
+  const baseAngle = uniform(0, Math.PI * 2);
+
+  for (let i = 0; i < count; i++) {
+    const angle = baseAngle + (i * Math.PI * 2) / count;
+    const lenJ = length * uniform(0.92, 1.08);
+    const widJ = width * uniform(0.9, 1.1);
+    drawPetal(img, jy, jx, angle, lenJ, widJ, thickness * uniform(0.92, 1.05));
+  }
+  brush(img, jy, jx, thickness * 1.15);
+}
+
+function generatePetalCountTask(
+  low: 2 | 3,
+  high: 3 | 4,
+  label: 0 | 1,
+  noise: number,
+): Map2D {
+  const img = zeros2D(IMAGE_SIZE, IMAGE_SIZE);
+  const thick = uniform(0.65, 1.0);
+  drawPetalFlower(img, label === 1 ? high : low, thick);
   return finishImage(img, noise);
+}
+
+/** Class 0: two petals. Class 1: three petals — all from one point. */
+function generateTwoThreeLoops(label: 0 | 1, noise: number): Map2D {
+  return generatePetalCountTask(2, 3, label, noise);
+}
+
+/** Class 0: three petals. Class 1: four petals — all from one point. */
+function generateThreeFourLoops(label: 0 | 1, noise: number): Map2D {
+  return generatePetalCountTask(3, 4, label, noise);
 }
 
 const IMAGE_GENERATORS: Record<CnnDatasetId2D, (label: 0 | 1, noise: number) => Map2D> = {
   digits: generateDigits,
   "circles-squares": generateCirclesSquares,
-  bars: generateBars,
+  "two-three-loops": generateTwoThreeLoops,
+  "three-four-loops": generateThreeFourLoops,
 };
 
 // ─── 1-D signal generators ────────────────────────────────────────────────────

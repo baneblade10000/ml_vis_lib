@@ -354,6 +354,20 @@
   color: var(--nn-text-muted);
 }
 
+.nn-toolbar-weight-viz {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.nn-toolbar-weight-viz__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--nn-text-muted);
+  white-space: nowrap;
+  user-select: none;
+}
+
 /* ─── Buttons ───────────────────────────────────────────────────────────────── */
 
 .nn-btn {
@@ -1371,6 +1385,103 @@
 }
 
 .nn-edge-label__delta {
+  opacity: 0.75;
+  font-weight: 500;
+}
+
+/* Matrix layout viz: no edge handles; weight grids sit between columns. */
+.nn-flow-wrap--matrix .nn-flow-handle {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.nn-weight-matrix {
+  position: relative;
+  box-sizing: border-box;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  overflow: visible;
+}
+
+.nn-weight-matrix__grid {
+  display: grid;
+  gap: 0;
+}
+
+.nn-weight-matrix__cell {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-sizing: border-box;
+  cursor: pointer;
+  outline: none;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.35);
+  transition: filter 80ms ease, box-shadow 80ms ease;
+}
+
+.nn-weight-matrix__cell--empty {
+  background: rgba(148, 163, 184, 0.08) !important;
+  cursor: default;
+  box-shadow: inset 0 0 0 0.5px rgba(148, 163, 184, 0.15);
+}
+
+.nn-weight-matrix__cell--cross:not(.nn-weight-matrix__cell--empty) {
+  filter: brightness(1.12);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.28);
+}
+
+.nn-weight-matrix__cell--hover {
+  filter: brightness(1.22) !important;
+  box-shadow: inset 0 0 0 1.5px rgba(15, 23, 42, 0.55) !important;
+  z-index: 1;
+  position: relative;
+}
+
+.nn-weight-matrix__cell--selected {
+  box-shadow: inset 0 0 0 2px #0f172a !important;
+  z-index: 2;
+  position: relative;
+}
+
+.nn-weight-matrix__cell:focus-visible {
+  box-shadow: inset 0 0 0 2px #6366f1 !important;
+}
+
+.nn-weight-matrix__tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.4rem;
+  align-items: baseline;
+  max-width: 14rem;
+  padding: 2px 6px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 6;
+}
+
+.nn-weight-matrix__tooltip-pair {
+  color: var(--nn-text-muted, #64748b);
+  font-weight: 500;
+}
+
+.nn-weight-matrix__tooltip-delta {
   opacity: 0.75;
   font-weight: 500;
 }
@@ -2976,4 +3087,211 @@
 .mobile-stub .locale-switcher {
   flex-shrink: 0;
   box-shadow: none;
+}
+
+/* ─── Signal lab ────────────────────────────────────────────────────────────── */
+
+.signal-playground {
+  font-family: var(--nn-font);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 1rem;
+  color: var(--nn-text);
+}
+
+.signal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.signal-toolbar-left,
+.signal-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.signal-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--nn-border);
+  padding: 0 0.25rem;
+  flex-shrink: 0;
+}
+
+.signal-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.5rem 0.875rem;
+  margin-bottom: -1px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--nn-text-secondary);
+  cursor: pointer;
+  transition: color var(--nn-transition), border-color var(--nn-transition);
+}
+
+.signal-tab:hover {
+  color: var(--nn-text);
+}
+
+.signal-tab--active {
+  color: var(--nn-text);
+  font-weight: 600;
+}
+
+.signal-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 19rem;
+  gap: 1rem;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.signal-canvas-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.signal-canvas-wrap canvas {
+  border-radius: var(--nn-radius-md);
+  box-shadow: var(--nn-shadow-sm);
+}
+
+.signal-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--nn-text-secondary);
+}
+
+.signal-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.signal-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--nn-surface);
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius-md);
+  padding: 0.75rem;
+  box-shadow: var(--nn-shadow-xs);
+}
+
+.signal-input-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.signal-input-tag {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--nn-radius-full);
+  color: #ffffff;
+}
+
+.signal-input-tag--f {
+  background: var(--nn-cyan);
+}
+
+.signal-input-tag--g {
+  background: var(--nn-crimson);
+}
+
+.signal-input-params {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.signal-slider {
+  display: grid;
+  grid-template-columns: 4rem 1fr 2.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.signal-slider--wide {
+  grid-template-columns: 5rem 1fr 2.5rem;
+  background: var(--nn-surface);
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius-md);
+  padding: 0.625rem 0.75rem;
+  box-shadow: var(--nn-shadow-xs);
+}
+
+.signal-slider-label {
+  color: var(--nn-text-secondary);
+  font-weight: 500;
+}
+
+.signal-slider-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--nn-text);
+  font-weight: 600;
+}
+
+.signal-slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--nn-accent);
+  cursor: pointer;
+}
+
+.signal-playback {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.signal-playback .signal-slider {
+  flex: 1 1 12rem;
+  min-width: 12rem;
+}
+
+.signal-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--nn-surface);
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius-md);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--nn-text-secondary);
+  cursor: pointer;
+}
+
+.signal-toggle input[type="checkbox"] {
+  accent-color: var(--nn-accent);
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .signal-body {
+    grid-template-columns: 1fr;
+  }
 }

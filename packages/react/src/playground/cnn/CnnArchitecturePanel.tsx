@@ -6,17 +6,15 @@ export interface CnnArchitecturePanelProps {
   layers: LayerSpec[];
   selectedIndex: number | null;
   onSelectLayer: (index: number) => void;
-  onRemoveLayer: (index: number) => void;
   onSetFilters: (index: number, filters: number) => void;
   onSetKernelSize: (index: number, kernelSize: number) => void;
-  onSetUnits: (index: number, units: number) => void;
   onSetPoolKind: (index: number, poolKind: "max" | "avg") => void;
 }
 
-const FILTER_OPTIONS = [1, 2, 4, 8];
-const KERNEL_OPTIONS_2D = [3, 5];
-const KERNEL_OPTIONS_1D = [3, 5, 7];
-const UNIT_OPTIONS = [1, 2, 4, 8];
+/** Conv filter count: step 2, capped at 16. */
+const FILTER_OPTIONS = [2, 4, 6, 8, 10, 12, 14, 16];
+const KERNEL_OPTIONS_2D = [3, 5, 7, 9];
+const KERNEL_OPTIONS_1D = [3, 5, 7, 9];
 
 function layerTitle(spec: LayerSpec, t: CnnMessages): string {
   switch (spec.kind) {
@@ -36,8 +34,22 @@ function layerTitle(spec: LayerSpec, t: CnnMessages): string {
   }
 }
 
+function nearestOption(options: number[], current: number): number {
+  let best = options[0]!;
+  let bestDist = Math.abs(best - current);
+  for (const o of options) {
+    const d = Math.abs(o - current);
+    if (d < bestDist) {
+      best = o;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
 function stepOption(options: number[], current: number, delta: -1 | 1): number {
-  const i = Math.max(0, options.indexOf(current));
+  const snapped = nearestOption(options, current);
+  const i = options.indexOf(snapped);
   return options[Math.max(0, Math.min(options.length - 1, i + delta))]!;
 }
 
@@ -103,10 +115,8 @@ export function CnnArchitecturePanel({
   layers,
   selectedIndex,
   onSelectLayer,
-  onRemoveLayer,
   onSetFilters,
   onSetKernelSize,
-  onSetUnits,
   onSetPoolKind,
 }: CnnArchitecturePanelProps) {
   const t = useCnnMessages();
@@ -119,9 +129,9 @@ export function CnnArchitecturePanel({
         {layers.map((spec, idx) => {
           const isConv = spec.kind === "conv2d" || spec.kind === "conv1d";
           const isPool = spec.kind === "pool2d" || spec.kind === "pool1d";
-          const isDense = spec.kind === "dense";
           const kernelOptions = spec.kind === "conv2d" ? KERNEL_OPTIONS_2D : KERNEL_OPTIONS_1D;
           const selected = selectedIndex === idx;
+          const filterValue = nearestOption(FILTER_OPTIONS, spec.filters ?? 4);
 
           return (
             <div
@@ -145,7 +155,7 @@ export function CnnArchitecturePanel({
                   <>
                     <ParamGroup label={t.filters}>
                       <MiniStepper
-                        value={spec.filters ?? 4}
+                        value={filterValue}
                         options={FILTER_OPTIONS}
                         onChange={(v) => onSetFilters(idx, v)}
                         ariaDec={`${t.filters} −`}
@@ -185,28 +195,6 @@ export function CnnArchitecturePanel({
                   </ParamGroup>
                 )}
 
-                {isDense && (
-                  <ParamGroup label={t.units}>
-                    <MiniStepper
-                      value={spec.units ?? 1}
-                      options={UNIT_OPTIONS}
-                      onChange={(v) => onSetUnits(idx, v)}
-                      ariaDec={`${t.units} −`}
-                      ariaInc={`${t.units} +`}
-                    />
-                  </ParamGroup>
-                )}
-
-                <ParamGroup>
-                  <button
-                    type="button"
-                    className="nn-icon-btn nn-icon-btn--sm"
-                    onClick={() => onRemoveLayer(idx)}
-                    aria-label={t.removeLayer}
-                  >
-                    −
-                  </button>
-                </ParamGroup>
               </div>
             </div>
           );

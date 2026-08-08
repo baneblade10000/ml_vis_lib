@@ -2,6 +2,7 @@ import type { Edge, Node } from "@xyflow/react";
 import { MarkerType } from "@xyflow/react";
 import {
   INPUTS,
+  MLP_COL_SPACING,
   MLP_NODE_SIZE,
   MLP_OUTPUT_NODE_SIZE,
   weightColor,
@@ -20,8 +21,32 @@ export const OUTPUT_NODE_HEIGHT = MLP_OUTPUT_NODE_SIZE;
 
 export type DataPoint = { x: number; y: number; label: number };
 
+/** How connections between layers are drawn on the canvas. */
+export type LayoutVizMode = "graph" | "matrix";
+
+export type WeightMatrixCellData = {
+  linkId: string | null;
+  weight: number;
+  gradient: number;
+  active: boolean;
+};
+
+export type WeightMatrixPayload = {
+  sourceIds: string[];
+  destIds: string[];
+  sourceLabels: string[];
+  destLabels: string[];
+  cells: WeightMatrixCellData[][];
+  selectedEdgeId: string | null;
+  vizMode: EdgeVizMode;
+  learningRate: number;
+  cellPx: number;
+  /** Global max|∂E/∂w| so gradient colors match edge viz across matrices. */
+  gradScale: number;
+};
+
 export type NetworkNodeData = {
-  kind: GraphNodeKind;
+  kind: GraphNodeKind | "weightMatrix";
   label: string;
   bias?: number;
   active?: boolean;
@@ -31,6 +56,8 @@ export type NetworkNodeData = {
   discretize: boolean;
   selected: boolean;
   paintGeneration?: number;
+  /** Present when `kind === "weightMatrix"`. */
+  matrix?: WeightMatrixPayload;
 };
 
 /** What drives edge stroke width / color / opacity. */
@@ -45,6 +72,11 @@ export type WeightEdgeData = {
   active: boolean;
   vizMode: EdgeVizMode;
 };
+
+const MATRIX_CELL_MIN = 8;
+const MATRIX_CELL_MAX = 18;
+/** Horizontal room between adjacent neuron columns for a weight matrix. */
+const MATRIX_GAP = MLP_COL_SPACING - NODE_WIDTH;
 
 /** Current ∂E/∂w used for visualization (batch mean → last batch → last sample). */
 export function linkPartialDerivative(link: {
@@ -85,6 +117,125 @@ function edgeStrokeStyle(
   };
 }
 
+function nodeDisplayLabel(graph: ComputationalGraph, id: string): string {
+  if (id in INPUTS) return INPUTS[id]?.label ?? id;
+  const node = graph.nodes.get(id);
+  return node?.label ?? id;
+}
+
+function matrixCellPx(rows: number, cols: number): number {
+  const dim = Math.max(rows, cols, 1);
+  const budget = MATRIX_GAP - 20;
+  const raw = Math.floor(budget / dim);
+  return Math.max(MATRIX_CELL_MIN, Math.min(MATRIX_CELL_MAX, raw));
+}
+
+function nodeOuterSize(graph: ComputationalGraph, id: string): { w: number; h: number } {
+  const isOut = graph.nodes.get(id)?.kind === "output";
+  return isOut
+    ? { w: OUTPUT_NODE_WIDTH, h: OUTPUT_NODE_HEIGHT }
+    : { w: NODE_WIDTH, h: NODE_HEIGHT };
+}
+
+/** Build one weight-matrix node sitting in the gap between two layer columns. */
+function buildWeightMatrixNode(
+  graph: ComputationalGraph,
+  layerIndex: number,
+  sourceIds: string[],
+  destIds: string[],
+  options: {
+    enabledFeatures: Record<string, boolean>;
+    selectedEdgeId: string | null;
+    edgeVizMode: EdgeVizMode;
+    learningRate: number;
+    gradients: Map<string, number>;
+    gradScale: number;
+  },
+): Node<NetworkNodeData> | null {
+  if (!sourceIds.length || !destIds.length) return null;
+
+  const destSet = new Set(destIds);
+  const linkByPair = new Map<string, { id: string; weight: number; isDead: boolean }>();
+  for (const srcId of sourceIds) {
+    const src = graph.nodes.get(srcId);
+    if (!src) continue;
+    for (const link of src.outputs) {
+      if (destSet.has(link.dest.id)) {
+        linkByPair.set(`${srcId}\0${link.dest.id}`, link);
+      }
+    }
+  }
+
+  const cellPx = matrixCellPx(destIds.length, sourceIds.length);
+  const cells: WeightMatrixCellData[][] = destIds.map((destId) =>
+    sourceIds.map((srcId) => {
+      const link = linkByPair.get(`${srcId}\0${destId}`);
+      const sourceActive =
+        srcId in options.enabledFeatures ? options.enabledFeatures[srcId] : true;
+      return {
+        linkId: link?.id ?? null,
+        weight: link?.weight ?? 0,
+        gradient: link ? (options.gradients.get(link.id) ?? 0) : 0,
+        active: !!link && sourceActive && !link.isDead,
+      };
+    }),
+  );
+
+  const matrixW = sourceIds.length * cellPx + 2;
+  const matrixH = destIds.length * cellPx + 2;
+
+  const srcPositions = sourceIds.map((id) => graph.positions.get(id));
+  const destPositions = destIds.map((id) => graph.positions.get(id));
+  if (srcPositions.some((p) => !p) || destPositions.some((p) => !p)) return null;
+
+  const srcRight = Math.max(
+    ...sourceIds.map((id, i) => srcPositions[i]!.x + nodeOuterSize(graph, id).w),
+  );
+  const destLeft = Math.min(...destPositions.map((p) => p!.x));
+
+  const centers: number[] = [];
+  sourceIds.forEach((id, i) => {
+    centers.push(srcPositions[i]!.y + nodeOuterSize(graph, id).h / 2);
+  });
+  destIds.forEach((id, i) => {
+    centers.push(destPositions[i]!.y + nodeOuterSize(graph, id).h / 2);
+  });
+  const centerY = centers.reduce((a, b) => a + b, 0) / centers.length;
+
+  return {
+    id: `__weight_matrix_${layerIndex}`,
+    type: "weightMatrix",
+    position: {
+      x: (srcRight + destLeft) / 2 - matrixW / 2,
+      y: centerY - matrixH / 2,
+    },
+    width: matrixW,
+    height: matrixH,
+    draggable: false,
+    connectable: false,
+    selectable: false,
+    focusable: false,
+    data: {
+      kind: "weightMatrix",
+      label: `W${layerIndex}`,
+      discretize: false,
+      selected: false,
+      matrix: {
+        sourceIds,
+        destIds,
+        sourceLabels: sourceIds.map((id) => nodeDisplayLabel(graph, id)),
+        destLabels: destIds.map((id) => nodeDisplayLabel(graph, id)),
+        cells,
+        selectedEdgeId: options.selectedEdgeId,
+        vizMode: options.edgeVizMode,
+        learningRate: options.learningRate,
+        cellPx,
+        gradScale: options.gradScale,
+      },
+    },
+  };
+}
+
 export function graphToFlow(
   graph: ComputationalGraph,
   options: {
@@ -98,12 +249,14 @@ export function graphToFlow(
     paintGeneration?: number;
     edgeVizMode?: EdgeVizMode;
     learningRate?: number;
+    layoutVizMode?: LayoutVizMode;
   },
 ): { nodes: Node<NetworkNodeData>[]; edges: Edge<WeightEdgeData>[] } {
   const nodes: Node<NetworkNodeData>[] = [];
   const edges: Edge<WeightEdgeData>[] = [];
   const edgeVizMode = options.edgeVizMode ?? "weight";
   const learningRate = options.learningRate ?? 0;
+  const layoutVizMode = options.layoutVizMode ?? "graph";
 
   // Relative scale so the largest |∂E/∂w| saturates. sqrt keeps earlier-layer
   // grads visible in deep nets where the output layer would otherwise dominate.
@@ -161,6 +314,24 @@ export function graphToFlow(
         paintGeneration: options.paintGeneration,
       },
     });
+  }
+
+  if (layoutVizMode === "matrix") {
+    const layers = graph.toLayeredNetwork();
+    for (let i = 0; i < layers.length - 1; i++) {
+      const sourceIds = layers[i]!.map((n) => n.id);
+      const destIds = layers[i + 1]!.map((n) => n.id);
+      const matrixNode = buildWeightMatrixNode(graph, i, sourceIds, destIds, {
+        enabledFeatures: options.enabledFeatures,
+        selectedEdgeId: options.selectedEdgeId,
+        edgeVizMode,
+        learningRate,
+        gradients,
+        gradScale,
+      });
+      if (matrixNode) nodes.push(matrixNode);
+    }
+    return { nodes, edges: [] };
   }
 
   for (const link of links) {

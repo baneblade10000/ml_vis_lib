@@ -122,7 +122,8 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     datasetLabels2D: {
       digits: "Digits 0 / 1",
       "circles-squares": "Circles / Squares",
-      bars: "H-bars / V-bars",
+      "two-three-loops": "2 loops / 3 loops",
+      "three-four-loops": "3 loops / 4 loops",
     },
     datasetLabels1D: {
       heartbeat: "Heartbeat",
@@ -208,7 +209,8 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     datasetLabels2D: {
       digits: "Цифры 0 / 1",
       "circles-squares": "Круги / Квадраты",
-      bars: "Гор. / Верт. полосы",
+      "two-three-loops": "2 петли / 3 петли",
+      "three-four-loops": "3 петли / 4 петли",
     },
     datasetLabels1D: {
       heartbeat: "Пульс",

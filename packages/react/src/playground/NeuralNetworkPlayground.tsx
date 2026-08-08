@@ -30,7 +30,7 @@ import { NetworkLossChart } from "./network/NetworkLossChart";
 import { ReactFlowNetworkGraph } from "./network/ReactFlowNetworkGraph";
 import { paintAllBoundaries, paintAllBoundariesAfterCommit, paintBoundaryNode } from "./network/boundaryPaint";
 import type { CurveStore, TrainingStats } from "./network/NetworkBoundaryContext";
-import type { EdgeVizMode } from "./network/graphAdapter";
+import type { EdgeVizMode, LayoutVizMode } from "./network/graphAdapter";
 import { useNetworkMessages } from "./network/messages";
 
 const DATASETS_2D_CLASSIFICATION: NetworkDatasetId[] = ["circle", "xor", "gauss", "spiral"];
@@ -211,6 +211,7 @@ type GraphPaneProps = {
   onResetWeights: () => void;
   edgeVizMode: EdgeVizMode;
   onEdgeVizModeChange: (mode: EdgeVizMode) => void;
+  layoutVizMode: LayoutVizMode;
   /** Snapshot of loss history — new array reference when the curve should redraw. */
   lossHistory: LossHistoryPoint[];
   lossTrain: number;
@@ -259,6 +260,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
   onResetWeights,
   edgeVizMode,
   onEdgeVizModeChange,
+  layoutVizMode,
   lossHistory,
   lossTrain,
   lossTest,
@@ -287,6 +289,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
       trainingLiveRef={trainingLiveRef}
       paintGeneration={paintGeneration}
       edgeVizMode={edgeVizMode}
+      layoutVizMode={layoutVizMode}
       learningRate={cfg.learningRate}
       boundaryRef={boundaryRef}
       curvesRef={curvesRef}
@@ -481,6 +484,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   const [edgeVizMode, setEdgeVizMode] = useState<EdgeVizMode>("weight");
   const edgeVizModeRef = useRef<EdgeVizMode>("weight");
   edgeVizModeRef.current = edgeVizMode;
+  const [layoutVizMode, setLayoutVizMode] = useState<LayoutVizMode>("graph");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const wasPlayingRef = useRef(false);
@@ -936,6 +940,27 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
               {t.mode2D}
             </button>
           </div>
+          <div className="nn-toolbar-weight-viz" role="group" aria-label={t.layoutViz}>
+            <span className="nn-toolbar-weight-viz__label">{t.layoutViz}</span>
+            <div className="nn-flat-switch">
+              {([
+                ["graph", t.layoutVizGraph],
+                ["matrix", t.layoutVizMatrix],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`nn-flat-switch__btn${layoutVizMode === id ? " selected" : ""}`}
+                  onClick={() => {
+                    setLayoutVizMode(id);
+                    setRefitViewKey((n) => n + 1);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <p className="nn-inspired-by">
@@ -1013,6 +1038,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           onResetWeights={resetWeights}
           edgeVizMode={edgeVizMode}
           onEdgeVizModeChange={setEdgeVizMode}
+          layoutVizMode={layoutVizMode}
           lossHistory={lossHistory}
           lossTrain={stats.lossTrain}
           lossTest={stats.lossTest}

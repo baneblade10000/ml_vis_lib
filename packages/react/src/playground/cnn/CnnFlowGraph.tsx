@@ -182,6 +182,11 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
   );
 
   const nodeKey = mapped.nodes.map((n) => n.id).join(",");
+  // Channel / length edits keep the same node ids — include them so growing
+  // conv stacks re-trigger midline alignment (otherwise Y sticks to the old maxH).
+  const layoutKey = mapped.nodes
+    .map((n) => `${n.id}:${n.data.channels}:${n.data.length ?? 0}:${n.height ?? 0}`)
+    .join(",");
   const [nodes, setNodes, onNodesChange] = useNodesState(mapped.nodes);
 
   const realign = useCallback(() => {
@@ -195,21 +200,34 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
       const sameTopo =
         prev.length === mapped.nodes.length &&
         prev.every((n, i) => n.id === mapped.nodes[i]?.id);
+      let sizeChanged = !sameTopo;
       const merged = mapped.nodes.map((n) => {
         const cur = prevById.get(n.id);
+        const grew =
+          !!cur &&
+          (cur.data.channels !== n.data.channels ||
+            cur.data.length !== n.data.length ||
+            Math.abs((cur.height ?? 0) - (n.height ?? 0)) > 4);
+        if (grew) sizeChanged = true;
+        // On filter/units edits drop stale measured height + Y so midline can
+        // recompute from the new stack sizes (preserving Y left short nodes high).
         return {
           ...n,
-          measured: cur?.measured,
-          height: cur?.height ?? n.height,
-          position: { x: n.position.x, y: cur?.position.y ?? n.position.y },
+          measured: grew ? undefined : cur?.measured,
+          height: grew ? n.height : (cur?.height ?? n.height),
+          position: {
+            x: n.position.x,
+            y: grew ? n.position.y : (cur?.position.y ?? n.position.y),
+          },
         };
       });
-      if (sameTopo || props.trainingLiveRef.current) return merged;
-      return alignNodesToMidline(merged);
+      // Play freezes Y so feature-map churn doesn't bounce the pipeline.
+      if (props.trainingLiveRef.current) return merged;
+      return sizeChanged ? alignNodesToMidline(merged) : merged;
     });
   }, [mapped.nodes, setNodes, props.trainingLiveRef]);
 
-  // Re-align after RF mount / topology change — not while Play is live.
+  // Re-align after RF mount / topology / stack-size change — not while Play is live.
   useLayoutEffect(() => {
     if (!nodesInitialized) return;
     if (props.trainingLiveRef.current) return;
@@ -222,7 +240,7 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
       window.clearTimeout(t2);
       window.clearTimeout(t3);
     };
-  }, [nodesInitialized, nodeKey, realign, props.trainingLiveRef]);
+  }, [nodesInitialized, nodeKey, layoutKey, realign, props.trainingLiveRef]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<Node<CnnNodeData>>[]) => {

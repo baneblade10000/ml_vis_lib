@@ -3,6 +3,7 @@ import {
   ComputationalGraphPlayground,
   ConvolutionalNetworkPlayground,
   NeuralNetworkPlayground,
+  // SignalPlayground, // hidden from the catalog for now — uncomment to re-enable
   useI18n,
 } from "@ml-vis/react";
 import { LocaleSwitcher } from "../LocaleSwitcher";
@@ -13,6 +14,7 @@ const IMMERSIVE_COMPONENTS = {
   "computational-graph": ComputationalGraphPlayground,
   "neural-network": NeuralNetworkPlayground,
   "convolutional-network": ConvolutionalNetworkPlayground,
+  // "signal-lab": SignalPlayground,
 } as const;
 
 export function VizPage() {

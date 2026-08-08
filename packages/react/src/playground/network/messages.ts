@@ -22,6 +22,9 @@ export type NetworkMessages = {
   paletteDenseHint: string;
   paletteHint: string;
   arrangeLayout: string;
+  layoutViz: string;
+  layoutVizGraph: string;
+  layoutVizMatrix: string;
   edgeViz: string;
   edgeVizWeight: string;
   edgeVizGradient: string;
@@ -86,6 +89,9 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     paletteDenseHint: "Weighted sum + activation",
     paletteHint: "Drag onto canvas · Connect handles · Del to remove",
     arrangeLayout: "Arrange layout",
+    layoutViz: "Weight display:",
+    layoutVizGraph: "Edges",
+    layoutVizMatrix: "Matrices",
     edgeViz: "Connections",
     edgeVizWeight: "Weights",
     edgeVizGradient: "Gradients",
@@ -175,6 +181,9 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     paletteDenseHint: "Взвешенная сумма + активация",
     paletteHint: "Перетащите на холст · Соединяйте порты · Del — удалить",
     arrangeLayout: "Выровнять схему",
+    layoutViz: "Отображение весов:",
+    layoutVizGraph: "Рёбра",
+    layoutVizMatrix: "Матрицы",
     edgeViz: "Связи",
     edgeVizWeight: "Веса",
     edgeVizGradient: "Градиенты",

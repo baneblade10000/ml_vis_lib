@@ -12,6 +12,8 @@ export type PlaygroundMessages = {
   vizNeuralNetworkDescription: string;
   vizConvolutionalNetworkTitle: string;
   vizConvolutionalNetworkDescription: string;
+  vizSignalLabTitle: string;
+  vizSignalLabDescription: string;
   mobileStubService: string;
   mobileStubTitle: string;
   mobileStubBody: string;
@@ -30,13 +32,16 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     backToCatalog: "Back to catalog",
     vizComputationalGraphTitle: "Computational Graph",
     vizComputationalGraphDescription:
-      "Assembly of a computational graph from elementary operations. Forward pass evaluates node values; backward pass propagates gradients via reverse-mode automatic differentiation—the foundation of backpropagation.",
+      "Forward and reverse-mode autodiff on a graph of elementary ops.",
     vizNeuralNetworkTitle: "Neural Network",
     vizNeuralNetworkDescription:
-      "Train a feedforward network on two-dimensional classification tasks; visualize the decision boundary, loss, and layer activations during optimization.",
+      "MLP training: decision boundary, loss, activations.",
     vizConvolutionalNetworkTitle: "Convolutional Network",
     vizConvolutionalNetworkDescription:
-      "Train a CNN end-to-end (learnable kernels, pooling, dense head) on small image and 1-D signal datasets. Watch feature maps form layer-by-layer as loss falls and accuracy climbs.",
+      "CNN training on images and 1-D signals: kernels, feature maps, metrics.",
+    vizSignalLabTitle: "Signals & Transforms",
+    vizSignalLabDescription:
+      "Convolution, cross-correlation, Fourier transform, convolution theorem.",
     mobileStubService: "Interactive visualizations service",
     mobileStubTitle: "Access from mobile devices is not supported",
     mobileStubBody:
@@ -55,13 +60,16 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     backToCatalog: "Назад к каталогу",
     vizComputationalGraphTitle: "Вычислительный граф",
     vizComputationalGraphDescription:
-      "Построение вычислительного графа из элементарных операций. Прямой проход вычисляет значения узлов, обратный — распространяет градиенты (автоматическое дифференцирование, reverse mode). Основа алгоритма обратного распространения ошибки.",
+      "Прямой и обратный проход (reverse-mode autodiff) на графе операций.",
     vizNeuralNetworkTitle: "Нейронная сеть",
     vizNeuralNetworkDescription:
-      "Обучение полносвязной сети на двумерных задачах классификации; визуализация границы решений, функции потерь и активаций в процессе оптимизации.",
+      "Обучение MLP: граница решений, loss, активации.",
     vizConvolutionalNetworkTitle: "Свёрточная сеть",
     vizConvolutionalNetworkDescription:
-      "Полное обучение CNN (обучаемые ядра, пулинг, полносвязная голова) на маленьких изображениях и 1-D сигналах. Наблюдайте, как послойно формируются карты признаков, а loss падает и точность растёт.",
+      "Обучение CNN на изображениях и 1-D сигналах: ядра, карты признаков, метрики.",
+    vizSignalLabTitle: "Сигналы и преобразования",
+    vizSignalLabDescription:
+      "Свёртка, кросс-корреляция, Фурье, теорема о свёртке.",
     mobileStubService: "Сервис интерактивных визуализаций",
     mobileStubTitle: "Доступ с мобильных устройств ограничен",
     mobileStubBody:

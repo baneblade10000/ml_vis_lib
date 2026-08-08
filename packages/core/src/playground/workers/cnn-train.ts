@@ -52,22 +52,25 @@ function buildSnapshot(e: CnnEngine, mode: SnapshotMode): CnnTrainSnapshot {
     e.refreshMetrics();
   }
 
+  // Inspected forward first — feature maps + readout probability must match the
+  // gallery thumb the user selected (not a leftover train/acc sample).
   e.forwardInspected();
   const featureMaps = e.snapshotFeatureMaps();
   const kernels = kernelsFromFeatureMaps(featureMaps);
+  const probability = e.galleryData().length ? e.currentProbability() : 0.5;
 
   if (mode === "full" || cachedGalleryExamples.length === 0) {
-    const gallerySource = (e.testData.length ? e.testData : e.trainData).slice();
+    const gallerySource = e.galleryData().slice();
     cachedGalleryExamples = gallerySource.slice(0, 48);
+    // predict() overwrites the live forward — restore inspected after.
     cachedGalleryPredictions = cachedGalleryExamples.map((ex) => e.predict(ex));
+    e.forwardInspected();
   }
 
   if (mode === "full" || !cachedLayers || !cachedConfig) {
     cachedLayers = buildLayerViews(e);
     cachedConfig = structuredClone(e.config);
   }
-
-  const probability = e.trainData.length || e.testData.length ? e.currentProbability() : 0.5;
 
   return {
     kind: "cnn",
@@ -176,8 +179,7 @@ function handleCommand(name: string, args: unknown): void {
       break;
     }
     case "setInspectedExample":
-      e.inspectedExampleIndex = a.index as number;
-      e.forwardInspected();
+      e.setInspectedExample(a.index as number);
       break;
     default:
       throw new Error(`Unknown CNN command: ${name}`);
@@ -241,9 +243,10 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
     case "inspect": {
       if (!engine) return;
       if (msg.exampleIndex !== undefined) {
-        engine.inspectedExampleIndex = msg.exampleIndex;
+        engine.setInspectedExample(msg.exampleIndex);
+      } else {
+        engine.forwardInspected();
       }
-      engine.forwardInspected();
       post({ type: "tick", snapshot: buildSnapshot(engine, "play") });
       break;
     }

@@ -22,10 +22,12 @@ import {
   graphToFlow,
   PALETTE_DRAG_TYPE,
   type EdgeVizMode,
+  type LayoutVizMode,
   type NetworkNodeData,
   type WeightEdgeData,
 } from "./graphAdapter";
 import { networkEdgeTypes, networkNodeTypes } from "./NetworkFlowNodes";
+import { NetworkGraphActionsProvider } from "./NetworkWeightMatrixNode";
 import {
   BoundaryPaintGenerationContext,
   NetworkBoundaryRefContext,
@@ -66,6 +68,7 @@ export interface ReactFlowNetworkGraphProps {
   trainingLiveRef?: RefObject<boolean>;
   paintGeneration?: number;
   edgeVizMode?: EdgeVizMode;
+  layoutVizMode?: LayoutVizMode;
   learningRate?: number;
   boundaryRef: RefObject<Record<string, number[][]>>;
   curvesRef?: RefObject<CurveStore>;
@@ -154,6 +157,7 @@ function ReactFlowNetworkGraphInner({
   trainingLive = false,
   paintGeneration = 0,
   edgeVizMode = "weight",
+  layoutVizMode = "graph",
   learningRate = 0,
 }: ReactFlowNetworkGraphProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -213,6 +217,7 @@ function ReactFlowNetworkGraphInner({
       lossTrain: displayLossTrain,
       paintGeneration,
       edgeVizMode,
+      layoutVizMode,
       learningRate,
     }),
     [
@@ -225,8 +230,14 @@ function ReactFlowNetworkGraphInner({
       displayLossTrain,
       paintGeneration,
       edgeVizMode,
+      layoutVizMode,
       learningRate,
     ],
+  );
+
+  const graphActions = useMemo(
+    () => ({ onSelectNode, onSelectEdge }),
+    [onSelectNode, onSelectEdge],
   );
 
   const mapped = useMemo(
@@ -281,7 +292,9 @@ function ReactFlowNetworkGraphInner({
           node.data.lossTest === next.data.lossTest &&
           node.data.lossTrain === next.data.lossTrain &&
           node.data.trainData === next.data.trainData &&
-          node.data.paintGeneration === next.data.paintGeneration;
+          node.data.paintGeneration === next.data.paintGeneration &&
+          // Matrix payloads are rebuilt each tick; ref equality is enough.
+          node.data.matrix === next.data.matrix;
         if (samePos && sameData && node.selected === selected) return node;
         changed = true;
         return { ...node, position: next.position, data: next.data, selected };
@@ -405,6 +418,7 @@ function ReactFlowNetworkGraphInner({
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node<NetworkNodeData>) => {
+      if (node.data.kind === "weightMatrix") return;
       onSelectEdge(null);
       onSelectNode(node.id);
     },
@@ -444,7 +458,7 @@ function ReactFlowNetworkGraphInner({
         if (link) onRemoveEdge(link.source.id, link.dest.id);
         return;
       }
-      if (selectedNodeId) {
+      if (selectedNodeId && !selectedNodeId.startsWith("__weight_matrix_")) {
         onRemoveNode(selectedNodeId);
       }
     };
@@ -453,48 +467,52 @@ function ReactFlowNetworkGraphInner({
   }, [selectedNodeId, selectedEdgeId, graph, onRemoveNode, onRemoveEdge]);
 
   return (
-    <div
-      className={`nn-flow-wrap${fillHeight ? " nn-flow-wrap--fill" : ""}`}
-      ref={reactFlowWrapper}
-      style={fillHeight ? undefined : { height }}
-    >
+    <NetworkGraphActionsProvider value={graphActions}>
       <div
-        className={`nn-flow-canvas${animateLayout ? " nn-flow-canvas--animate" : ""}`}
-        style={fillHeight ? undefined : { width: "100%", height }}
+        className={`nn-flow-wrap${fillHeight ? " nn-flow-wrap--fill" : ""}${
+          layoutVizMode === "matrix" ? " nn-flow-wrap--matrix" : ""
+        }`}
+        ref={reactFlowWrapper}
+        style={fillHeight ? undefined : { height }}
       >
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={networkNodeTypes}
-        edgeTypes={networkEdgeTypes}
-        onNodesChange={handleNodesChange}
-        onNodeDragStart={onNodeDragStart}
-        onNodeDragStop={onNodeDragStop}
-        onEdgesChange={handleEdgesChange}
-        onConnect={handleConnect}
-        onDrop={onDropNode ? onDrop : undefined}
-        onDragOver={onDropNode ? onDragOver : undefined}
-        onNodeClick={onNodeClick}
-        onNodeDoubleClick={onNodeDoubleClick}
-        onEdgeClick={onEdgeClick}
-        onPaneClick={onPaneClick}
-        minZoom={MIN_ZOOM}
-        maxZoom={MAX_ZOOM}
-        proOptions={{ hideAttribution: true }}
-        nodesFocusable={false}
-        edgesFocusable={false}
-        autoPanOnNodeDrag={false}
-        nodesDraggable
-        nodesConnectable
-        elementsSelectable
-      >
-        <Background gap={20} size={1} color="var(--nn-border)" />
-        <Controls showInteractive={false} position="bottom-right" />
-      </ReactFlow>
-      </div>
+        <div
+          className={`nn-flow-canvas${animateLayout ? " nn-flow-canvas--animate" : ""}`}
+          style={fillHeight ? undefined : { width: "100%", height }}
+        >
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={networkNodeTypes}
+            edgeTypes={networkEdgeTypes}
+            onNodesChange={handleNodesChange}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDragStop={onNodeDragStop}
+            onEdgesChange={handleEdgesChange}
+            onConnect={layoutVizMode === "matrix" ? undefined : handleConnect}
+            onDrop={onDropNode ? onDrop : undefined}
+            onDragOver={onDropNode ? onDragOver : undefined}
+            onNodeClick={onNodeClick}
+            onNodeDoubleClick={onNodeDoubleClick}
+            onEdgeClick={onEdgeClick}
+            onPaneClick={onPaneClick}
+            minZoom={MIN_ZOOM}
+            maxZoom={MAX_ZOOM}
+            proOptions={{ hideAttribution: true }}
+            nodesFocusable={false}
+            edgesFocusable={false}
+            autoPanOnNodeDrag={false}
+            nodesDraggable={layoutVizMode !== "matrix"}
+            nodesConnectable={layoutVizMode !== "matrix"}
+            elementsSelectable
+          >
+            <Background gap={20} size={1} color="var(--nn-border)" />
+            <Controls showInteractive={false} position="bottom-right" />
+          </ReactFlow>
+        </div>
 
-      {children && <div className="nn-flow-overlays">{children}</div>}
-    </div>
+        {children && <div className="nn-flow-overlays">{children}</div>}
+      </div>
+    </NetworkGraphActionsProvider>
   );
 }
 

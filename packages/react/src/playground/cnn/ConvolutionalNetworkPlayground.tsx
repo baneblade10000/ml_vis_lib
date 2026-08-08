@@ -274,15 +274,6 @@ export function ConvolutionalNetworkPlayground({
     return idx >= 0 && idx < snapshot.config.layers.length ? idx : null;
   }, [snapshot, selectedLayerId]);
 
-  const onRemoveLayer = useCallback(
-    (index: number) => {
-      setPlaying(false);
-      setSelectedLayerId(null);
-      cmd("removeLayer", { index });
-    },
-    [cmd],
-  );
-
   const onSetFilters = useCallback(
     (index: number, filters: number) => {
       setPlaying(false);
@@ -295,14 +286,6 @@ export function ConvolutionalNetworkPlayground({
     (index: number, kernelSize: number) => {
       setPlaying(false);
       cmd("setLayerKernelSize", { index, kernelSize });
-    },
-    [cmd],
-  );
-
-  const onSetUnits = useCallback(
-    (index: number, units: number) => {
-      setPlaying(false);
-      cmd("setLayerUnits", { index, units });
     },
     [cmd],
   );
@@ -459,10 +442,8 @@ export function ConvolutionalNetworkPlayground({
                 const layer = snapshot.layers[idx + 1];
                 setSelectedLayerId(layer ? layer.id : null);
               }}
-              onRemoveLayer={onRemoveLayer}
               onSetFilters={onSetFilters}
               onSetKernelSize={onSetKernelSize}
-              onSetUnits={onSetUnits}
               onSetPoolKind={onSetPoolKind}
             />
             <div className="nn-flow-dock-section">

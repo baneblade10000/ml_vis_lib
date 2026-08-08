@@ -16,6 +16,8 @@ export { ComputationalGraphPlayground } from "./playground/autograd/Computationa
 export type { ComputationalGraphPlaygroundProps } from "./playground/autograd/ComputationalGraphPlayground";
 export { ConvolutionalNetworkPlayground } from "./playground/cnn/ConvolutionalNetworkPlayground";
 export type { ConvolutionalNetworkPlaygroundProps } from "./playground/cnn/ConvolutionalNetworkPlayground";
+export { SignalPlayground } from "./playground/signal/SignalPlayground";
+export type { SignalPlaygroundProps } from "./playground/signal/SignalPlayground";
 
 export {
   I18nProvider,

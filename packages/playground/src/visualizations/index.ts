@@ -3,10 +3,15 @@ import {
   ComputationalGraphPlayground,
   ConvolutionalNetworkPlayground,
   NeuralNetworkPlayground,
+  // SignalPlayground, // hidden from the catalog for now — uncomment to re-enable
 } from "@ml-vis/react";
 import type { PlaygroundMessages } from "../i18n";
 
-export type VisualizationId = "neural-network" | "computational-graph" | "convolutional-network";
+export type VisualizationId =
+  | "neural-network"
+  | "computational-graph"
+  | "convolutional-network"
+  | "signal-lab";
 
 export interface VisualizationEntry {
   id: VisualizationId;
@@ -38,6 +43,13 @@ export const visualizations: VisualizationEntry[] = [
     descriptionKey: "vizConvolutionalNetworkDescription",
     component: ConvolutionalNetworkPlayground,
   },
+  // {
+  //   id: "signal-lab",
+  //   path: "/viz/signal-lab",
+  //   titleKey: "vizSignalLabTitle",
+  //   descriptionKey: "vizSignalLabDescription",
+  //   component: SignalPlayground,
+  // },
 ];
 
 export function getVisualizationById(id: string): VisualizationEntry | undefined {

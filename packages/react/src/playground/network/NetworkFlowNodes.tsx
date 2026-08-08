@@ -38,6 +38,7 @@ import {
   TrainingLiveRefContext,
 } from "./NetworkBoundaryContext";
 import { registerBoundaryPainter } from "./boundaryPaint";
+import { WeightMatrixFlowNode } from "./NetworkWeightMatrixNode";
 
 function matrixForDisplay(
   matrix: number[][],
@@ -530,6 +531,7 @@ export const networkNodeTypes = {
   dense: DenseFlowNode,
   sum: SumFlowNode,
   readout: OutputFlowNode,
+  weightMatrix: WeightMatrixFlowNode,
 };
 
 export const WeightFlowEdge = function WeightFlowEdge({

@@ -587,17 +587,26 @@ export class CnnEngine {
     this.accTest = this.sampleAccuracy(this.testData, maxSamples);
   }
 
-  /** Recompute feature maps for the inspected example (cheap, for display). */
+  /**
+   * Examples shown in the input gallery / driven by inspect clicks.
+   * Prefer the held-out test split so clicking a thumb forwards that same image
+   * (not a same-index train example).
+   */
+  galleryData(): ImageExample[] | SignalExample[] {
+    return this.testData.length ? this.testData : this.trainData;
+  }
+
+  /** Recompute feature maps for the inspected gallery example (cheap, for display). */
   forwardInspected(): void {
-    const data = this.trainData.length ? this.trainData : this.testData;
+    const data = this.galleryData();
     if (!data.length) return;
     const idx = Math.min(this.inspectedExampleIndex, data.length - 1);
-    this.forwardExample(data[idx]);
+    this.forwardExample(data[idx]!);
   }
 
   setInspectedExample(index: number): void {
-    const data = this.trainData.length ? this.trainData : this.testData;
-    this.inspectedExampleIndex = Math.max(0, Math.min(index, data.length - 1));
+    const data = this.galleryData();
+    this.inspectedExampleIndex = Math.max(0, Math.min(index, Math.max(0, data.length - 1)));
     this.forwardInspected();
   }
 
