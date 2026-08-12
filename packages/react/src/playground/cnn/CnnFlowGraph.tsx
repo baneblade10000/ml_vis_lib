@@ -13,7 +13,6 @@ import {
   Controls,
   ReactFlow,
   ReactFlowProvider,
-  useNodesInitialized,
   useNodesState,
   useReactFlow,
   type Node,
@@ -22,6 +21,8 @@ import {
 import "@xyflow/react/dist/style.css";
 import type { FeatureMapSnapshot } from "@ml-vis/core";
 import {
+  CNN_COL_GAP,
+  CNN_ORIGIN_X,
   cnnPipelineToFlow,
   formatCnnNodeLabel,
   type CnnNodeData,
@@ -31,20 +32,31 @@ import { cnnEdgeTypes, cnnNodeTypes } from "./CnnFlowNodes";
 import {
   CnnPlayVizRefContext,
   FeatureMapRefContext,
+  KernelExpandContext,
   PaintGenerationContext,
+  ReceptiveFieldContext,
   TrainingLiveRefContext,
   TrainingStatsRefContext,
   type CnnPlayViz,
   type CnnTrainingStats,
   type FeatureMapStore,
+  type KernelExpandApi,
+  type KernelExpandSelection,
+  type ReceptiveFieldApi,
 } from "./featureMapContext";
 import { useCnnMessages } from "./messages";
+import {
+  buildRfLayerMetas,
+  type RfSelection,
+} from "./receptiveField";
 
 export interface CnnFlowGraphProps {
   pipeline: CnnPipelineView;
   selectedNodeId: string | null;
   paintGeneration: number;
   featureMaps: FeatureMapSnapshot[];
+  /** Config kernel sizes by layer id — layout must react before WASM dumps catch up. */
+  layerKernelSizes?: Record<string, number>;
   onSelectNode: (nodeId: string | null) => void;
   featureMapRef: RefObject<FeatureMapStore>;
   statsRef: RefObject<CnnTrainingStats>;
@@ -58,6 +70,9 @@ export interface CnnFlowGraphProps {
   refitViewKey?: number;
 }
 
+/** Position is the left-center of each node — vertical centers share one Y. */
+const NODE_ORIGIN: [number, number] = [0, 0.5];
+const PIPELINE_Y = 0;
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 1.5;
 const FIT_MAX_ZOOM = 1.05;
@@ -65,7 +80,7 @@ const LABEL_MARGIN = 20;
 
 /**
  * Viewport that fits the pipeline between immersive side docks.
- * Uses known node geometry (same approach as the MLP graph).
+ * Accounts for nodeOrigin [0, 0.5] (position.y is the vertical center).
  */
 function viewportForNodes(
   nodes: Node<CnnNodeData>[],
@@ -81,10 +96,12 @@ function viewportForNodes(
   for (const node of nodes) {
     const w = node.width ?? node.measured?.width ?? 0;
     const h = node.height ?? node.measured?.height ?? 0;
+    const top = node.position.y - h / 2;
+    const bottom = node.position.y + h / 2 + LABEL_MARGIN;
     minX = Math.min(minX, node.position.x);
-    minY = Math.min(minY, node.position.y);
+    minY = Math.min(minY, top);
     maxX = Math.max(maxX, node.position.x + w);
-    maxY = Math.max(maxY, node.position.y + h + LABEL_MARGIN);
+    maxY = Math.max(maxY, bottom);
   }
 
   const pad = fillHeight
@@ -106,42 +123,21 @@ function viewportForNodes(
   };
 }
 
-/** Real content box height in flow coordinates (ignores zoom). */
-function contentHeight(nodeId: string): number | null {
-  const el = document.querySelector(
-    `.react-flow__node[data-id="${CSS.escape(nodeId)}"] .cnn-node`,
-  );
-  if (!(el instanceof HTMLElement)) return null;
-  const h = el.offsetHeight;
-  return h > 0 ? h : null;
-}
-
-/**
- * Shift every node so the vertical center of its .cnn-node sits on one midline.
- * Uses DOM heights — RF `measured` / estimates are often too short for conv stacks.
- */
-function alignNodesToMidline(nodes: Node<CnnNodeData>[]): Node<CnnNodeData>[] {
-  if (!nodes.length) return nodes;
-  const heights = nodes.map(
-    (n) => contentHeight(n.id) ?? n.measured?.height ?? n.height ?? 0,
-  );
-  if (heights.every((h) => h < 1)) return nodes;
-  const maxH = Math.max(...heights);
-  let changed = false;
-  const next = nodes.map((n, i) => {
-    const h = heights[i]!;
-    const y = (maxH - h) / 2;
-    const heightChanged = n.height !== h;
-    const yChanged = Math.abs(n.position.y - y) >= 0.5;
-    if (!heightChanged && !yChanged) return n;
-    changed = true;
-    return {
+/** Pack columns left→right from live widths; keep vertical centers on the midline. */
+function layoutPipelineNodes(nodes: Node<CnnNodeData>[]): Node<CnnNodeData>[] {
+  let x = CNN_ORIGIN_X;
+  return nodes.map((n) => {
+    const width = n.measured?.width ?? n.width ?? 0;
+    const height = n.measured?.height ?? n.height ?? 0;
+    const next = {
       ...n,
-      height: h,
-      position: { x: n.position.x, y },
+      width,
+      height,
+      position: { x, y: PIPELINE_Y },
     };
+    x += width + CNN_COL_GAP;
+    return next;
   });
-  return changed ? next : nodes;
 }
 
 function CnnFlowGraphInner(props: CnnFlowGraphProps) {
@@ -149,6 +145,7 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
     pipeline,
     selectedNodeId,
     featureMaps,
+    layerKernelSizes,
     onSelectNode,
     loss,
     probability,
@@ -159,16 +156,93 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
   const t = useCnnMessages();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { setViewport } = useReactFlow();
-  const nodesInitialized = useNodesInitialized();
   const [measured, setMeasured] = useState({ width: 0, height: 0 });
   const fittedSizeRef = useRef({ width: 0, height: 0 });
   const topologyFitRef = useRef("");
   const refitViewKeyRef = useRef<number | undefined>(undefined);
 
-  const labelFor = useCallback((layer: Parameters<typeof formatCnnNodeLabel>[0]) => formatCnnNodeLabel(layer, t), [t]);
+  const labelFor = useCallback(
+    (layer: Parameters<typeof formatCnnNodeLabel>[0]) => formatCnnNodeLabel(layer, t),
+    [t],
+  );
 
-  // Readout probs live in playVizRef — don't put them in RF node data (avoids
-  // graph rebuild / Y realign when only the bars should move).
+  const kernelSizeByLayerId = useMemo(() => {
+    const out: Record<string, number> = { ...(layerKernelSizes ?? {}) };
+    for (const m of featureMaps) {
+      if (out[m.layerId] != null) continue;
+      const k2 = m.kernels2d?.[0]?.length;
+      const k1 = m.kernels1d?.[0]?.length;
+      if (k2 && k2 > 0) out[m.layerId] = k2;
+      else if (k1 && k1 > 0) out[m.layerId] = k1;
+    }
+    return out;
+  }, [featureMaps, layerKernelSizes]);
+
+  const rfLayers = useMemo(
+    () => buildRfLayerMetas(pipeline.layers, kernelSizeByLayerId),
+    [pipeline.layers, kernelSizeByLayerId],
+  );
+
+  const [rfSelection, setRfSelection] = useState<RfSelection | null>(null);
+  const [rfPinned, setRfPinned] = useState(false);
+  const [kernelExpand, setKernelExpand] = useState<KernelExpandSelection | null>(null);
+
+  const rfApi = useMemo<ReceptiveFieldApi>(
+    () => ({
+      layers: rfLayers,
+      selection: rfSelection,
+      pinned: rfPinned,
+      setHover: (next) => {
+        if (!rfPinned) setRfSelection(next);
+      },
+      pin: (next) => {
+        if (
+          next &&
+          rfPinned &&
+          rfSelection &&
+          rfSelection.sourceLayerId === next.sourceLayerId &&
+          rfSelection.channel === next.channel &&
+          rfSelection.outY === next.outY &&
+          rfSelection.outX === next.outX
+        ) {
+          setRfPinned(false);
+          setRfSelection(null);
+          return;
+        }
+        setRfPinned(!!next);
+        setRfSelection(next);
+      },
+      clear: () => {
+        setRfPinned(false);
+        setRfSelection(null);
+      },
+    }),
+    [rfLayers, rfSelection, rfPinned],
+  );
+
+  const kernelExpandApi = useMemo<KernelExpandApi>(
+    () => ({
+      selection: kernelExpand,
+      prevLayerId: (layerId: string) => {
+        const idx = pipeline.layers.findIndex((l) => l.id === layerId);
+        if (idx <= 0) return null;
+        return pipeline.layers[idx - 1]?.id ?? null;
+      },
+      selectLayer: (layerId: string) => onSelectNode(layerId),
+      toggle: (next) => {
+        setKernelExpand((cur) =>
+          cur &&
+          cur.layerId === next.layerId &&
+          cur.filter === next.filter
+            ? null
+            : next,
+        );
+      },
+      clear: () => setKernelExpand(null),
+    }),
+    [kernelExpand, pipeline.layers, onSelectNode],
+  );
+
   void loss;
   void probability;
   const mapped = useMemo(
@@ -176,83 +250,87 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
       cnnPipelineToFlow(pipeline, {
         selectedNodeId,
         featureMaps,
+        kernelSizeByLayerId,
         labelFor,
       }),
-    [pipeline, selectedNodeId, featureMaps, labelFor],
+    [pipeline, selectedNodeId, featureMaps, kernelSizeByLayerId, labelFor],
   );
 
   const nodeKey = mapped.nodes.map((n) => n.id).join(",");
-  // Channel / length edits keep the same node ids — include them so growing
-  // conv stacks re-trigger midline alignment (otherwise Y sticks to the old maxH).
+  /** Include sizes so kernel / filter changes re-fit the viewport. */
   const layoutKey = mapped.nodes
-    .map((n) => `${n.id}:${n.data.channels}:${n.data.length ?? 0}:${n.height ?? 0}`)
+    .map(
+      (n) =>
+        `${n.id}:${n.data.channels}:${n.data.length ?? 0}:${n.data.kernelSize ?? 0}:${n.width ?? 0}:${n.height ?? 0}`,
+    )
     .join(",");
-  const [nodes, setNodes, onNodesChange] = useNodesState(mapped.nodes);
 
-  const realign = useCallback(() => {
-    setNodes((prev) => alignNodesToMidline(prev));
-  }, [setNodes]);
+  useEffect(() => {
+    setRfPinned(false);
+    setRfSelection(null);
+    setKernelExpand(null);
+  }, [nodeKey]);
 
-  // Sync pipeline → RF nodes. Never touch Y here during Play map ticks.
+  const [nodes, setNodes, onNodesChange] = useNodesState(layoutPipelineNodes(mapped.nodes));
+
+  // Sync pipeline → RF nodes; re-pack X from widths; keep vertical centers on the midline.
   useLayoutEffect(() => {
     setNodes((prev) => {
       const prevById = new Map(prev.map((n) => [n.id, n]));
-      const sameTopo =
-        prev.length === mapped.nodes.length &&
-        prev.every((n, i) => n.id === mapped.nodes[i]?.id);
-      let sizeChanged = !sameTopo;
       const merged = mapped.nodes.map((n) => {
         const cur = prevById.get(n.id);
-        const grew =
+        // Same-pad keeps rows/cols fixed when kernel size changes — must key on kernelSize.
+        const sizeDirty =
           !!cur &&
           (cur.data.channels !== n.data.channels ||
             cur.data.length !== n.data.length ||
-            Math.abs((cur.height ?? 0) - (n.height ?? 0)) > 4);
-        if (grew) sizeChanged = true;
-        // On filter/units edits drop stale measured height + Y so midline can
-        // recompute from the new stack sizes (preserving Y left short nodes high).
+            cur.data.rows !== n.data.rows ||
+            cur.data.cols !== n.data.cols ||
+            cur.data.kernelSize !== n.data.kernelSize);
         return {
           ...n,
-          measured: grew ? undefined : cur?.measured,
-          height: grew ? n.height : (cur?.height ?? n.height),
-          position: {
-            x: n.position.x,
-            y: grew ? n.position.y : (cur?.position.y ?? n.position.y),
-          },
+          measured: sizeDirty ? undefined : cur?.measured,
+          width: sizeDirty
+            ? n.width
+            : (cur?.measured?.width ?? cur?.width ?? n.width),
+          height: sizeDirty
+            ? n.height
+            : (cur?.measured?.height ?? cur?.height ?? n.height),
         };
       });
-      // Play freezes Y so feature-map churn doesn't bounce the pipeline.
-      if (props.trainingLiveRef.current) return merged;
-      return sizeChanged ? alignNodesToMidline(merged) : merged;
+      return layoutPipelineNodes(merged);
     });
-  }, [mapped.nodes, setNodes, props.trainingLiveRef]);
-
-  // Re-align after RF mount / topology / stack-size change — not while Play is live.
-  useLayoutEffect(() => {
-    if (!nodesInitialized) return;
-    if (props.trainingLiveRef.current) return;
-    realign();
-    const t1 = window.setTimeout(realign, 32);
-    const t2 = window.setTimeout(realign, 100);
-    const t3 = window.setTimeout(realign, 250);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-      window.clearTimeout(t3);
-    };
-  }, [nodesInitialized, nodeKey, layoutKey, realign, props.trainingLiveRef]);
+  }, [mapped.nodes, setNodes]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<Node<CnnNodeData>>[]) => {
       onNodesChange(changes);
-      // During Play, feature-map canvases resize every tick — realigning Y makes
-      // the whole pipeline columns jump/flip. Keep midline stable while training.
-      if (props.trainingLiveRef.current) return;
+      // After RF measures DOM, re-pack X only when widths actually moved.
       if (changes.some((c) => c.type === "dimensions")) {
-        requestAnimationFrame(realign);
+        requestAnimationFrame(() => {
+          setNodes((prev) => {
+            let dirty = false;
+            const sized = prev.map((node) => {
+              const mh = node.measured?.height;
+              const mw = node.measured?.width;
+              if (mh == null && mw == null) return node;
+              const width = mw ?? node.width;
+              const height = mh ?? node.height;
+              if (width !== node.width || height !== node.height) dirty = true;
+              return width === node.width && height === node.height
+                ? node
+                : { ...node, width, height };
+            });
+            const next = layoutPipelineNodes(sized);
+            if (!dirty && next.every((n, i) => n.position.x === prev[i]?.position.x)) {
+              return prev;
+            }
+            return next;
+          });
+        });
       }
     },
-    [onNodesChange, realign, props.trainingLiveRef],
+    [onNodesChange, setNodes],
   );
 
   useEffect(() => {
@@ -277,7 +355,7 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
   useEffect(() => {
     if (measured.width <= 0 || measured.height <= 0 || !nodes.length) return;
 
-    const topologyPending = topologyFitRef.current !== nodeKey;
+    const topologyPending = topologyFitRef.current !== layoutKey;
     const refitPending = refitViewKey !== undefined && refitViewKeyRef.current !== refitViewKey;
     const sizeDrift =
       Math.abs(measured.width - fittedSizeRef.current.width) > 24 ||
@@ -292,21 +370,27 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
 
     const hadPriorFit = topologyFitRef.current !== "";
     void setViewport(viewport, {
-      duration: (refitPending || resizeRefit) && hadPriorFit ? 200 : 0,
+      duration: (refitPending || resizeRefit || hadPriorFit) && hadPriorFit ? 200 : 0,
     });
     fittedSizeRef.current = measured;
-    if (topologyPending) topologyFitRef.current = nodeKey;
+    if (topologyPending) topologyFitRef.current = layoutKey;
     if (refitPending) refitViewKeyRef.current = refitViewKey;
-  }, [measured, nodes, nodeKey, refitViewKey, fillHeight, setViewport]);
+  }, [measured, nodes, layoutKey, refitViewKey, fillHeight, setViewport]);
 
   const onNodeClick = (_: React.MouseEvent, node: Node<CnnNodeData>) => {
     onSelectNode(node.id);
   };
-  const onPaneClick = () => onSelectNode(null);
+  const onPaneClick = () => {
+    onSelectNode(null);
+    rfApi.clear();
+    kernelExpandApi.clear();
+  };
 
   const canvasHeight = fillHeight ? measured.height || height : height;
 
   return (
+    <ReceptiveFieldContext.Provider value={rfApi}>
+    <KernelExpandContext.Provider value={kernelExpandApi}>
     <div
       className={`nn-flow-wrap${fillHeight ? " nn-flow-wrap--fill" : ""}`}
       ref={wrapperRef}
@@ -321,6 +405,7 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
           edges={mapped.edges}
           nodeTypes={cnnNodeTypes}
           edgeTypes={cnnEdgeTypes}
+          nodeOrigin={NODE_ORIGIN}
           onNodesChange={handleNodesChange}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
@@ -337,6 +422,8 @@ function CnnFlowGraphInner(props: CnnFlowGraphProps) {
       </div>
       {props.children && <div className="nn-flow-overlays">{props.children}</div>}
     </div>
+    </KernelExpandContext.Provider>
+    </ReceptiveFieldContext.Provider>
   );
 }
 

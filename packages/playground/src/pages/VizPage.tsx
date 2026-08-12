@@ -3,9 +3,9 @@ import {
   ComputationalGraphPlayground,
   ConvolutionalNetworkPlayground,
   NeuralNetworkPlayground,
-  // SignalPlayground, // hidden from the catalog for now — uncomment to re-enable
   useI18n,
 } from "@ml-vis/react";
+import { createBurnCnnTrainWorker } from "../burn/createBurnCnnTrainWorker";
 import { LocaleSwitcher } from "../LocaleSwitcher";
 import { usePlaygroundT } from "../i18n";
 import { getVisualizationById } from "../visualizations";
@@ -14,7 +14,6 @@ const IMMERSIVE_COMPONENTS = {
   "computational-graph": ComputationalGraphPlayground,
   "neural-network": NeuralNetworkPlayground,
   "convolutional-network": ConvolutionalNetworkPlayground,
-  // "signal-lab": SignalPlayground,
 } as const;
 
 export function VizPage() {
@@ -36,9 +35,18 @@ export function VizPage() {
   );
 
   if (immersive && ImmersiveComponent) {
+    const isCnn = viz.id === "convolutional-network";
     return (
       <div className="viz-page viz-page--immersive">
-        <ImmersiveComponent toolbarStart={backLink} toolbarEnd={<LocaleSwitcher />} />
+        {isCnn ? (
+          <ConvolutionalNetworkPlayground
+            toolbarStart={backLink}
+            toolbarEnd={<LocaleSwitcher />}
+            createWorker={createBurnCnnTrainWorker}
+          />
+        ) : (
+          <ImmersiveComponent toolbarStart={backLink} toolbarEnd={<LocaleSwitcher />} />
+        )}
       </div>
     );
   }

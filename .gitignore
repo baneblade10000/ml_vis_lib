@@ -1,3 +1,7 @@
+# Rust
+target/
+crates/**/pkg/
+
 # Dependencies
 node_modules/
 

@@ -9,6 +9,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "storybook": "pnpm --filter @ml-vis/react storybook",
+    "burn:build": "bash scripts/build-burn-cnn.sh",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",

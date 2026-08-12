@@ -1,5 +1,7 @@
 export {
   IMAGE_SIZE,
+  IMAGE_SIZE_THREE_FOUR_LOOPS,
+  imageSizeForDataset,
   SIGNAL_LENGTH,
   NUM_EXAMPLES,
   DEFAULT_TRAIN_RATIO,
@@ -18,59 +20,16 @@ export type {
   CnnDatasetId1D,
 } from "./gallery";
 
-export { CNN_ACTIVATIONS, CNN_ACTIVATION_IDS, activationById, Activations } from "./activations";
+export { CNN_ACTIVATION_IDS } from "./activations";
 export type { CnnActivationId } from "./activations";
-export type { ActivationFunction } from "../network/nn";
 
-export { Losses } from "./loss";
-export type { LossFunction } from "./loss";
+export { zeros2D } from "./tensor";
+export type { Map2D, Volume, Signal } from "./tensor";
 
-export {
-  zeros2D,
-  zerosVolume,
-  zeros1D,
-  zerosSignal,
-  clone2D,
-  cloneVolume,
-  clone1D,
-  cloneSignal,
-  cloneKernel2D,
-  cloneKernel1D,
-  map2DInPlace,
-  sum2D,
-  sumVolume,
-  sum1D,
-  gaussian,
-  randomInit,
-} from "./tensor";
-export type {
-  Map2D,
-  Volume,
-  Signal,
-  Kernel2D,
-  Kernel1D,
-  Spatial,
-  VolumeShape,
-  SignalShape,
-} from "./tensor";
-
-export { Layer } from "./layers/base";
 export type { LayerKind, DataSpace, LayerShape } from "./layers/base";
-export { flattenVolume, unflattenVolume } from "./layers/base";
-export { InputLayer } from "./layers/input";
-export { Conv2DLayer } from "./layers/conv2d";
-export { Pool2DLayer } from "./layers/pool2d";
-export type { PoolKind2D } from "./layers/pool2d";
-export { Conv1DLayer } from "./layers/conv1d";
-export { Pool1DLayer } from "./layers/pool1d";
-export { FlattenLayer } from "./layers/flatten";
-export { GlobalAvgPool2DLayer } from "./layers/gap2d";
-export { GlobalAvgPool1DLayer } from "./layers/gap1d";
-export { DenseLayer } from "./layers/dense";
-export { OutputLayer } from "./layers/output";
+export { shapeSpace } from "./layers/base";
 
 export {
-  CnnEngine,
   DEFAULT_CNN_CONFIG,
   DEFAULT_CNN_CONFIG_2D,
   DEFAULT_CNN_CONFIG_1D,
@@ -86,5 +45,5 @@ export type {
   FeatureMapSnapshot,
   CnnRegularizationId,
   PlaygroundOptimizerId,
+  PoolKind,
 } from "./engine";
-export { applyRegularizedUpdate, regularizationDerivative } from "./regularization";

@@ -3,8 +3,11 @@
  * `import.meta.url` resolves relative to this file in `dist/workers/`.
  */
 
+/** @deprecated CNN training is Burn WASM only (`createBurnCnnTrainWorker` in playground). */
 export function createCnnTrainWorker(): Worker {
-  return new Worker(new URL("./cnn-train.js", import.meta.url), { type: "module" });
+  throw new Error(
+    "JS CNN train worker removed. Pass createWorker={createBurnCnnTrainWorker} from the playground.",
+  );
 }
 
 export function createNetworkTrainWorker(): Worker {

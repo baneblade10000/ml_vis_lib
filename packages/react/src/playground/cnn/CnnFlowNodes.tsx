@@ -1,4 +1,4 @@
-import { useCallback, useContext, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useCallback, useContext, useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   BaseEdge,
   getBezierPath,
@@ -20,6 +20,8 @@ import {
   type FeatureMapSnapshot,
 } from "@ml-vis/core";
 import {
+  CNN_CELL_PX,
+  cnnGridPx,
   downsample1D,
   unitStackSize,
   type CnnNodeData,
@@ -30,14 +32,13 @@ import {
   FeatureMapRefContext,
   PaintGenerationContext,
   TrainingLiveRefContext,
+  useKernelExpand,
+  useReceptiveField,
 } from "./featureMapContext";
 import { registerBoundaryPainter } from "./featureMapPaint";
 import { useCnnMessages } from "./messages";
+import { receptiveFieldCascade, type RfRect } from "./receptiveField";
 
-/** Pixel size of one feature-map tile. */
-const MAP_PX = 44;
-/** Pixel size of the kernel thumb beside each conv channel output. */
-const KERNEL_PX = 36;
 /** Cap on tiles shown per node (extra channels are dropped to fit). */
 const MAX_TILES = 16;
 
@@ -47,61 +48,212 @@ function useLayerSnapshot(layerId: string): FeatureMapSnapshot | undefined {
   return ref?.current?.[layerId];
 }
 
-/** Render a single 2-D map to a small canvas via the shared value→rgba rasterizer. */
+function drawRfOverlay(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  cell: number,
+  rect: RfRect | null,
+  kind: "field" | "pixel",
+) {
+  ctx.clearRect(0, 0, width, height);
+  if (!rect) return;
+  const x = rect.x0 * cell;
+  const y = rect.y0 * cell;
+  const w = (rect.x1 - rect.x0 + 1) * cell;
+  const h = (rect.y1 - rect.y0 + 1) * cell;
+  if (kind === "field") {
+    ctx.fillStyle = "rgba(94, 201, 255, 0.32)";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#5ec9ff";
+    ctx.lineWidth = Math.max(2, cell * 0.35);
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  } else {
+    ctx.strokeStyle = "#5ec9ff";
+    ctx.lineWidth = Math.max(2, cell * 0.4);
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = "rgba(52, 87, 163, 0.2)";
+    ctx.fillRect(x, y, w, h);
+  }
+}
+
+/** Render a single 2-D map — each cell is {@link CNN_CELL_PX} (same as kernels). */
 function Map2DCanvas({
   map,
-  px,
   label,
+  layerId,
+  channel = 0,
+  interactive = false,
+  showRf = false,
 }: {
   map: number[][];
-  px: number;
   label?: string;
+  layerId: string;
+  channel?: number;
+  /** Click/hover picks a pixel and projects RF onto previous layers. */
+  interactive?: boolean;
+  /** Draw the cascaded RF rect for this layer when present in the selection. */
+  showRf?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heatRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const rf = useReceptiveField();
 
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
     const heat = heatRef.current;
     if (!canvas || !heat || !map.length) return;
-    // Downsample large maps to ~px for display.
-    const target = px;
     let grid = map;
-    if (map.length > target) {
-      let factor = Math.max(1, Math.round(map.length / target));
+    let factor = 1;
+    if (map.length > 64) {
+      factor = Math.max(1, Math.round(map.length / 64));
       while (factor > 1 && map.length % factor !== 0) factor -= 1;
       if (factor > 1) grid = reduceMatrix(map, factor);
     }
     renderValueMatrix(heat, grid, { layout: "row-major", palette: "gray" });
-    // Integer-scale nearest-neighbor into a crisp bitmap, then CSS-scale to `px`
-    // with `image-rendering: pixelated` — avoids bilinear smear on tiny maps.
     const rows = grid.length;
     const cols = grid[0]?.length ?? rows;
-    const cell = Math.max(1, Math.floor(px / Math.max(rows, cols)));
-    const bw = cols * cell;
-    const bh = rows * cell;
-    if (canvas.width !== bw || canvas.height !== bh) {
-      canvas.width = bw;
-      canvas.height = bh;
-      canvas.style.width = `${px}px`;
-      canvas.style.height = `${px}px`;
-    }
+    const { w: bw, h: bh } = cnnGridPx(rows, cols);
+    canvas.width = bw;
+    canvas.height = bh;
+    canvas.style.width = `${bw}px`;
+    canvas.style.height = `${bh}px`;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, bw, bh);
     ctx.drawImage(heat, 0, 0, bw, bh);
-  }, [map, px]);
+
+    const overlay = overlayRef.current;
+    if (overlay) {
+      if (overlay.width !== bw || overlay.height !== bh) {
+        overlay.width = bw;
+        overlay.height = bh;
+      }
+      const octx = overlay.getContext("2d");
+      if (octx) {
+        octx.imageSmoothingEnabled = false;
+        let rect: RfRect | null = null;
+        let kind: "field" | "pixel" = "field";
+        const sel = rf?.selection;
+        const layerRect = showRf ? sel?.byLayer[layerId] : undefined;
+        const channelOk =
+          layerRect != null &&
+          (layerRect.channel == null || layerRect.channel === channel);
+        if (layerRect && channelOk) {
+          rect = {
+            y0: Math.floor(layerRect.y0 / factor),
+            y1: Math.floor(layerRect.y1 / factor),
+            x0: Math.floor(layerRect.x0 / factor),
+            x1: Math.floor(layerRect.x1 / factor),
+          };
+          kind = "field";
+        } else if (
+          sel &&
+          sel.sourceLayerId === layerId &&
+          sel.channel === channel
+        ) {
+          rect = {
+            y0: Math.floor(sel.outY / factor),
+            y1: Math.floor(sel.outY / factor),
+            x0: Math.floor(sel.outX / factor),
+            x1: Math.floor(sel.outX / factor),
+          };
+          kind = "pixel";
+        }
+        drawRfOverlay(octx, bw, bh, CNN_CELL_PX, rect, kind);
+      }
+    }
+  }, [map, rf?.selection, showRf, layerId, channel]);
 
   const paintRef = useRef(paint);
   paintRef.current = paint;
   useLayoutEffect(() => paintRef.current(), [paint]);
 
+  const rows = map.length || 1;
+  const cols = map[0]?.length ?? rows;
+  const { w, h } = cnnGridPx(rows, cols);
+
+  const cellFromEvent = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !map.length) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    let factor = 1;
+    if (map.length > 64) {
+      factor = Math.max(1, Math.round(map.length / 64));
+      while (factor > 1 && map.length % factor !== 0) factor -= 1;
+    }
+    const dispRows = Math.max(1, Math.floor(map.length / factor));
+    const dispCols = Math.max(1, Math.floor((map[0]?.length ?? map.length) / factor));
+    const cx = Math.min(dispCols - 1, Math.max(0, Math.floor(((e.clientX - rect.left) / rect.width) * dispCols)));
+    const cy = Math.min(dispRows - 1, Math.max(0, Math.floor(((e.clientY - rect.top) / rect.height) * dispRows)));
+    const outX = Math.min(cols - 1, Math.floor((cx + 0.5) * factor));
+    const outY = Math.min(rows - 1, Math.floor((cy + 0.5) * factor));
+    return { outY, outX };
+  };
+
+  const applyPick = (e: ReactPointerEvent<HTMLCanvasElement>, pin: boolean) => {
+    if (!interactive || !rf) return;
+    const cell = cellFromEvent(e);
+    if (!cell) return;
+    const projected = receptiveFieldCascade(
+      rf.layers,
+      layerId,
+      cell.outY,
+      cell.outX,
+      channel,
+    );
+    if (!projected) return;
+    const next = {
+      sourceLayerId: layerId,
+      channel,
+      outY: cell.outY,
+      outX: cell.outX,
+      ...projected,
+    };
+    if (pin) rf.pin(next);
+    else if (!rf.pinned) rf.setHover(next);
+  };
+
   return (
-    <div className="cnn-feature-cell" title={label} style={{ width: px, height: px }}>
+    <div
+      className={`cnn-feature-cell${interactive ? " cnn-feature-cell--pick nodrag nopan" : ""}`}
+      title={label}
+      style={{ width: w, height: h }}
+    >
       <canvas ref={heatRef} width={1} height={1} hidden aria-hidden />
-      <canvas ref={canvasRef} className="cnn-feature-canvas" />
+      <canvas
+        ref={canvasRef}
+        className="cnn-feature-canvas"
+        width={w}
+        height={h}
+        onPointerMove={interactive ? (e) => applyPick(e, false) : undefined}
+        onPointerLeave={
+          interactive
+            ? () => {
+                if (rf && !rf.pinned) rf.setHover(null);
+              }
+            : undefined
+        }
+        onPointerDown={
+          interactive
+            ? (e) => {
+                e.stopPropagation();
+                applyPick(e, true);
+              }
+            : undefined
+        }
+      />
+      <canvas
+        ref={overlayRef}
+        className="cnn-feature-canvas cnn-feature-canvas--overlay"
+        width={w}
+        height={h}
+        aria-hidden
+      />
     </div>
   );
 }
@@ -125,25 +277,28 @@ function ConvBiasIndicator({ bias }: { bias: number }) {
 }
 
 /**
- * Mini pixelated kernel preview (nearest-neighbor), sized for pairing with a
- * feature-map tile. Accepts a 2-D map or a 1-row wrapper around a 1-D kernel.
- * Colored with the NN weight palette (violet → orchid → magenta).
+ * Mini pixelated kernel — same {@link CNN_CELL_PX} as feature maps.
  */
 function KernelMini({
   map,
-  size,
   label,
   bias,
+  selected = false,
+  interactive = false,
+  onSelect,
 }: {
   map: number[][];
-  size: number;
   label?: string;
   bias?: number;
+  selected?: boolean;
+  interactive?: boolean;
+  onSelect?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heatRef = useRef<HTMLCanvasElement>(null);
   const rows = map.length;
   const cols = map[0]?.length ?? 0;
+  const { w, h } = cnnGridPx(Math.max(1, rows), Math.max(1, cols));
 
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
@@ -153,22 +308,18 @@ function KernelMini({
       layout: "row-major",
       palette: "diverging",
     });
-    const cell = Math.max(1, Math.floor(size / Math.max(rows, cols)));
-    const bw = cols * cell;
-    const bh = rows * cell;
-    if (canvas.width !== bw || canvas.height !== bh) {
-      canvas.width = bw;
-      canvas.height = bh;
-      canvas.style.width = `${size}px`;
-      canvas.style.height = `${size}px`;
-    }
+    const { w: bw, h: bh } = cnnGridPx(rows, cols);
+    canvas.width = bw;
+    canvas.height = bh;
+    canvas.style.width = `${bw}px`;
+    canvas.style.height = `${bh}px`;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, bw, bh);
     ctx.drawImage(heat, 0, 0, bw, bh);
-  }, [map, size, rows, cols]);
+  }, [map, rows, cols]);
 
   const paintRef = useRef(paint);
   paintRef.current = paint;
@@ -178,61 +329,75 @@ function KernelMini({
     return (
       <div
         className="cnn-kernel-mini cnn-kernel-mini--empty"
-        style={{ width: size, height: size }}
+        style={{ width: w, height: h }}
         title={label}
       />
     );
   }
 
   const title =
-    typeof bias === "number" ? `${label ?? "kernel"} · bias ${bias.toFixed(3)}` : label;
+    typeof bias === "number" && Number.isFinite(bias)
+      ? `${label ?? "kernel"} · bias ${bias.toFixed(3)}`
+      : label;
 
   return (
-    <div className="cnn-kernel-with-bias" title={title}>
-      {typeof bias === "number" && <ConvBiasIndicator bias={bias} />}
-      <div className="cnn-kernel-mini" style={{ width: size, height: size }}>
+    <div
+      className={`cnn-kernel-with-bias${interactive ? " cnn-kernel-with-bias--pick nodrag nopan" : ""}${selected ? " cnn-kernel-with-bias--selected" : ""}`}
+      title={title}
+      onPointerDown={
+        interactive && onSelect
+          ? (e) => {
+              e.stopPropagation();
+              onSelect();
+            }
+          : undefined
+      }
+    >
+      {typeof bias === "number" && Number.isFinite(bias) && (
+        <ConvBiasIndicator bias={bias} />
+      )}
+      <div className="cnn-kernel-mini" style={{ width: w, height: h }}>
         <canvas ref={heatRef} width={cols} height={rows} hidden aria-hidden />
-        <canvas ref={canvasRef} className="cnn-feature-canvas" />
+        <canvas ref={canvasRef} className="cnn-feature-canvas" width={w} height={h} />
       </div>
     </div>
   );
 }
 
-/** Render a 1-D signal as a thin horizontal bar of pixels. */
-function Signal1DCanvas({ values, px }: { values: number[]; px: number }) {
+/** Render a 1-D signal — each sample is {@link CNN_CELL_PX} wide. */
+function Signal1DCanvas({ values }: { values: number[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heatRef = useRef<HTMLCanvasElement>(null);
+  const n = Math.max(1, values.length);
+  const bw = n * CNN_CELL_PX;
+  const bh = CNN_CELL_PX;
 
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
     const heat = heatRef.current;
     if (!canvas || !heat || !values.length) return;
-    // Wrap as a 1-row matrix and rasterize, then draw stretched to height.
     const mat = [values.slice()];
     renderValueMatrix(heat, mat, { layout: "row-major", palette: "gray" });
-    const h = 8;
-    const cell = Math.max(1, Math.floor(px / values.length));
-    const bw = values.length * cell;
-    if (canvas.width !== bw || canvas.height !== h) {
+    if (canvas.width !== bw || canvas.height !== bh) {
       canvas.width = bw;
-      canvas.height = h;
-      canvas.style.width = `${px}px`;
-      canvas.style.height = `${h}px`;
+      canvas.height = bh;
+      canvas.style.width = `${bw}px`;
+      canvas.style.height = `${bh}px`;
     }
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, bw, h);
-    ctx.drawImage(heat, 0, 0, bw, h);
-  }, [values, px]);
+    ctx.clearRect(0, 0, bw, bh);
+    ctx.drawImage(heat, 0, 0, bw, bh);
+  }, [values, bw, bh]);
 
   const paintRef = useRef(paint);
   paintRef.current = paint;
   useLayoutEffect(() => paintRef.current(), [paint]);
 
   return (
-    <div className="cnn-feature-cell cnn-feature-cell--signal" style={{ width: px, height: 8 }}>
+    <div className="cnn-feature-cell cnn-feature-cell--signal" style={{ width: bw, height: bh }}>
       <canvas ref={heatRef} width={1} height={1} hidden aria-hidden />
       <canvas ref={canvasRef} className="cnn-feature-canvas" />
     </div>
@@ -266,6 +431,8 @@ function FeatureGrid({
   mode,
   showKernels = false,
   vertical = false,
+  interactiveMaps = false,
+  showRf = false,
 }: {
   layerId: string;
   channels: number;
@@ -274,10 +441,15 @@ function FeatureGrid({
   showKernels?: boolean;
   /** Stack channel tiles in a column (pool layers). */
   vertical?: boolean;
+  /** Feature-map pixels project a receptive field onto previous layers. */
+  interactiveMaps?: boolean;
+  /** Draw cascaded RF overlay on this layer's maps. */
+  showRf?: boolean;
 }) {
   const snapshot = useLayerSnapshot(layerId);
   const paintGeneration = useContext(PaintGenerationContext);
   const trainingLiveRef = useContext(TrainingLiveRefContext);
+  const expand = useKernelExpand();
   const groupRef = useRef<HTMLDivElement>(null);
 
   // Register a no-op painter keyed by the node so paintAllFeatureMaps() keeps us
@@ -296,48 +468,124 @@ function FeatureGrid({
   const signals = snapshot?.signals ?? [];
   const kernels2d = snapshot?.kernels2d ?? [];
   const kernels1d = snapshot?.kernels1d ?? [];
+  const kernels2dIn = snapshot?.kernels2dIn ?? [];
+  const kernels1dIn = snapshot?.kernels1dIn ?? [];
   const biases = snapshot?.biases ?? [];
   const showCount = Math.min(channels, MAX_TILES);
   const tiles: ReactNode[] = [];
 
+  const side2d =
+    expand?.selection?.prevLayerId === layerId ? expand.selection.perIn2d : undefined;
+  const side1d =
+    expand?.selection?.prevLayerId === layerId ? expand.selection.perIn1d : undefined;
+  const selectedFilter =
+    expand?.selection?.layerId === layerId ? expand.selection.filter : -1;
+
   if (mode === "2d") {
     for (let i = 0; i < showCount; i++) {
       const map = maps2d[i] ?? [];
+      const mapTile = (
+        <Map2DCanvas
+          map={map}
+          label={`filter ${i + 1}`}
+          layerId={layerId}
+          channel={i}
+          interactive={interactiveMaps}
+          showRf={showRf}
+        />
+      );
+      const side = side2d?.[i];
+      const sideTile = side?.length ? (
+        <KernelMini map={side} label={`→ in ${i + 1}`} />
+      ) : null;
+
       if (showKernels) {
         const kernel = kernels2d[i] ?? [];
         tiles.push(
           <div key={i} className="cnn-channel-pair" title={`kernel → channel ${i + 1}`}>
             <KernelMini
               map={kernel}
-              size={KERNEL_PX}
               label={`kernel ${i + 1}`}
               bias={biases[i]}
+              selected={selectedFilter === i}
+              interactive
+              onSelect={() => {
+                expand?.selectLayer(layerId);
+                if (!expand) return;
+                const perIn = kernels2dIn[i];
+                if ((perIn?.length ?? 0) <= 1) return;
+                const prevLayerId = expand.prevLayerId(layerId);
+                if (!prevLayerId) return;
+                expand.toggle({
+                  layerId,
+                  filter: i,
+                  prevLayerId,
+                  perIn2d: perIn,
+                });
+              }}
             />
-            <Map2DCanvas map={map} px={MAP_PX} label={`filter ${i + 1}`} />
+            {mapTile}
+            {sideTile}
+          </div>,
+        );
+      } else if (sideTile) {
+        tiles.push(
+          <div key={i} className="cnn-channel-pair" title={`in-channel kernel ${i + 1}`}>
+            {mapTile}
+            {sideTile}
           </div>,
         );
       } else {
-        tiles.push(<Map2DCanvas key={i} map={map} px={MAP_PX} label={`filter ${i + 1}`} />);
+        tiles.push(<div key={i}>{mapTile}</div>);
       }
     }
   } else {
     for (let i = 0; i < showCount; i++) {
       const values = signals[i] ?? [];
+      const signalTile = <Signal1DCanvas values={values} />;
+      const sideRow = side1d?.[i];
+      const sideTile = sideRow?.length ? (
+        <KernelMini map={[sideRow]} label={`→ in ${i + 1}`} />
+      ) : null;
+
       if (showKernels) {
         const kernel = kernels1d[i] ?? [];
         tiles.push(
           <div key={i} className="cnn-channel-pair cnn-channel-pair--1d" title={`kernel → channel ${i + 1}`}>
             <KernelMini
               map={kernel.length ? [kernel] : []}
-              size={KERNEL_PX}
               label={`kernel ${i + 1}`}
               bias={biases[i]}
+              selected={selectedFilter === i}
+              interactive
+              onSelect={() => {
+                expand?.selectLayer(layerId);
+                if (!expand) return;
+                const perIn = kernels1dIn[i];
+                if ((perIn?.length ?? 0) <= 1) return;
+                const prevLayerId = expand.prevLayerId(layerId);
+                if (!prevLayerId) return;
+                expand.toggle({
+                  layerId,
+                  filter: i,
+                  prevLayerId,
+                  perIn1d: perIn,
+                });
+              }}
             />
-            <Signal1DCanvas values={values} px={MAP_PX} />
+            {signalTile}
+            {sideTile}
+          </div>,
+        );
+      } else if (sideTile) {
+        tiles.push(
+          <div key={i} className="cnn-channel-pair cnn-channel-pair--1d">
+            {signalTile}
+            {sideTile}
           </div>,
         );
       } else {
-        tiles.push(<Signal1DCanvas key={i} values={values} px={MAP_PX} />);
+        tiles.push(<div key={i}>{signalTile}</div>);
       }
     }
   }
@@ -390,7 +638,12 @@ function BaseCnnNode({
 export function CnnInputNode({ data }: NodeProps<Node<CnnNodeData>>) {
   return (
     <BaseCnnNode data={data} className="cnn-node--input" hideTarget>
-      <FeatureGrid layerId={data.layerId} channels={data.channels} mode={data.mode} />
+      <FeatureGrid
+        layerId={data.layerId}
+        channels={data.channels}
+        mode={data.mode}
+        showRf
+      />
     </BaseCnnNode>
   );
 }
@@ -403,6 +656,8 @@ export function CnnConvNode({ data }: NodeProps<Node<CnnNodeData>>) {
         channels={data.channels}
         mode={data.mode}
         showKernels
+        interactiveMaps={data.mode === "2d"}
+        showRf
       />
     </BaseCnnNode>
   );
@@ -416,9 +671,25 @@ export function CnnPoolNode({ data }: NodeProps<Node<CnnNodeData>>) {
         channels={data.channels}
         mode={data.mode}
         vertical
+        interactiveMaps={data.mode === "2d"}
+        showRf
       />
     </BaseCnnNode>
   );
+}
+
+/** Flatten / GAP column values from feature-map `signals`. */
+function flatSignalValues(signals: number[][] | undefined, length?: number): number[] {
+  if (!signals?.length) return new Array(length || 0).fill(0);
+  // Dense / flatten / fixed GAP export: [[v0..vN]]
+  if (signals.length === 1) {
+    const row = signals[0]!;
+    if (row.length) return row;
+  }
+  // Legacy GAP [C][1] (or multi-row): one scalar per channel/row.
+  const fromRows = signals.map((row) => row[0] ?? 0);
+  if (fromRows.some((v) => v !== 0) || !length) return fromRows;
+  return new Array(length).fill(0);
 }
 
 /** Flatten column: grayscale unit squares + per-unit source handles for dense edges. */
@@ -426,11 +697,11 @@ function FlattenVector({ layerId, length }: { layerId: string; length?: number }
   const snapshot = useLayerSnapshot(layerId);
   const paintGeneration = useContext(PaintGenerationContext);
   void paintGeneration;
-  const values = snapshot?.signals?.[0] ?? [];
-  const n = values.length || length || 32;
-  const raw = values.length ? values : new Array(n).fill(0);
-  const stack = unitStackSize(raw.length, 1);
-  const shown = downsample1D(raw, stack.visCount);
+  const raw = flatSignalValues(snapshot?.signals, length);
+  const n = raw.length || length || 32;
+  const values = raw.length ? raw : new Array(n).fill(0);
+  const stack = unitStackSize(values.length, 1);
+  const shown = downsample1D(values, stack.visCount);
   const fills = activationGray(shown);
   const { d, gap, width, height } = stack;
 
@@ -438,7 +709,7 @@ function FlattenVector({ layerId, length }: { layerId: string; length?: number }
     <div
       className="cnn-unit-stack cnn-unit-stack--flatten"
       style={{ width, height }}
-      title={`${raw.length} units`}
+      title={`${values.length} units`}
     >
       {shown.map((_, i) => (
         <div
@@ -494,7 +765,7 @@ function DenseNeuronColumn({ layerId, units }: { layerId: string; units: number 
   const shownBias = biases.length
     ? downsample1D(biases, stack.visCount)
     : new Array(stack.visCount).fill(0);
-  const { d, gap, width, height } = stack;
+  const { d, gap } = stack;
 
   if (!snapshot?.matrix?.length && !acts.length) {
     return <div className="cnn-feature-empty" title={t.denseWeightsEmpty} />;

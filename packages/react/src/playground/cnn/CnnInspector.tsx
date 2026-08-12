@@ -4,6 +4,7 @@ import {
   weightColor,
   weightValueNormalized,
 } from "@ml-vis/core";
+import { cnnGridPx } from "./cnnAdapter";
 import { useCnnMessages } from "./messages";
 
 export interface CnnInspectorProps {
@@ -28,17 +29,16 @@ function normalizeWeightMap(map: number[][]): number[][] {
 
 function KernelThumb({
   map,
-  size,
   bias,
 }: {
   map: number[][];
-  size: number;
   bias?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heatRef = useRef<HTMLCanvasElement>(null);
   const cols = map[0]?.length ?? 1;
   const rows = map.length;
+  const { w, h } = cnnGridPx(rows, cols);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -48,12 +48,18 @@ function KernelThumb({
       layout: "row-major",
       palette: "diverging",
     });
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+    }
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, size, size);
-    ctx.drawImage(heat, 0, 0, size, size);
-  }, [map, size]);
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(heat, 0, 0, w, h);
+  }, [map, w, h]);
 
   const title =
     typeof bias === "number" ? `bias ${bias.toFixed(3)}` : undefined;
@@ -68,9 +74,9 @@ function KernelThumb({
           style={{ background: weightColor(weightValueNormalized(bias)) }}
         />
       )}
-      <div className="cnn-kernel-thumb" style={{ width: size, height: size }}>
+      <div className="cnn-kernel-thumb" style={{ width: w, height: h }}>
         <canvas ref={heatRef} width={cols} height={rows} hidden aria-hidden />
-        <canvas ref={canvasRef} width={size} height={size} className="cnn-feature-canvas" />
+        <canvas ref={canvasRef} className="cnn-feature-canvas" />
       </div>
     </div>
   );
@@ -80,7 +86,7 @@ function KernelGrid2D({ maps, biases }: { maps: number[][][]; biases?: number[] 
   return (
     <div className="cnn-kernel-grid">
       {maps.map((m, i) => (
-        <KernelThumb key={i} map={m} size={36} bias={biases?.[i]} />
+        <KernelThumb key={i} map={m} bias={biases?.[i]} />
       ))}
     </div>
   );
@@ -90,7 +96,7 @@ function KernelGrid1D({ vectors, biases }: { vectors: number[][]; biases?: numbe
   return (
     <div className="cnn-kernel-grid cnn-kernel-grid--1d">
       {vectors.map((v, i) => (
-        <KernelThumb key={i} map={[v]} size={72} bias={biases?.[i]} />
+        <KernelThumb key={i} map={[v]} bias={biases?.[i]} />
       ))}
     </div>
   );

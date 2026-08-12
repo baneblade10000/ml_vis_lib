@@ -14,9 +14,8 @@ export {
 } from "./train";
 export type { LiveTrainingState, TrainingSplit } from "./train";
 
-// Convolutional-network engine (isolated from the feedforward network engine).
+// Convolutional-network playground types + gallery (train compute = Burn WASM).
 export {
-  CnnEngine,
   DEFAULT_CNN_CONFIG,
   DEFAULT_CNN_CONFIG_2D,
   DEFAULT_CNN_CONFIG_1D,
@@ -27,7 +26,11 @@ export {
   CNN_REGULARIZATION_RATES,
   PLAYGROUND_OPTIMIZERS,
   IMAGE_SIZE,
+  IMAGE_SIZE_THREE_FOUR_LOOPS,
+  imageSizeForDataset,
   SIGNAL_LENGTH,
+  makeImageDataset,
+  makeSignalDataset,
 } from "./cnn";
 export type {
   CnnMode,

@@ -1,0 +1,7 @@
+[workspace]
+members = ["crates/cnn_burn"]
+resolver = "2"
+
+[profile.release]
+lto = true
+opt-level = "s"

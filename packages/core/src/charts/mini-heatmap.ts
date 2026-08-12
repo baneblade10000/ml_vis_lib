@@ -48,7 +48,7 @@ const imageDataCache = new WeakMap<
 >();
 
 export type ValueMatrixLayout = "col-major" | "row-major";
-/** `diverging` = TF Playground violet→magenta; `gray` = bright black→white. */
+/** `diverging` = deep blue→sky cyan; `gray` = bright black→white. */
 export type ValueMatrixPalette = "diverging" | "gray";
 
 export interface RenderValueMatrixOptions {

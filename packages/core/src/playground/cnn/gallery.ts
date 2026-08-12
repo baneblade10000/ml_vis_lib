@@ -32,8 +32,15 @@ export const CNN_DATASET_IDS_2D: CnnDatasetId2D[] = [
 ];
 export const CNN_DATASET_IDS_1D: CnnDatasetId1D[] = ["heartbeat", "tones", "pulses"];
 
-/** Slightly larger than before so digits stay readable after 2× pooling. */
+/** Default resolution for most 2-D datasets. */
 export const IMAGE_SIZE = 16;
+/** Larger canvas for the 3-vs-4 petal task (needs room for four lobes). */
+export const IMAGE_SIZE_THREE_FOUR_LOOPS = 32;
+
+/** Spatial size used when generating / training a given 2-D dataset. */
+export function imageSizeForDataset(id: CnnDatasetId2D): number {
+  return id === "three-four-loops" ? IMAGE_SIZE_THREE_FOUR_LOOPS : IMAGE_SIZE;
+}
 export const SIGNAL_LENGTH = 48;
 export const NUM_EXAMPLES = 160;
 /** Train/test split fraction. */
@@ -70,10 +77,11 @@ function shuffleInPlace<T>(arr: T[]): void {
 }
 
 function paint(img: Map2D, r: number, c: number, v: number): void {
+  const size = img.length;
   const rr = Math.round(r);
   const cc = Math.round(c);
-  if (rr < 0 || rr >= IMAGE_SIZE || cc < 0 || cc >= IMAGE_SIZE) return;
-  img[rr][cc] = Math.max(img[rr][cc], clamp01(v));
+  if (rr < 0 || rr >= size || cc < 0 || cc >= size) return;
+  img[rr]![cc] = Math.max(img[rr]![cc]!, clamp01(v));
 }
 
 /** Soft circular brush — looks more “handwritten” than hard pixels. */
@@ -109,9 +117,10 @@ function drawLine(
 }
 
 function finishImage(img: Map2D, noise: number): Map2D {
-  for (let r = 0; r < IMAGE_SIZE; r++) {
-    for (let c = 0; c < IMAGE_SIZE; c++) {
-      img[r][c] = clamp01(addNoise(img[r][c], noise));
+  const size = img.length;
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      img[r]![c] = clamp01(addNoise(img[r]![c]!, noise));
     }
   }
   return img;
@@ -208,13 +217,17 @@ function drawPetal(
 
 /** `count` petals sharing one junction, evenly spaced in angle. */
 function drawPetalFlower(img: Map2D, count: 2 | 3 | 4, thickness: number): void {
-  const jx = IMAGE_SIZE * 0.5 + uniform(-0.7, 0.7);
-  const jy = IMAGE_SIZE * 0.5 + uniform(-0.7, 0.7);
-  // Pack tighter as petal count grows so the flower stays on 16×16.
+  const size = img.length;
+  const scale = size / 16;
+  const jx = size * 0.5 + uniform(-0.7, 0.7) * scale;
+  const jy = size * 0.5 + uniform(-0.7, 0.7) * scale;
+  // Base lengths tuned for 16×16; scale up for larger canvases.
   const length =
-    count === 2 ? uniform(5.2, 6.4) : count === 3 ? uniform(4.4, 5.4) : uniform(3.8, 4.8);
+    (count === 2 ? uniform(5.2, 6.4) : count === 3 ? uniform(4.4, 5.4) : uniform(3.8, 4.8)) *
+    scale;
   const width =
-    count === 2 ? uniform(2.4, 3.2) : count === 3 ? uniform(2.0, 2.7) : uniform(1.6, 2.2);
+    (count === 2 ? uniform(2.4, 3.2) : count === 3 ? uniform(2.0, 2.7) : uniform(1.6, 2.2)) *
+    scale;
   const baseAngle = uniform(0, Math.PI * 2);
 
   for (let i = 0; i < count; i++) {
@@ -231,21 +244,22 @@ function generatePetalCountTask(
   high: 3 | 4,
   label: 0 | 1,
   noise: number,
+  size: number,
 ): Map2D {
-  const img = zeros2D(IMAGE_SIZE, IMAGE_SIZE);
-  const thick = uniform(0.65, 1.0);
+  const img = zeros2D(size, size);
+  const thick = uniform(0.65, 1.0) * (size / 16);
   drawPetalFlower(img, label === 1 ? high : low, thick);
   return finishImage(img, noise);
 }
 
 /** Class 0: two petals. Class 1: three petals — all from one point. */
 function generateTwoThreeLoops(label: 0 | 1, noise: number): Map2D {
-  return generatePetalCountTask(2, 3, label, noise);
+  return generatePetalCountTask(2, 3, label, noise, IMAGE_SIZE);
 }
 
-/** Class 0: three petals. Class 1: four petals — all from one point. */
+/** Class 0: three petals. Class 1: four petals — all from one point (32×32). */
 function generateThreeFourLoops(label: 0 | 1, noise: number): Map2D {
-  return generatePetalCountTask(3, 4, label, noise);
+  return generatePetalCountTask(3, 4, label, noise, IMAGE_SIZE_THREE_FOUR_LOOPS);
 }
 
 const IMAGE_GENERATORS: Record<CnnDatasetId2D, (label: 0 | 1, noise: number) => Map2D> = {

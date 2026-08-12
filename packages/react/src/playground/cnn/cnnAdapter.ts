@@ -1,5 +1,4 @@
 import type { Edge, Node } from "@xyflow/react";
-import { MarkerType } from "@xyflow/react";
 import {
   weightColor,
   weightMagnitude,
@@ -22,7 +21,9 @@ export type CnnPipelineView = {
 };
 
 /** Pixel geometry for the CNN flow graph. */
-export const CNN_COL_SPACING = 200;
+export const CNN_COL_GAP = 72;
+/** @deprecated use {@link CNN_COL_GAP}; kept for any external imports. */
+export const CNN_COL_SPACING = CNN_COL_GAP;
 export const CNN_ORIGIN_X = 80;
 export const CNN_NODE_WIDTH = 150;
 
@@ -31,20 +32,34 @@ export const CNN_MAX_VIS_UNITS = 32;
 /** Max pixel height of a Flatten/Dense unit stack — keeps cells readable as squares. */
 export const CNN_MAX_STACK_HEIGHT = 420;
 
-const MAP_PX = 44;
-/** Pixel size of the kernel thumb drawn beside each conv channel. */
-const KERNEL_PX = 36;
+/**
+ * On-screen size of one activation / weight cell.
+ * Kernels and feature maps share this so a kernel pixel matches a map pixel.
+ */
+export const CNN_CELL_PX = 8;
+
 const MAP_GAP = 3;
 const PAIR_GAP = 4;
+const BIAS_CHIP = 13; // bias square + gap beside kernel
 const MAP_GRID_MAX_W = 140;
-/** Wider wrap for conv nodes: kernel + activation side by side. */
-const CONV_GRID_MAX_W = 280;
 const NODE_CHROME = 38; // label + padding + gaps
 
-/** Width of one conv channel cell: kernel thumb + gap + feature map. */
-function convChannelCellW(mode: "2d" | "1d"): number {
-  if (mode === "1d") return KERNEL_PX + PAIR_GAP + MAP_PX;
-  return KERNEL_PX + PAIR_GAP + MAP_PX;
+export function cnnGridPx(
+  rows: number,
+  cols: number,
+  cellPx = CNN_CELL_PX,
+): { w: number; h: number } {
+  return {
+    w: Math.max(1, cols) * cellPx,
+    h: Math.max(1, rows) * cellPx,
+  };
+}
+
+/** Width of one conv channel cell: bias + kernel + gap + feature map. */
+function convChannelCellW(mapCols: number, kernelCols: number): number {
+  const map = cnnGridPx(1, mapCols);
+  const ker = cnnGridPx(1, kernelCols);
+  return BIAS_CHIP + ker.w + PAIR_GAP + map.w;
 }
 
 /** Evenly sample a 1-D series down to `target` samples. */
@@ -115,6 +130,8 @@ function estimateNodeSize(
   mode: CnnMode,
   /** Incoming vector length for dense weight columns. */
   inputLength = 64,
+  /** Conv kernel spatial size (k) when known from feature-map dump. */
+  kernelDim = 3,
 ): { width: number; height: number } {
   if (kind === "flatten" || kind === "gap2d" || kind === "gap1d") {
     const n = shape?.kind === "1d" ? shape.length : 32;
@@ -140,19 +157,26 @@ function estimateNodeSize(
   const channels = Math.max(1, Math.min(16, shape?.channels ?? 1));
   const isConv = kind === "conv2d" || kind === "conv1d";
   const isPool = kind === "pool2d" || kind === "pool1d";
+  const mapRows = shape?.kind === "2d" ? shape.rows : 1;
+  const mapCols =
+    shape?.kind === "2d" ? shape.cols : shape?.kind === "1d" ? shape.length : 16;
+  const map = cnnGridPx(mapRows, Math.max(1, mapCols));
+  const ker = cnnGridPx(kernelDim, kernelDim);
+
   if (mode === "1d" || shape?.kind === "1d") {
-    const rows = channels;
-    const rowH = isConv ? Math.max(8, KERNEL_PX) : 8;
-    const gridH = rows * rowH + Math.max(0, rows - 1) * MAP_GAP;
+    const sigLen = shape?.kind === "1d" ? shape.length : 64;
+    const sig = cnnGridPx(1, Math.max(1, sigLen));
+    const ker1 = cnnGridPx(1, kernelDim);
+    const rowH = isConv ? Math.max(8, ker1.h, 8) : 8;
+    const gridH = channels * rowH + Math.max(0, channels - 1) * MAP_GAP;
     const width = isConv
-      ? Math.max(CNN_NODE_WIDTH, convChannelCellW("1d") + 28)
+      ? Math.max(CNN_NODE_WIDTH, BIAS_CHIP + ker1.w + PAIR_GAP + sig.w + 28)
       : CNN_NODE_WIDTH;
     return { width, height: NODE_CHROME + gridH };
   }
   if (isConv) {
-    // .cnn-node is ~150px wide, so kernel+map pairs stack one per row.
-    const cellW = convChannelCellW("2d");
-    const rowH = Math.max(MAP_PX, KERNEL_PX);
+    const cellW = convChannelCellW(mapCols, kernelDim);
+    const rowH = Math.max(map.h, ker.h);
     const gridH = channels * rowH + Math.max(0, channels - 1) * MAP_GAP;
     return {
       width: Math.max(CNN_NODE_WIDTH, cellW + 28),
@@ -160,13 +184,16 @@ function estimateNodeSize(
     };
   }
   if (isPool) {
-    // Pool tiles are stacked in a single column (FeatureGrid vertical).
-    const gridH = channels * MAP_PX + Math.max(0, channels - 1) * MAP_GAP;
-    return { width: CNN_NODE_WIDTH, height: NODE_CHROME + gridH };
+    const gridH = channels * map.h + Math.max(0, channels - 1) * MAP_GAP;
+    return {
+      width: Math.max(CNN_NODE_WIDTH, map.w + 28),
+      height: NODE_CHROME + gridH,
+    };
   }
-  const perRow = Math.max(1, Math.floor((MAP_GRID_MAX_W + MAP_GAP) / (MAP_PX + MAP_GAP)));
+  const tile = Math.max(map.w, map.h);
+  const perRow = Math.max(1, Math.floor((MAP_GRID_MAX_W + MAP_GAP) / (tile + MAP_GAP)));
   const gridRows = Math.ceil(channels / perRow);
-  const gridH = gridRows * MAP_PX + Math.max(0, gridRows - 1) * MAP_GAP;
+  const gridH = gridRows * tile + Math.max(0, gridRows - 1) * MAP_GAP;
   return { width: CNN_NODE_WIDTH, height: NODE_CHROME + gridH };
 }
 
@@ -212,6 +239,8 @@ export type CnnNodeData = {
   cols?: number;
   /** Length for 1-D layers. */
   length?: number;
+  /** Conv kernel spatial size used for width estimates / layout invalidation. */
+  kernelSize?: number;
   /** Param count of the layer. */
   params: number;
   /** Aggregate weight magnitude (tanh) for the connecting edge, or null. */
@@ -263,6 +292,8 @@ export function cnnPipelineToFlow(
     selectedNodeId: string | null;
     paintGeneration?: number;
     featureMaps: FeatureMapSnapshot[];
+    /** Preferred kernel sizes (from config) — drives width before snapshots catch up. */
+    kernelSizeByLayerId?: Record<string, number>;
     loss?: number;
     probability?: number;
     /** Localized node titles; defaults to layer.label string. */
@@ -282,12 +313,19 @@ export function cnnPipelineToFlow(
     const prev = layers[idx - 1]?.shape;
     const inputLength =
       prev?.kind === "1d" ? prev.length : prev?.kind === "2d" ? prev.rows * prev.cols * prev.channels : 64;
-    return estimateNodeSize(layer.kind, shape, mode, inputLength);
+    const snap = options.featureMaps.find((m) => m.layerId === layer.id);
+    const kernelDim =
+      options.kernelSizeByLayerId?.[layer.id] ??
+      snap?.kernels2d?.[0]?.length ??
+      snap?.kernels1d?.[0]?.length ??
+      3;
+    return estimateNodeSize(layer.kind, shape, mode, inputLength, kernelDim);
   });
   const maxH = Math.max(1, ...sizes.map((s) => s.height));
+  void maxH;
 
-  // Pack by top-left. Y is a first guess from estimates; CnnFlowGraph re-aligns
-  // to a shared midline after React Flow measures real DOM heights.
+  // X packs left→right by full node width + gap (half-width step overlapped on 32×32).
+  // Y is the vertical center (nodeOrigin [0, 0.5] in the graph).
   let x = CNN_ORIGIN_X;
   layers.forEach((layer, idx) => {
     const shape = layer.shape;
@@ -295,13 +333,18 @@ export function cnnPipelineToFlow(
     const isOutput = layer.kind === "output";
     const wMag = layer.weightMag;
     const { width, height } = sizes[idx]!;
+    const snap = options.featureMaps.find((m) => m.layerId === layer.id);
+    const kernelSize =
+      options.kernelSizeByLayerId?.[layer.id] ??
+      snap?.kernels2d?.[0]?.length ??
+      snap?.kernels1d?.[0]?.length;
     const labelable: LabelableLayer = { kind: layer.kind, label: () => layer.label };
     nodes.push({
       id: layer.id,
       type,
       position: {
         x,
-        y: (maxH - height) / 2,
+        y: 0,
       },
       width,
       height,
@@ -314,6 +357,8 @@ export function cnnPipelineToFlow(
         rows: shape?.kind === "2d" ? shape.rows : undefined,
         cols: shape?.kind === "2d" ? shape.cols : undefined,
         length: shape?.kind === "1d" ? shape.length : undefined,
+        kernelSize:
+          layer.kind === "conv2d" || layer.kind === "conv1d" ? (kernelSize ?? 3) : undefined,
         params: layer.params,
         weightMag: wMag,
         loss: isOutput ? options.loss : undefined,
@@ -369,23 +414,10 @@ export function cnnPipelineToFlow(
             });
           }
         }
-      } else {
-        const mag = wMag ?? 0;
-        const stroke = weightColor(mag);
-        const strokeW = 2 + Math.abs(mag) * 5.5;
-        edges.push({
-          id: `${prev.id}->${layer.id}`,
-          source: prev.id,
-          target: layer.id,
-          type: "cnnWeight",
-          data: { weightMag: mag, active: true },
-          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: stroke },
-          style: { stroke, strokeWidth: strokeW, strokeOpacity: 0.45 + Math.abs(mag) * 0.55 },
-        });
       }
+      // No hop edges between spatial layers (input/conv/pool) — layout alone is enough.
     }
-      const nextW = sizes[idx + 1]?.width ?? width;
-    x += Math.max(CNN_COL_SPACING, (width + nextW) / 2 + 56);
+    x += width + CNN_COL_GAP;
   });
 
   return { nodes, edges };

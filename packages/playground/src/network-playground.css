@@ -3,16 +3,16 @@
 :root {
   --nn-font: "Inter", system-ui, -apple-system, sans-serif;
 
-  --nn-accent: #4f46e5;
-  --nn-accent-hover: #4338ca;
-  --nn-accent-soft: rgba(79, 70, 229, 0.1);
-  --nn-accent-glow: rgba(79, 70, 229, 0.35);
+  --nn-accent: #3457a3;
+  --nn-accent-hover: #083275;
+  --nn-accent-soft: rgba(52, 87, 163, 0.15);
+  --nn-accent-glow: rgba(52, 87, 163, 0.35);
 
-  --nn-cyan: #4f46e5;
+  --nn-cyan: #3457a3;
   --nn-crimson: #dc263a;
 
   --nn-bg: #f1f5f9;
-  --nn-bg-gradient: linear-gradient(145deg, #f8fafc 0%, #eef2ff 45%, #f1f5f9 100%);
+  --nn-bg-gradient: linear-gradient(145deg, #f8fafc 0%, #e8f4fc 45%, #f1f5f9 100%);
 
   --nn-surface: #ffffff;
   --nn-surface-raised: #ffffff;
@@ -169,7 +169,7 @@
 }
 
 .catalog-card:hover {
-  border-color: rgba(79, 70, 229, 0.35);
+  border-color: rgba(52, 87, 163, 0.35);
   box-shadow: var(--nn-shadow-md);
   transform: translateY(-2px);
 }
@@ -769,7 +769,7 @@
   border-radius: 50%;
   background: #fff;
   border: 2px solid var(--nn-accent);
-  box-shadow: 0 1px 4px rgba(79, 70, 229, 0.35);
+  box-shadow: 0 1px 4px rgba(52, 87, 163, 0.35);
   cursor: pointer;
   transition:
     transform 0.1s ease,
@@ -787,7 +787,7 @@
   border-radius: 50%;
   background: #fff;
   border: 2px solid var(--nn-accent);
-  box-shadow: 0 1px 4px rgba(79, 70, 229, 0.35);
+  box-shadow: 0 1px 4px rgba(52, 87, 163, 0.35);
   cursor: pointer;
 }
 
@@ -1265,7 +1265,7 @@
 }
 
 .nn-flow-node.selected {
-  border-color: #6366f1;
+  border-color: #3457a3;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
 }
 
@@ -1314,8 +1314,8 @@
 
 /* Bias indicator: a small square tucked into the neuron's bottom-right
    corner. A white rounded border keeps it legible over any heatmap color; the
-   fill color encodes the bias via the diverging palette (violet negative /
-   magenta positive), saturating as |bias| grows. */
+   fill color encodes the bias via the diverging palette (deep blue negative /
+   sky cyan positive), saturating as |bias| grows. */
 .nn-flow-bias {
   position: absolute;
   right: 4px;
@@ -1340,7 +1340,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #8b5cf6;
+  background: #3457a3;
   color: #fff;
   font-size: 0.75rem;
   font-weight: 700;
@@ -1354,7 +1354,7 @@
 .nn-flow-handle {
   width: 8px !important;
   height: 8px !important;
-  background: #6366f1 !important;
+  background: #3457a3 !important;
   border: 2px solid #fff !important;
 }
 
@@ -1448,7 +1448,7 @@
 }
 
 .nn-weight-matrix__cell:focus-visible {
-  box-shadow: inset 0 0 0 2px #6366f1 !important;
+  box-shadow: inset 0 0 0 2px #3457a3 !important;
 }
 
 .nn-weight-matrix__tooltip {
@@ -1536,9 +1536,9 @@
   border-radius: 999px;
   background: linear-gradient(
     to right,
-    #3a30a8 0%,
-    #a855c4 50%,
-    #c02670 100%
+    #083275 0%,
+    #337dba 50%,
+    #5ec9ff 100%
   );
   border: 1px solid var(--nn-border, #e2e8f0);
 }
@@ -1587,7 +1587,7 @@
 }
 
 .nn-network-palette-item:hover {
-  border-color: #6366f1;
+  border-color: #3457a3;
   box-shadow: var(--nn-shadow-sm);
 }
 
@@ -1608,11 +1608,11 @@
 }
 
 .nn-network-palette-icon--dense {
-  background: #6366f1;
+  background: #3457a3;
 }
 
 .nn-network-palette-icon--sum {
-  background: #8b5cf6;
+  background: #3457a3;
 }
 
 .nn-network-palette-icon--output {
@@ -2056,8 +2056,8 @@
 
   .nn-flow-dock--right {
     width: 14rem;
-    top: auto;
-    bottom: 0.75rem;
+    top: 0.75rem;
+    bottom: auto;
     max-height: 45%;
   }
 
@@ -2089,7 +2089,7 @@
 }
 
 .ag-palette-icon {
-  background: #6366f1;
+  background: #3457a3;
   width: 1.375rem;
   height: 1.375rem;
   font-size: 0.6875rem;
@@ -2138,7 +2138,7 @@
 }
 
 .ag-node.selected {
-  border-color: #4f46e5;
+  border-color: #3457a3;
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
 }
 
@@ -2165,7 +2165,7 @@
 
 .ag-node-symbol {
   font-weight: 800;
-  color: #4f46e5;
+  color: #3457a3;
   font-size: 0.8125rem;
 }
 
@@ -2198,7 +2198,7 @@
   width: 9px;
   height: 9px;
   background: #fff;
-  border: 2px solid #6366f1;
+  border: 2px solid #3457a3;
 }
 
 .ag-edge-label {
@@ -2277,7 +2277,7 @@
 }
 
 .nn-flat-switch__btn:focus-visible {
-  outline: 2px solid var(--nn-accent, #6366f1);
+  outline: 2px solid var(--nn-accent, #3457a3);
   outline-offset: 2px;
 }
 
@@ -2309,31 +2309,34 @@
 /* Layer nodes (each renders its feature maps as a tile grid) */
 .cnn-node {
   position: relative;
-  width: 150px;
-  background: #fff;
-  border: 2px solid var(--nn-border);
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-  padding: 0.375rem;
+  width: auto;
+  min-width: 120px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0.25rem 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.25rem;
   font-family: var(--nn-font);
+  overflow: visible;
 }
 
 .cnn-node.selected {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+  box-shadow: none;
 }
 
-.cnn-node--input { border-color: #94a3b8; }
+.cnn-node.selected .cnn-node-label {
+  color: #3457a3;
+}
+
+.cnn-node--input { min-width: 0; }
 .cnn-node--conv {
-  border-color: #6366f1;
-  width: auto;
   min-width: 150px;
 }
-.cnn-node--pool { border-color: #0ea5e9; }
+.cnn-node--pool { min-width: 0; }
 .cnn-node--flatten {
   width: auto;
   min-width: 48px;
@@ -2466,9 +2469,12 @@
   font-family: var(--nn-font);
   font-size: 0.625rem;
   font-weight: 600;
-  color: var(--nn-text-muted);
+  color: var(--nn-text-secondary);
   line-height: 1.1;
   letter-spacing: 0.01em;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 4px;
+  padding: 0 4px;
 }
 
 .cnn-node-label--hidden { display: none; }
@@ -2477,7 +2483,7 @@
   width: 8px;
   height: 8px;
   background: #fff;
-  border: 2px solid #6366f1;
+  border: 2px solid #3457a3;
 }
 
 /* Feature-map tile grid inside a node */
@@ -2486,12 +2492,11 @@
   flex-wrap: wrap;
   gap: 3px;
   justify-content: center;
-  align-items: center;
-  max-width: 140px;
+  align-items: flex-start;
+  max-width: none;
 }
 
 .cnn-feature-grid--with-kernels {
-  max-width: 280px;
   gap: 5px;
 }
 
@@ -2500,20 +2505,21 @@
   flex-direction: column;
   flex-wrap: nowrap;
   max-width: none;
-  align-items: center;
+  align-items: flex-start;
 }
 
-/* Conv channel: kernel (left) + activation map (right) */
+/* Conv channel: kernel (left) + activation map (right) — never stretch tiles. */
 .cnn-channel-pair {
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .cnn-channel-pair--1d {
   align-items: center;
-  min-height: 36px;
+  min-height: 0;
 }
 
 .cnn-kernel-with-bias {
@@ -2524,14 +2530,24 @@
   flex-shrink: 0;
 }
 
+.cnn-kernel-with-bias--pick {
+  cursor: pointer;
+}
+
+.cnn-kernel-with-bias--selected .cnn-kernel-mini {
+  outline: 2px solid #5ec9ff;
+  outline-offset: 1px;
+}
+
 .cnn-kernel-mini {
   position: relative;
-  flex-shrink: 0;
+  flex: 0 0 auto;
   border-radius: 0;
   overflow: hidden;
-  border: 1px solid rgba(99, 102, 241, 0.45);
+  border: 1px solid rgba(52, 87, 163, 0.45);
   background: #f8fafc;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  line-height: 0;
 }
 
 /* Bias chip on dense units — bottom-right overlay, same role as .nn-flow-bias. */
@@ -2567,6 +2583,8 @@
 
 .cnn-kernel-mini .cnn-feature-canvas {
   display: block;
+  width: auto !important;
+  height: auto !important;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -2583,18 +2601,35 @@
 
 .cnn-feature-empty {
   width: 100%;
-  height: 44px;
+  height: 48px;
 }
 
 .cnn-feature-cell {
+  position: relative;
+  flex: 0 0 auto;
   border-radius: 0;
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, 0.1);
   background: #f8fafc;
+  line-height: 0;
+}
+
+.cnn-feature-cell--pick {
+  cursor: crosshair;
+}
+
+.cnn-feature-canvas--overlay {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .cnn-feature-cell--signal {
-  height: 8px;
+  height: auto;
 }
 
 .cnn-feature-cell--vector {
@@ -2612,12 +2647,11 @@
 
 .cnn-feature-canvas {
   display: block;
-}
-
-.cnn-feature-cell .cnn-feature-canvas,
-.cnn-kernel-mini .cnn-feature-canvas {
-  width: 100%;
-  height: 100%;
+  /* Bitmap already scaled by CNN_CELL_PX — never stretch via CSS. */
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: none !important;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -2833,7 +2867,7 @@
 }
 
 .cnn-arch-add__btn:focus-visible {
-  outline: 2px solid var(--nn-accent, #6366f1);
+  outline: 2px solid var(--nn-accent, #3457a3);
   outline-offset: 2px;
 }
 
@@ -2869,11 +2903,11 @@
 }
 
 .cnn-gallery-item:hover {
-  border-color: #6366f1;
+  border-color: #3457a3;
 }
 
 .cnn-gallery-item.selected {
-  border-color: #6366f1;
+  border-color: #3457a3;
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
 }
 
@@ -2932,13 +2966,18 @@
 
 .cnn-kernel-thumb {
   position: relative;
+  flex: 0 0 auto;
   border: 1px solid var(--nn-border);
   border-radius: 0;
   overflow: hidden;
+  line-height: 0;
 }
 
 .cnn-kernel-thumb .cnn-feature-canvas {
+  width: auto !important;
+  height: auto !important;
   image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .cnn-bias-list {
@@ -3294,4 +3333,110 @@
   .signal-body {
     grid-template-columns: 1fr;
   }
+}
+
+/* Burn WASM lazy dock */
+.viz-page--immersive {
+  position: relative;
+}
+
+.burn-cnn-dock {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 40;
+  width: min(17.5rem, calc(100% - 1.5rem));
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--nn-border, #d0d4dc);
+  background: color-mix(in srgb, var(--nn-surface, #fff) 92%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--nn-shadow-sm, 0 4px 16px rgba(0, 0, 0, 0.08));
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.75rem;
+  color: var(--nn-text-secondary, #445);
+}
+
+.burn-cnn-dock__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.burn-cnn-dock__title {
+  font-size: 0.8125rem;
+  color: var(--nn-text, #111);
+}
+
+.burn-cnn-dock__hint {
+  opacity: 0.7;
+  font-size: 0.6875rem;
+}
+
+.burn-cnn-dock__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.burn-cnn-dock__bar {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--nn-border, #ccd) 70%, transparent);
+  overflow: hidden;
+}
+
+.burn-cnn-dock__bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--nn-accent, #3b82f6);
+  transition: width 120ms linear;
+}
+
+.burn-cnn-dock__meta {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.burn-cnn-dock__actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.burn-cnn-dock__stats {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.burn-cnn-dock__stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.burn-cnn-dock__stats dt {
+  margin: 0;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.burn-cnn-dock__stats dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--nn-text, #111);
+  font-weight: 600;
+}
+
+.burn-cnn-dock__error {
+  margin: 0;
+  color: #b42318;
+  line-height: 1.35;
 }

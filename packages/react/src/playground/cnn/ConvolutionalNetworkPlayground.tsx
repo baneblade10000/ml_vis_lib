@@ -17,7 +17,6 @@ import {
   type SignalExample,
   type TrainSnapshot,
 } from "@ml-vis/core";
-import { createCnnTrainWorker } from "@ml-vis/core/workers/createWorkers";
 import { NetworkLossChart } from "../network/NetworkLossChart";
 import { CnnFlowGraph } from "./CnnFlowGraph";
 import { CnnArchitecturePanel } from "./CnnArchitecturePanel";
@@ -34,11 +33,57 @@ export interface ConvolutionalNetworkPlaygroundProps {
   initialMode?: CnnMode;
   toolbarStart?: React.ReactNode;
   toolbarEnd?: React.ReactNode;
+  /** Burn WASM train worker factory (required — JS CNN compute removed). */
+  createWorker: () => Worker;
 }
 
 function shapeLabel(shape: LayerShape): string {
   if (shape.kind === "2d") return `${shape.channels}×${shape.rows}×${shape.cols}`;
   return `${shape.channels}×${shape.length}`;
+}
+
+/** Config kernel sizes keyed by live layer id (skip input at layers[0]). */
+function kernelSizesFromSnapshot(snap: CnnTrainSnapshot): Record<string, number> {
+  const out: Record<string, number> = {};
+  const specs = snap.config.layers;
+  for (let i = 0; i < specs.length; i++) {
+    const spec = specs[i]!;
+    const view = snap.layers[i + 1];
+    if (!view) continue;
+    if (spec.kind === "conv2d" || spec.kind === "conv1d") {
+      out[view.id] = Math.max(1, spec.kernelSize ?? 3);
+    }
+  }
+  return out;
+}
+
+function kernelSpatialSize(kernels: unknown): number | undefined {
+  if (!Array.isArray(kernels) || kernels.length === 0) return undefined;
+  let cur: unknown = kernels[0];
+  // Walk nested filter/in-channel wrappers until we hit a numeric row (2d) or vector (1d).
+  while (Array.isArray(cur) && cur.length > 0 && Array.isArray(cur[0])) {
+    cur = cur[0];
+  }
+  if (Array.isArray(cur)) return cur.length;
+  return undefined;
+}
+
+/** Keep previous kernels only when spatial size still matches config (avoid stale k after resize). */
+function mergeKernels<T>(
+  next: T | undefined,
+  prev: T | undefined,
+  expectedK: number | undefined,
+): T | undefined {
+  const nextArr = next as unknown[] | undefined;
+  if (nextArr && nextArr.length > 0) {
+    const spatial = kernelSpatialSize(next);
+    if (expectedK == null || spatial == null || spatial === expectedK) return next;
+  }
+  const prevArr = prev as unknown[] | undefined;
+  if (!prevArr?.length) return nextArr?.length ? next : undefined;
+  const prevSpatial = kernelSpatialSize(prev);
+  if (expectedK != null && prevSpatial != null && prevSpatial !== expectedK) return undefined;
+  return prev;
 }
 
 function specKindLabel(kind: string, t: ReturnType<typeof useCnnMessages>): string {
@@ -69,6 +114,7 @@ export function ConvolutionalNetworkPlayground({
   initialMode = "2d",
   toolbarStart,
   toolbarEnd,
+  createWorker,
 }: ConvolutionalNetworkPlaygroundProps) {
   const t = useCnnMessages();
   const initialConfig = initialMode === "1d" ? DEFAULT_CNN_CONFIG["1d"] : DEFAULT_CNN_CONFIG["2d"];
@@ -113,35 +159,77 @@ export function ConvolutionalNetworkPlayground({
     (snap: CnnTrainSnapshot) => {
       statsRef.current = { ...snap.stats };
       playVizRef.current = { probability: snap.probability, loss: snap.loss };
-      const store: FeatureMapStore = {};
-      for (const m of snap.featureMaps) store[m.layerId] = m;
-      featureMapRef.current = store;
+      const expectedK = kernelSizesFromSnapshot(snap);
+      const store: FeatureMapStore = { ...featureMapRef.current };
+      if (snap.featureMaps.length > 0) {
+        for (const m of snap.featureMaps) {
+          const prev = store[m.layerId];
+          const k = expectedK[m.layerId];
+          // Play dumps often omit kernels — keep last known only if size still matches config.
+          store[m.layerId] = {
+            ...m,
+            kernels2d: mergeKernels(m.kernels2d, prev?.kernels2d, k),
+            kernels1d: mergeKernels(m.kernels1d, prev?.kernels1d, k),
+            kernels2dIn: mergeKernels(m.kernels2dIn, prev?.kernels2dIn, k),
+            kernels1dIn: mergeKernels(m.kernels1dIn, prev?.kernels1dIn, k),
+            biases: m.biases?.length ? m.biases : prev?.biases,
+            matrix: m.matrix?.length ? m.matrix : prev?.matrix,
+          };
+        }
+        featureMapRef.current = store;
+      }
       flushToolbarDom(statsRef.current);
 
-      // Learning curve must track every tick — don't wait on the RF snapshot throttle.
-      setLossHistory(snap.lossHistory);
+      // Chart follows every tick (history is pushed each paint in the worker).
+      if (snap.lossHistory.length > 0) {
+        setLossHistory(snap.lossHistory);
+      }
       setChartLoss({ train: snap.stats.lossTrain, test: snap.stats.lossTest });
 
-      // During Play, keep React Flow / docks at ~4 Hz; feature maps via refs.
       const now = performance.now();
       const playingNow = playingRef.current;
-      if (!playingNow || now - lastReactFlushRef.current >= 250) {
+      // During play, refresh RF node data ~12 Hz; canvases paint via paintGeneration.
+      if (!playingNow || now - lastReactFlushRef.current >= 80) {
         lastReactFlushRef.current = now;
-        setSnapshot(snap);
+        setSnapshot((prev) => {
+          if (!prev) return snap;
+          const mergedMaps =
+            snap.featureMaps.length > 0
+              ? snap.featureMaps.map((m) => {
+                  const old = prev.featureMaps.find((x) => x.layerId === m.layerId);
+                  const k = expectedK[m.layerId];
+                  return {
+                    ...m,
+                    kernels2d: mergeKernels(m.kernels2d, old?.kernels2d, k),
+                    kernels1d: mergeKernels(m.kernels1d, old?.kernels1d, k),
+                    kernels2dIn: mergeKernels(m.kernels2dIn, old?.kernels2dIn, k),
+                    kernels1dIn: mergeKernels(m.kernels1dIn, old?.kernels1dIn, k),
+                    biases: m.biases?.length ? m.biases : old?.biases,
+                    matrix: m.matrix?.length ? m.matrix : old?.matrix,
+                  };
+                })
+              : prev.featureMaps;
+          return {
+            ...snap,
+            featureMaps: mergedMaps,
+            kernels:
+              Object.keys(snap.kernels).length > 0 ? snap.kernels : prev.kernels,
+          };
+        });
       }
       requestPaint();
     },
     [flushToolbarDom, requestPaint],
   );
 
-  // Boot train worker (or fall back to a same-thread shim via Worker if unavailable — skip).
+  // Boot train worker (Burn WASM from playground, or legacy factory).
   useEffect(() => {
     if (!canUseTrainWorkers()) {
       console.warn("[cnn] Web Workers unavailable; CNN playground requires Workers");
       return;
     }
     const client = new TrainWorkerClient({
-      createWorker: createCnnTrainWorker,
+      createWorker,
       onTick: (s) => {
         if (isCnnSnapshot(s)) applySnapshot(s);
       },
@@ -157,9 +245,8 @@ export function ConvolutionalNetworkPlayground({
       client.dispose();
       clientRef.current = null;
     };
-    // Only boot once for the initial mode; mode switches go through commands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [createWorker]);
 
   useEffect(() => {
     paintAllFeatureMapsAfterCommit();
@@ -169,8 +256,8 @@ export function ConvolutionalNetworkPlayground({
   useEffect(() => {
     const client = clientRef.current;
     if (!client) return;
-    // Match local train throughput (~40+ eps on the default 2D net).
-    if (playing) client.play(48);
+    // Single-thread Rust is faster than shard IPC on this tiny net.
+    if (playing) client.play(96);
     else client.pause();
   }, [playing]);
 
@@ -313,6 +400,10 @@ export function ConvolutionalNetworkPlayground({
     }
     return out;
   }, [featureMaps]);
+  const layerKernelSizes = useMemo(
+    () => (snapshot ? kernelSizesFromSnapshot(snapshot) : {}),
+    [snapshot],
+  );
 
   if (!snapshot) {
     return (
@@ -425,6 +516,7 @@ export function ConvolutionalNetworkPlayground({
           selectedNodeId={selectedLayerId}
           paintGeneration={paintGeneration}
           featureMaps={featureMaps}
+          layerKernelSizes={layerKernelSizes}
           onSelectNode={setSelectedLayerId}
           featureMapRef={featureMapRef}
           statsRef={statsRef}
@@ -477,12 +569,6 @@ export function ConvolutionalNetworkPlayground({
                 onRegenerateData={onRegenerateData}
               />
             </div>
-            <CnnInspector
-              selectedLayerId={selectedLayerId}
-              kernels={snapshot.kernels}
-              biases={convBiases}
-              info={inspectorInfo}
-            />
           </aside>
           <aside className="nn-flow-dock nn-flow-dock--right">
             <NetworkLossChart
@@ -518,6 +604,12 @@ export function ConvolutionalNetworkPlayground({
                 <span>+1</span>
               </div>
             </div>
+            <CnnInspector
+              selectedLayerId={selectedLayerId}
+              kernels={snapshot.kernels}
+              biases={convBiases}
+              info={inspectorInfo}
+            />
           </aside>
         </CnnFlowGraph>
       </div>

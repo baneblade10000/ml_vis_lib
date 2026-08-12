@@ -1,11 +1,11 @@
-/** Diverging palette: violet (neg) → orchid (0) → magenta (pos). */
+/** Diverging palette: deep blue (neg) → mid blue (0) → sky cyan (pos). */
 
-export const PALETTE_LOW = { r: 58, g: 48, b: 168 }; // #3a30a8 — dark saturated violet
-export const PALETTE_MID = { r: 168, g: 85, b: 196 }; // #a855c4 — vivid orchid
-export const PALETTE_HIGH = { r: 192, g: 38, b: 112 }; // #c02670 — saturated magenta
+export const PALETTE_LOW = { r: 8, g: 50, b: 117 }; // #083275
+export const PALETTE_MID = { r: 51, g: 125, b: 186 }; // #337dba — blend of endpoints
+export const PALETTE_HIGH = { r: 94, g: 201, b: 255 }; // #5ec9ff
 
-export const CLASS_0_HEX = "#3a30a8";
-export const CLASS_1_HEX = "#c02670";
+export const CLASS_0_HEX = "#083275";
+export const CLASS_1_HEX = "#5ec9ff";
 
 const NUM_SHADES = 30;
 
@@ -29,7 +29,7 @@ function interpolateColor(
   };
 }
 
-/** Maps a value in [-1, 1] to an RGB color (violet → light → magenta). */
+/** Maps a value in [-1, 1] to an RGB color (deep blue → mid → sky cyan). */
 export function valueToRgb(value: number): { r: number; g: number; b: number } {
   const t = (clamp(value, -1, 1) + 1) / 2;
   if (t <= 0.5) return interpolateColor(PALETTE_LOW, PALETTE_MID, t * 2);

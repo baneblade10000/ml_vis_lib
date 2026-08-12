@@ -1,0 +1,8 @@
+[target.wasm32-unknown-unknown]
+rustflags = [
+  "--cfg",
+  "getrandom_backend=\"wasm_js\"",
+  # Needed for cnn_burn f32x4 conv (wasm SIMD128).
+  "-C",
+  "target-feature=+simd128",
+]

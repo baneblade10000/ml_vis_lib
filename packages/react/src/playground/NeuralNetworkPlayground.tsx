@@ -391,16 +391,6 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
             onRegenerateData={onRegenerateData}
           />
         </div>
-        <NetworkInspector
-          graph={engine.graph}
-          selectedNodeId={selectedNodeId}
-          selectedEdgeId={selectedEdgeId}
-          onRemoveNode={onRemoveNode}
-          onRemoveEdge={(edgeId) => {
-            const link = engine.graph.getAllLinks().find((l) => l.id === edgeId);
-            if (link) onRemoveEdge(link.source.id, link.dest.id);
-          }}
-        />
       </aside>
       <aside className="nn-flow-dock nn-flow-dock--right">
         <NetworkLossChart
@@ -430,7 +420,7 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
         <div
           className="nn-weight-legend nn-weight-legend--dock"
           role="img"
-          aria-label="Weight color scale from −1 (violet) through 0 (orchid) to +1 (magenta)"
+          aria-label="Weight color scale from −1 (deep blue) through 0 (mid blue) to +1 (sky cyan)"
         >
           <span className="nn-weight-legend__title">Weight</span>
           <div className="nn-weight-legend__bar" />
@@ -440,6 +430,16 @@ const NetworkGraphPane = memo(function NetworkGraphPane({
             <span>+1</span>
           </div>
         </div>
+        <NetworkInspector
+          graph={engine.graph}
+          selectedNodeId={selectedNodeId}
+          selectedEdgeId={selectedEdgeId}
+          onRemoveNode={onRemoveNode}
+          onRemoveEdge={(edgeId) => {
+            const link = engine.graph.getAllLinks().find((l) => l.id === edgeId);
+            if (link) onRemoveEdge(link.source.id, link.dest.id);
+          }}
+        />
       </aside>
     </ReactFlowNetworkGraph>
   );

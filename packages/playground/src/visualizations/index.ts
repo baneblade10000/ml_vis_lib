@@ -1,10 +1,11 @@
-import type { ComponentType } from "react";
+import { createElement, type ComponentType } from "react";
 import {
   ComputationalGraphPlayground,
   ConvolutionalNetworkPlayground,
   NeuralNetworkPlayground,
   // SignalPlayground, // hidden from the catalog for now — uncomment to re-enable
 } from "@ml-vis/react";
+import { createBurnCnnTrainWorker } from "../burn/createBurnCnnTrainWorker";
 import type { PlaygroundMessages } from "../i18n";
 
 export type VisualizationId =
@@ -19,6 +20,12 @@ export interface VisualizationEntry {
   titleKey: keyof PlaygroundMessages;
   descriptionKey: keyof PlaygroundMessages;
   component: ComponentType;
+}
+
+function ConvolutionalNetworkWithBurn() {
+  return createElement(ConvolutionalNetworkPlayground, {
+    createWorker: createBurnCnnTrainWorker,
+  });
 }
 
 export const visualizations: VisualizationEntry[] = [
@@ -41,7 +48,7 @@ export const visualizations: VisualizationEntry[] = [
     path: "/viz/convolutional-network",
     titleKey: "vizConvolutionalNetworkTitle",
     descriptionKey: "vizConvolutionalNetworkDescription",
-    component: ConvolutionalNetworkPlayground,
+    component: ConvolutionalNetworkWithBurn,
   },
   // {
   //   id: "signal-lab",

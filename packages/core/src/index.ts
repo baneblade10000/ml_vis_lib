@@ -31,7 +31,6 @@ export {
   makeDataset,
   resetLiveTraining,
   configSignature,
-  CnnEngine,
   DEFAULT_CNN_CONFIG,
   DEFAULT_CNN_CONFIG_2D,
   DEFAULT_CNN_CONFIG_1D,
@@ -42,9 +41,13 @@ export {
   CNN_REGULARIZATION_RATES,
   PLAYGROUND_OPTIMIZERS,
   IMAGE_SIZE,
+  IMAGE_SIZE_THREE_FOUR_LOOPS,
+  imageSizeForDataset,
   SIGNAL_LENGTH,
   TrainWorkerClient,
   canUseTrainWorkers,
+  makeImageDataset,
+  makeSignalDataset,
 } from "./playground";
 export type {
   ActivationId,

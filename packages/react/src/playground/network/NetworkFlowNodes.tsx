@@ -376,7 +376,7 @@ function NodeViz({
 
 function BiasIndicator({ bias }: { bias: number }) {
   // The bias square sits in the neuron's bottom-right corner. Its fill color
-  // encodes the bias via the diverging palette: violet for negative, magenta
+  // encodes the bias via the diverging palette: deep blue for negative, sky cyan
   // for positive, with the hue saturating toward the palette extremes as |bias|
   // grows (tanh-normalized, so small biases stay readable).
   return (
