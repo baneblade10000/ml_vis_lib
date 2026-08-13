@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
-import { weightColor, weightMagnitude, weightValueNormalized } from "@ml-vis/core/network";
+import { weightColorZeroWhite, weightMagnitude, weightValueNormalized } from "@ml-vis/core/network";
 import { type CnnLayerView, type CnnMode, type FeatureMapSnapshot, type LayerKind, type LayerShape } from "@ml-vis/core/cnn";
 import type { CnnMessages } from "./messages";
 
@@ -84,7 +84,7 @@ export function cnnWeightStroke(weight: number, active = true): {
 } {
   const mag = weightMagnitude(weight);
   return {
-    stroke: weightColor(weightValueNormalized(weight)),
+    stroke: weightColorZeroWhite(weightValueNormalized(weight)),
     strokeWidth: 2 + mag * 5.5,
     strokeOpacity: active ? 0.45 + mag * 0.55 : 0.12,
   };

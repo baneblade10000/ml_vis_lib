@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-import { valueToRgb } from "../playground/network/colors";
+import { valueToRgb, valueToRgbZeroWhite } from "../playground/network/colors";
 
 /** Average each factor×factor block in a square matrix. */
 export function reduceMatrix(matrix: number[][], factor: number): number[][] {
@@ -48,8 +48,8 @@ const imageDataCache = new WeakMap<
 >();
 
 export type ValueMatrixLayout = "col-major" | "row-major";
-/** `diverging` = deep blue→sky cyan; `gray` = bright black→white. */
-export type ValueMatrixPalette = "diverging" | "gray";
+/** `diverging` = deep blue→sky cyan; `diverging-zero-white` = same with white at 0; `gray` = black→white. */
+export type ValueMatrixPalette = "diverging" | "diverging-zero-white" | "gray";
 
 export interface RenderValueMatrixOptions {
   discretize?: boolean;
@@ -164,7 +164,10 @@ export function renderValueMatrix(
         r = g = b = g8;
       } else {
         const mapped = autoscale ? ((value - range.min) / span) * 2 - 1 : value;
-        ({ r, g, b } = valueToRgb(mapped));
+        ({ r, g, b } =
+          palette === "diverging-zero-white"
+            ? valueToRgbZeroWhite(mapped)
+            : valueToRgb(mapped));
       }
 
       image.data[++p] = r;

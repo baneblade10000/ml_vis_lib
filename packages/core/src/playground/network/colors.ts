@@ -1,11 +1,13 @@
-/** Diverging palette: deep blue (neg) → mid blue (0) → sky cyan (pos). */
+/** Diverging palette: #3d41b9 indigo (neg) → #6999fa light-blue (0) → #1a90d9 cyan-blue (pos). */
 
-export const PALETTE_LOW = { r: 8, g: 50, b: 117 }; // #083275
-export const PALETTE_MID = { r: 51, g: 125, b: 186 }; // #337dba — blend of endpoints
-export const PALETTE_HIGH = { r: 94, g: 201, b: 255 }; // #5ec9ff
+export const PALETTE_LOW = { r: 61, g: 65, b: 185 }; // #3d41b9
+export const PALETTE_MID = { r: 105, g: 153, b: 250 }; // #6999fa — midpoint
+/** White midpoint for signed learnable params (CNN kernels / weights / biases). */
+export const PALETTE_ZERO_WHITE = { r: 255, g: 255, b: 255 };
+export const PALETTE_HIGH = { r: 26, g: 144, b: 217 }; // #1a90d9
 
-export const CLASS_0_HEX = "#083275";
-export const CLASS_1_HEX = "#5ec9ff";
+export const CLASS_0_HEX = "#3d41b9";
+export const CLASS_1_HEX = "#1a90d9";
 
 const NUM_SHADES = 30;
 
@@ -15,6 +17,18 @@ function clamp(value: number, min: number, max: number): number {
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+/**
+ * Pull mid-range values toward 0 so ±0.5 stay closer to the midpoint color
+ * instead of snapping toward the extremes.
+ */
+const VALUE_TO_COLOR_GAMMA = 1.6;
+
+function shapeForColor(value: number): number {
+  const v = clamp(value, -1, 1);
+  if (v === 0) return 0;
+  return Math.sign(v) * Math.pow(Math.abs(v), VALUE_TO_COLOR_GAMMA);
 }
 
 function interpolateColor(
@@ -29,11 +43,23 @@ function interpolateColor(
   };
 }
 
+function mapValueToRgb(
+  value: number,
+  mid: { r: number; g: number; b: number },
+): { r: number; g: number; b: number } {
+  const t = (shapeForColor(value) + 1) / 2;
+  if (t <= 0.5) return interpolateColor(PALETTE_LOW, mid, t * 2);
+  return interpolateColor(mid, PALETTE_HIGH, (t - 0.5) * 2);
+}
+
 /** Maps a value in [-1, 1] to an RGB color (deep blue → mid → sky cyan). */
 export function valueToRgb(value: number): { r: number; g: number; b: number } {
-  const t = (clamp(value, -1, 1) + 1) / 2;
-  if (t <= 0.5) return interpolateColor(PALETTE_LOW, PALETTE_MID, t * 2);
-  return interpolateColor(PALETTE_MID, PALETTE_HIGH, (t - 0.5) * 2);
+  return mapValueToRgb(value, PALETTE_MID);
+}
+
+/** Same as {@link valueToRgb}, but 0 is white (CNN learnable parameters). */
+export function valueToRgbZeroWhite(value: number): { r: number; g: number; b: number } {
+  return mapValueToRgb(value, PALETTE_ZERO_WHITE);
 }
 
 /** Maps a probability in [0, 1] to RGBA components (class 0 → class 1). */
@@ -45,6 +71,12 @@ export function probabilityToRgba(probability: number, alpha = 255): [number, nu
 /** CSS color string for a weight value in [-1, 1]. */
 export function weightColor(value: number): string {
   const { r, g, b } = valueToRgb(value);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+/** CSS color for a signed param in [-1, 1] with white at 0. */
+export function weightColorZeroWhite(value: number): string {
+  const { r, g, b } = valueToRgbZeroWhite(value);
   return `rgb(${r}, ${g}, ${b})`;
 }
 

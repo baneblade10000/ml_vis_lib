@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import { renderValueMatrix } from "@ml-vis/core/charts";
-import { weightColor, weightValueNormalized } from "@ml-vis/core/network";
+import { weightColorZeroWhite, weightValueNormalized } from "@ml-vis/core/network";
 import { cnnGridPx } from "./cnnAdapter";
 import { useCnnMessages } from "./messages";
 
@@ -43,7 +43,7 @@ function KernelThumb({
     if (!canvas || !heat || !map.length) return;
     renderValueMatrix(heat, normalizeWeightMap(map), {
       layout: "row-major",
-      palette: "diverging",
+      palette: "diverging-zero-white",
     });
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
@@ -68,7 +68,7 @@ function KernelThumb({
           className="cnn-filter-bias"
           data-sign={bias >= 0 ? "pos" : "neg"}
           aria-hidden
-          style={{ background: weightColor(weightValueNormalized(bias)) }}
+          style={{ background: weightColorZeroWhite(weightValueNormalized(bias)) }}
         />
       )}
       <div className="cnn-kernel-thumb" style={{ width: w, height: h }}>
@@ -160,7 +160,7 @@ export function CnnInspector({ selectedLayerId, kernels, biases, info }: CnnInsp
                   className="cnn-filter-bias cnn-filter-bias--inline"
                   data-sign={b >= 0 ? "pos" : "neg"}
                   aria-hidden
-                  style={{ background: weightColor(weightValueNormalized(b)) }}
+                  style={{ background: weightColorZeroWhite(weightValueNormalized(b)) }}
                 />
                 <span className="cnn-bias-list__label">
                   {t.inspectorBias} {i + 1}

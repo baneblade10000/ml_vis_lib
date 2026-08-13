@@ -11,7 +11,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import { renderValueMatrix, reduceMatrix } from "@ml-vis/core/charts";
-import { CLASS_0_HEX, CLASS_1_HEX, weightColor, weightValueNormalized } from "@ml-vis/core/network";
+import { CLASS_0_HEX, CLASS_1_HEX, weightColor, weightColorZeroWhite, weightValueNormalized } from "@ml-vis/core/network";
 import { type FeatureMapSnapshot } from "@ml-vis/core/cnn";
 import {
   CNN_CELL_PX,
@@ -597,7 +597,7 @@ function DenseNeuronColumn({ layerId, units }: { layerId: string; units: number 
                   className="cnn-filter-bias"
                   data-sign={bias >= 0 ? "pos" : "neg"}
                   aria-hidden
-                  style={{ background: weightColor(weightValueNormalized(bias)) }}
+                  style={{ background: weightColorZeroWhite(weightValueNormalized(bias)) }}
                 />
               )}
             </span>
