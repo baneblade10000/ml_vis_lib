@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { reduceMatrix } from "../../charts/mini-heatmap";
 import { boundaryToGridPoints, computeBoundaries } from "./boundary";
 import { valueToRgb, PALETTE_HIGH, PALETTE_LOW, PALETTE_MID } from "./colors";
+import { CURVE_DENSITY, DENSITY, NODE_BOUNDARY_DENSITY } from "./constants";
 import { PlaygroundEngine } from "./engine";
 import { Activations } from "./nn";
 
@@ -45,8 +46,8 @@ describe("PlaygroundEngine", () => {
     const hiddenId = [...engine.graph.nodes.keys()].find(
       (id) => id !== "x" && id !== "y" && id !== outputId,
     );
-    expect(engine.boundary[outputId].length).toBe(200);
-    expect(hiddenId && engine.boundary[hiddenId].length).toBe(10);
+    expect(engine.boundary[outputId].length).toBe(DENSITY);
+    expect(hiddenId && engine.boundary[hiddenId].length).toBe(NODE_BOUNDARY_DENSITY);
   });
 
   it("rebuilds boundary keys after applyTopologySnapshot (worker init path)", () => {
@@ -64,7 +65,7 @@ describe("PlaygroundEngine", () => {
     for (const id of main.graph.nodes.keys()) {
       expect(worker.boundary[id], `missing boundary for ${id}`).toBeDefined();
     }
-    expect(worker.boundary[worker.outputNodeId]?.length).toBe(200);
+    expect(worker.boundary[worker.outputNodeId]?.length).toBe(DENSITY);
     expect(worker.trainData).toEqual(main.trainData);
   });
 
@@ -135,7 +136,7 @@ describe("1D data mode", () => {
     });
     expect(engine.config.dataMode).toBe("1d");
     expect(Object.keys(engine.curves).length).toBeGreaterThan(0);
-    expect(engine.curves[engine.outputNodeId]?.length).toBe(240);
+    expect(engine.curves[engine.outputNodeId]?.length).toBe(CURVE_DENSITY);
     const initialLoss = engine.lossTrain;
     for (let i = 0; i < 25; i++) engine.step();
     expect(engine.lossTrain).toBeLessThanOrEqual(initialLoss + 1e-6);
@@ -148,7 +149,7 @@ describe("1D data mode", () => {
     expect(engine.config.enabledFeatures.x).toBe(true);
     engine.setProblemType("regression");
     expect(engine.config.dataset).toBe("sine");
-    expect(engine.targetCurve?.length).toBe(240);
+    expect(engine.targetCurve?.length).toBe(CURVE_DENSITY);
     engine.setDataMode("2d");
     expect(engine.config.problemType).toBe("regression");
     expect(engine.config.dataset).toBe("sinSin");
@@ -188,7 +189,9 @@ describe("2D regression", () => {
     const initialLoss = engine.lossTrain;
     for (let i = 0; i < 40; i++) engine.step();
     expect(engine.lossTrain).toBeLessThan(initialLoss);
-  });
+    // 2x boundary resolution (DENSITY 200→400) makes each step's full boundary
+    // refresh ~4x heavier, so this real-training test needs a larger budget.
+  }, 20000);
 });
 
 describe("regularization", () => {
