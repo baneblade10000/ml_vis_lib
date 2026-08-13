@@ -1,22 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  DecisionBoundaryPlot,
-  DEFAULT_CONFIG,
-  TrainWorkerClient,
-  canUseTrainWorkers,
-  frameIndexForEpoch,
-  type DecisionBoundaryPayload,
-  type MlpTrainSnapshot,
-  type PlaygroundConfig,
-  type PlaygroundPayload,
-  type TrainSnapshot,
-  advanceLiveTraining,
-  buildPayload,
-  configSignature,
-  createLiveTrainingState,
-  resetLiveTraining,
-  type LiveTrainingState,
-} from "@ml-vis/core";
+import { DecisionBoundaryPlot, type DecisionBoundaryPayload } from "@ml-vis/core/charts";
+import { DEFAULT_CONFIG, MlpTrainClient, canUseTrainWorkers, frameIndexForEpoch, type MlpTrainSnapshot, type PlaygroundConfig, type PlaygroundPayload, advanceLiveTraining, buildPayload, configSignature, createLiveTrainingState, resetLiveTraining, type LiveTrainingState } from "@ml-vis/core/mlp";
 import { createMlpTrainWorker } from "@ml-vis/core/workers/createWorkers";
 import { ChartBox, useCanvasChart } from "./useCanvasChart";
 
@@ -264,10 +248,6 @@ export function PlaygroundControls({
   );
 }
 
-function isMlpSnapshot(s: TrainSnapshot | null): s is MlpTrainSnapshot {
-  return s?.kind === "mlp";
-}
-
 export function DecisionBoundaryPlayground({ initialConfig }: { initialConfig?: PlaygroundConfig }) {
   const [config, setConfig] = useState<PlaygroundConfig>(initialConfig ?? DEFAULT_CONFIG);
   const [payload, setPayload] = useState<PlaygroundPayload | null>(null);
@@ -278,7 +258,7 @@ export function DecisionBoundaryPlayground({ initialConfig }: { initialConfig?: 
   const [hover, setHover] = useState<{ x1: number; x2: number; probability: number } | null>(null);
   const configRef = useRef(config);
   configRef.current = config;
-  const clientRef = useRef<TrainWorkerClient | null>(null);
+  const clientRef = useRef<MlpTrainClient | null>(null);
   const fallbackStateRef = useRef<LiveTrainingState | null>(null);
   const pending = configSignature(config) !== configSignature(trainedConfig);
 
@@ -300,16 +280,14 @@ export function DecisionBoundaryPlayground({ initialConfig }: { initialConfig?: 
       setTrainedConfig(state.config);
       return;
     }
-    const client = new TrainWorkerClient({
+    const client = new MlpTrainClient({
       createWorker: createMlpTrainWorker,
-      onTick: (s) => {
-        if (isMlpSnapshot(s)) applySnap(s);
-      },
+      onTick: applySnap,
       onError: (message) => console.error("[mlp train worker]", message),
     });
     clientRef.current = client;
     void client.init(structuredClone(cfg)).then((s) => {
-      if (isMlpSnapshot(s)) applySnap(s);
+      applySnap(s);
     });
     return () => {
       client.dispose();

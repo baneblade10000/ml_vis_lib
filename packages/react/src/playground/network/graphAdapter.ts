@@ -1,16 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import { MarkerType } from "@xyflow/react";
-import {
-  INPUTS,
-  MLP_COL_SPACING,
-  MLP_NODE_SIZE,
-  MLP_OUTPUT_NODE_SIZE,
-  weightColor,
-  weightMagnitude,
-  weightValueNormalized,
-  type ComputationalGraph,
-  type GraphNodeKind,
-} from "@ml-vis/core";
+import { INPUTS, MLP_COL_SPACING, MLP_NODE_SIZE, MLP_OUTPUT_NODE_SIZE, weightColor, weightMagnitude, weightValueNormalized, type ComputationalGraph, type GraphNodeKind } from "@ml-vis/core/network";
 
 // Single source of truth lives in @ml-vis/core (mlp-layout.ts); these re-export
 // the canonical values so layout geometry and rendered node sizes can never drift.

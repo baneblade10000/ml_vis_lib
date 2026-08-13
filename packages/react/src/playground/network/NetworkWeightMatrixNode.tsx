@@ -1,6 +1,6 @@
 import { useContext, useState, createContext, type ReactNode } from "react";
 import { type Node, type NodeProps } from "@xyflow/react";
-import { weightColor, weightValueNormalized } from "@ml-vis/core";
+import { weightColor, weightValueNormalized } from "@ml-vis/core/network";
 import type { NetworkNodeData, WeightMatrixCellData } from "./graphAdapter";
 
 export type NetworkGraphActions = {

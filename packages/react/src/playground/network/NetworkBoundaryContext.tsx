@@ -1,5 +1,5 @@
 import { createContext, useContext, type RefObject } from "react";
-import type { NetworkDataMode, NetworkProblemType } from "@ml-vis/core";
+import { NetworkDataMode, NetworkProblemType } from "@ml-vis/core/network";
 
 export type BoundaryStore = Record<string, number[][]>;
 export type CurveStore = Record<string, number[]>;

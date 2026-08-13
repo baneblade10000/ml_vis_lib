@@ -1,4 +1,4 @@
-import { OP_SPECS, type AutogradGraph } from "@ml-vis/core";
+import { OP_SPECS, type AutogradGraph } from "@ml-vis/core/autograd";
 import { useAutogradMessages } from "./messages";
 
 function fmt(value: number): string {

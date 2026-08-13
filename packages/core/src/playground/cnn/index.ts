@@ -47,3 +47,16 @@ export type {
   PlaygroundOptimizerId,
   PoolKind,
 } from "./engine";
+
+// Train worker client + protocol types for the CNN engine (Burn WASM).
+// Re-exported here so CNN consumers depend on a single subpath.
+export { CnnTrainClient, canUseTrainWorkers } from "../workers";
+export type {
+  CnnTrainSnapshot,
+  CnnCommandArgs,
+  CnnTrainClientOptions,
+  CnnLayerView,
+} from "../workers";
+
+// Shared loss-history point rendered by the loss chart.
+export type { LossHistoryPoint } from "../network/engine";

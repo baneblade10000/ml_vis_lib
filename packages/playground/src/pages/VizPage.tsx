@@ -1,3 +1,4 @@
+import type { ComponentType, ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import {
   ComputationalGraphPlayground,
@@ -36,6 +37,13 @@ export function VizPage() {
 
   if (immersive && ImmersiveComponent) {
     const isCnn = viz.id === "convolutional-network";
+    // CNN needs createWorker and is rendered explicitly above; the else branch only
+    // ever renders the other immersive components (toolbar props only), so narrow
+    // the union away from the CNN component for this render.
+    const ImmersiveToolbarComponent = ImmersiveComponent as ComponentType<{
+      toolbarStart?: ReactNode;
+      toolbarEnd?: ReactNode;
+    }>;
     return (
       <div className="viz-page viz-page--immersive">
         {isCnn ? (
@@ -45,7 +53,7 @@ export function VizPage() {
             createWorker={createBurnCnnTrainWorker}
           />
         ) : (
-          <ImmersiveComponent toolbarStart={backLink} toolbarEnd={<LocaleSwitcher />} />
+          <ImmersiveToolbarComponent toolbarStart={backLink} toolbarEnd={<LocaleSwitcher />} />
         )}
       </div>
     );

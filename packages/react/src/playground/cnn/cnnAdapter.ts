@@ -1,14 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
-import {
-  weightColor,
-  weightMagnitude,
-  weightValueNormalized,
-  type CnnLayerView,
-  type CnnMode,
-  type FeatureMapSnapshot,
-  type LayerKind,
-  type LayerShape,
-} from "@ml-vis/core";
+import { weightColor, weightMagnitude, weightValueNormalized } from "@ml-vis/core/network";
+import { type CnnLayerView, type CnnMode, type FeatureMapSnapshot, type LayerKind, type LayerShape } from "@ml-vis/core/cnn";
 import type { CnnMessages } from "./messages";
 
 /** Minimal layer surface needed for localized titles. */

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { LayerSpec } from "@ml-vis/core";
+import { LayerSpec } from "@ml-vis/core/cnn";
 import { useCnnMessages, type CnnMessages } from "./messages";
 
 export interface CnnArchitecturePanelProps {

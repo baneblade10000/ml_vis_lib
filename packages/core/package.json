@@ -17,6 +17,42 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./section": {
+      "import": { "types": "./dist/section.d.ts", "default": "./dist/section.js" },
+      "require": { "types": "./dist/section.d.cts", "default": "./dist/section.cjs" }
+    },
+    "./signal": {
+      "import": { "types": "./dist/signal.d.ts", "default": "./dist/signal.js" },
+      "require": { "types": "./dist/signal.d.cts", "default": "./dist/signal.cjs" }
+    },
+    "./charts": {
+      "import": { "types": "./dist/charts.d.ts", "default": "./dist/charts.js" },
+      "require": { "types": "./dist/charts.d.cts", "default": "./dist/charts.cjs" }
+    },
+    "./i18n": {
+      "import": { "types": "./dist/i18n.d.ts", "default": "./dist/i18n.js" },
+      "require": { "types": "./dist/i18n.d.cts", "default": "./dist/i18n.cjs" }
+    },
+    "./network": {
+      "import": { "types": "./dist/network.d.ts", "default": "./dist/network.js" },
+      "require": { "types": "./dist/network.d.cts", "default": "./dist/network.cjs" }
+    },
+    "./cnn": {
+      "import": { "types": "./dist/cnn.d.ts", "default": "./dist/cnn.js" },
+      "require": { "types": "./dist/cnn.d.cts", "default": "./dist/cnn.cjs" }
+    },
+    "./autograd": {
+      "import": { "types": "./dist/autograd.d.ts", "default": "./dist/autograd.js" },
+      "require": { "types": "./dist/autograd.d.cts", "default": "./dist/autograd.cjs" }
+    },
+    "./mlp": {
+      "import": { "types": "./dist/mlp.d.ts", "default": "./dist/mlp.js" },
+      "require": { "types": "./dist/mlp.d.cts", "default": "./dist/mlp.cjs" }
+    },
+    "./workers": {
+      "import": { "types": "./dist/workers.d.ts", "default": "./dist/workers.js" },
+      "require": { "types": "./dist/workers.d.cts", "default": "./dist/workers.cjs" }
+    },
     "./workers/cnn-train": {
       "import": "./dist/workers/cnn-train.js"
     },

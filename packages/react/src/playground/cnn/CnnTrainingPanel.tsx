@@ -1,11 +1,4 @@
-import {
-  CNN_REGULARIZATION_RATES,
-  CNN_REGULARIZATIONS,
-  PLAYGROUND_OPTIMIZERS,
-  type CnnActivationId,
-  type CnnRegularizationId,
-  type PlaygroundOptimizerId,
-} from "@ml-vis/core";
+import { CNN_REGULARIZATION_RATES, CNN_REGULARIZATIONS, PLAYGROUND_OPTIMIZERS, type CnnActivationId, type CnnRegularizationId, type PlaygroundOptimizerId } from "@ml-vis/core/cnn";
 import { useCnnMessages } from "./messages";
 
 const LEARNING_RATES = [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3];

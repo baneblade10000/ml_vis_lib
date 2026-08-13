@@ -29,7 +29,7 @@ export {
   useLocale,
 } from "./i18n";
 export type { I18nProviderProps, ReactMessages } from "./i18n";
-export type { Locale } from "@ml-vis/core";
+export { type Locale } from "@ml-vis/core/i18n";
 
 export {
   Section,
@@ -45,4 +45,4 @@ export type {
   SectionProviderProps,
 } from "./section";
 
-export type { SectionDefinition, SectionSize } from "@ml-vis/core";
+export { type SectionDefinition, type SectionSize } from "@ml-vis/core/section";

@@ -10,23 +10,8 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import {
-  CLASS_0_HEX,
-  CLASS_1_HEX,
-  NODE_BOUNDARY_DENSITY,
-  PLAY_DISPLAY_DENSITY,
-  X_DOMAIN,
-  curveStrokeFromValues,
-  inferYDomain,
-  reduceMatrix,
-  renderCurve,
-  renderCurvePoints,
-  renderTargetCurve,
-  renderValueMatrix,
-  valueToRgb,
-  weightColor,
-  weightValueNormalized,
-} from "@ml-vis/core";
+import { curveStrokeFromValues, inferYDomain, reduceMatrix, renderCurve, renderCurvePoints, renderTargetCurve, renderValueMatrix } from "@ml-vis/core/charts";
+import { CLASS_0_HEX, CLASS_1_HEX, NODE_BOUNDARY_DENSITY, PLAY_DISPLAY_DENSITY, X_DOMAIN, valueToRgb, weightColor, weightValueNormalized } from "@ml-vis/core/network";
 import type { DataPoint, NetworkNodeData, WeightEdgeData } from "./graphAdapter";
 import { NODE_WIDTH, OUTPUT_NODE_WIDTH } from "./graphAdapter";
 import {

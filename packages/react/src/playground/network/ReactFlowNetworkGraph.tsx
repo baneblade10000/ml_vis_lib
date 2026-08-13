@@ -16,7 +16,7 @@ import {
   type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { ComputationalGraph, GraphNodeKind, NetworkDataMode, NetworkProblemType } from "@ml-vis/core";
+import { ComputationalGraph, GraphNodeKind, NetworkDataMode, NetworkProblemType } from "@ml-vis/core/network";
 import {
   flowKindFromDrag,
   graphToFlow,

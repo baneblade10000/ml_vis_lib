@@ -5,7 +5,20 @@ import { defineConfig } from "tsup";
 // (that race dropped createWorkers.d.ts in CI and broke @ml-vis/react dts).
 export default defineConfig([
   {
-    entry: ["src/index.ts"],
+    // Root barrel + per-domain subpath barrels. Each entry is also a public
+    // subpath in package.json `exports` (e.g. @ml-vis/core/network).
+    entry: {
+      index: "src/index.ts",
+      section: "src/section/index.ts",
+      signal: "src/signal/index.ts",
+      charts: "src/charts/index.ts",
+      i18n: "src/i18n/index.ts",
+      network: "src/playground/network/index.ts",
+      cnn: "src/playground/cnn/index.ts",
+      autograd: "src/playground/autograd/index.ts",
+      mlp: "src/playground/index.ts",
+      workers: "src/playground/workers/index.ts",
+    },
     format: ["esm", "cjs"],
     dts: true,
     sourcemap: true,

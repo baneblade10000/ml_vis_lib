@@ -10,15 +10,9 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import {
-  CLASS_0_HEX,
-  CLASS_1_HEX,
-  renderValueMatrix,
-  reduceMatrix,
-  weightColor,
-  weightValueNormalized,
-  type FeatureMapSnapshot,
-} from "@ml-vis/core";
+import { renderValueMatrix, reduceMatrix } from "@ml-vis/core/charts";
+import { CLASS_0_HEX, CLASS_1_HEX, weightColor, weightValueNormalized } from "@ml-vis/core/network";
+import { type FeatureMapSnapshot } from "@ml-vis/core/cnn";
 import {
   CNN_CELL_PX,
   cnnGridPx,

@@ -1,25 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import {
-  CLASS_0_HEX,
-  CLASS_1_HEX,
-  DEFAULT_NETWORK_CONFIG,
-  PlaygroundEngine,
-  NETWORK_DATASETS,
-  NETWORK_DATASETS_1D_CLASSIFICATION,
-  NETWORK_DATASETS_1D_REGRESSION,
-  TrainWorkerClient,
-  canUseTrainWorkers,
-  valueToRgb,
-  type Dataset1DId,
-  type LossHistoryPoint,
-  type NetworkAnyDatasetId,
-  type NetworkDataMode,
-  type NetworkDatasetId,
-  type NetworkPlaygroundConfig,
-  type NetworkProblemType,
-  type NetworkTrainSnapshot,
-  type TrainSnapshot,
-} from "@ml-vis/core";
+import { CLASS_0_HEX, CLASS_1_HEX, DEFAULT_NETWORK_CONFIG, PlaygroundEngine, NetworkTrainClient, canUseTrainWorkers, valueToRgb, type Dataset1DId, type LossHistoryPoint, type NetworkAnyDatasetId, type NetworkDataMode, type DatasetId as NetworkDatasetId, type NetworkPlaygroundConfig, type NetworkProblemType, type NetworkTrainSnapshot } from "@ml-vis/core/network";
+import { DATASETS as NETWORK_DATASETS, DATASETS_1D_CLASSIFICATION as NETWORK_DATASETS_1D_CLASSIFICATION, DATASETS_1D_REGRESSION as NETWORK_DATASETS_1D_REGRESSION } from "@ml-vis/core/network";
 import { createNetworkTrainWorker } from "@ml-vis/core/workers/createWorkers";
 import { NetworkInspector } from "./network/NetworkInspector";
 import { NetworkArchitecturePanel } from "./network/NetworkArchitecturePanel";
@@ -490,7 +471,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   const wasPlayingRef = useRef(false);
   const trainingLiveRef = useRef(false);
   trainingLiveRef.current = playing;
-  const trainClientRef = useRef<TrainWorkerClient | null>(null);
+  const trainClientRef = useRef<NetworkTrainClient | null>(null);
   const trainReadyRef = useRef<Promise<unknown> | null>(null);
   const edgeVizBumpRef = useRef(0);
   /** Bumped on main-thread topology edits; worker rebuild catches up. */
@@ -558,11 +539,9 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
       console.warn("[network] Web Workers unavailable; falling back to main-thread train");
       return;
     }
-    const client = new TrainWorkerClient({
+    const client = new NetworkTrainClient({
       createWorker: createNetworkTrainWorker,
-      onTick: (s: TrainSnapshot) => {
-        if (s.kind === "network") applyNetworkTick(s);
-      },
+      onTick: applyNetworkTick,
       onError: (message) => console.error("[network train worker]", message),
     });
     trainClientRef.current = client;

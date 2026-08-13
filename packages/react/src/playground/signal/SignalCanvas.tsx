@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { SignalPlot, type SignalPlotPayload } from "@ml-vis/core";
+import { SignalPlot, type SignalPlotPayload } from "@ml-vis/core/charts";
 import { ChartBox, useCanvasChart } from "../../useCanvasChart";
 
 interface SignalCanvasProps {

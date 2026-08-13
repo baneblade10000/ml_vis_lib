@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { getSignalPresetSpec, type SignalParamId } from "@ml-vis/core";
+import { getSignalPresetSpec, type SignalParamId } from "@ml-vis/core/signal";
 import type { SignalInput, SignalPresetId } from "./config";
 import { useSignalMessages } from "./messages";
 

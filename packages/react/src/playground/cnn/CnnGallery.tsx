@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
-import { renderValueMatrix } from "@ml-vis/core";
-import type { ImageExample, SignalExample } from "@ml-vis/core";
+import { renderValueMatrix } from "@ml-vis/core/charts";
+import { ImageExample, SignalExample } from "@ml-vis/core/cnn";
 import { useCnnMessages } from "./messages";
 
 export interface CnnGalleryProps {

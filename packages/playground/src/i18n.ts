@@ -1,4 +1,4 @@
-import type { Locale } from "@ml-vis/core";
+import { Locale } from "@ml-vis/core/i18n";
 
 export type PlaygroundMessages = {
   language: string;

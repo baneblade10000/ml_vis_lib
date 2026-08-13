@@ -23,6 +23,9 @@ htmlcov/
 .coverage
 .coverage.*
 
+# GUI smoke-test evidence (ad-hoc screenshots, not source)
+gui-test-screenshots/
+
 # Python
 .venv/
 __pycache__/

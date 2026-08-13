@@ -1,11 +1,5 @@
-import type {
-  Dataset1DId,
-  Locale,
-  NetworkDatasetId,
-  NetworkProblemType,
-  NetworkRegularizationId,
-  WeightInitId,
-} from "@ml-vis/core";
+import { Locale } from "@ml-vis/core/i18n";
+import { Dataset1DId, DatasetId as NetworkDatasetId, NetworkProblemType, NetworkRegularizationId, WeightInitId } from "@ml-vis/core/network";
 import { useLocale } from "../../i18n";
 
 export type NetworkMessages = {

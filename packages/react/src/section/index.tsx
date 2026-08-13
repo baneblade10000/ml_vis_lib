@@ -8,13 +8,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import {
-  SectionRegistry,
-  SectionStore,
-  type SectionDefinition,
-  type SectionLayoutOptions,
-  type SectionStoreSnapshot,
-} from "@ml-vis/core";
+import { SectionRegistry, SectionStore, type SectionDefinition, type SectionLayoutOptions, type SectionStoreSnapshot } from "@ml-vis/core/section";
 import { useI18n } from "../i18n";
 
 type SectionContextValue = {

@@ -6,12 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  getLocale,
-  setLocale as setCoreLocale,
-  subscribeLocale,
-  type Locale,
-} from "@ml-vis/core";
+import { getLocale, setLocale as setCoreLocale, subscribeLocale, type Locale } from "@ml-vis/core/i18n";
 
 export type ReactMessages = {
   expandSection: string;
@@ -87,5 +82,5 @@ export function useLocale(): Locale {
   return locale;
 }
 
-export type { Locale } from "@ml-vis/core";
-export { getLocale, localeLabels, locales, setLocale, subscribeLocale } from "@ml-vis/core";
+export { type Locale } from "@ml-vis/core/i18n";
+export { getLocale, localeLabels, locales, setLocale, subscribeLocale } from "@ml-vis/core/i18n";

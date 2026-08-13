@@ -1,4 +1,4 @@
-import type { GraphNodeKind } from "@ml-vis/core";
+import { GraphNodeKind } from "@ml-vis/core/network";
 import { PALETTE_DRAG_TYPE } from "./graphAdapter";
 import { useNetworkMessages } from "./messages";
 

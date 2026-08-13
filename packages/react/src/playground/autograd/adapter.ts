@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
-import { OP_SPECS, type AutogradGraph, type AutogradOp } from "@ml-vis/core";
+import { OP_SPECS, type AutogradGraph, type AutogradOp } from "@ml-vis/core/autograd";
 
 export const AUTOGRAD_DRAG_TYPE = "application/reactflow-autograd";
 

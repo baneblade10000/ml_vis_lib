@@ -1,11 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import {
-  AUTOGRAD_PRESETS,
-  CompGraphEngine,
-  type AutogradOp,
-  type AutogradPresetId,
-  type CompGraphConfig,
-} from "@ml-vis/core";
+import { AUTOGRAD_PRESETS, CompGraphEngine, type AutogradOp, type AutogradPresetId, type CompGraphConfig } from "@ml-vis/core/autograd";
 import { AutogradFlowGraph } from "./AutogradFlowGraph";
 import { AutogradPalette } from "./AutogradPalette";
 import { AutogradInspector } from "./AutogradInspector";

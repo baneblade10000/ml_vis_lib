@@ -1,14 +1,4 @@
-import {
-  PLAYGROUND_OPTIMIZERS,
-  NETWORK_ACTIVATIONS,
-  NETWORK_REGULARIZATION_RATES,
-  NETWORK_REGULARIZATIONS,
-  WEIGHT_INITS,
-  type PlaygroundOptimizerId,
-  type NetworkActivationId,
-  type NetworkRegularizationId,
-  type WeightInitId,
-} from "@ml-vis/core";
+import { PLAYGROUND_OPTIMIZERS, NETWORK_ACTIVATIONS, NETWORK_REGULARIZATION_RATES, NETWORK_REGULARIZATIONS, WEIGHT_INITS, type PlaygroundOptimizerId, type NetworkActivationId, type NetworkRegularizationId, type WeightInitId } from "@ml-vis/core/network";
 import { useNetworkMessages } from "./messages";
 
 const LEARNING_RATES = [0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10];

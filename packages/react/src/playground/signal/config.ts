@@ -7,17 +7,8 @@
  * to reason about and reuse.
  */
 
-import {
-  buildSignal,
-  convolve,
-  convolveViaFft,
-  correlate,
-  dftMagnitude,
-  type Signal as CoreSignal,
-  type SignalParamId,
-  type SignalPresetId,
-  type SignalPlotPayload,
-} from "@ml-vis/core";
+import { buildSignal, convolve, convolveViaFft, correlate, dftMagnitude, type Signal as CoreSignal, type SignalParamId, type SignalPresetId } from "@ml-vis/core/signal";
+import { type SignalPlotPayload } from "@ml-vis/core/charts";
 import type { SignalTabId } from "./messages";
 
 export type { SignalTabId, SignalPresetId, SignalParamId };

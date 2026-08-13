@@ -3,20 +3,8 @@
  * CNN train worker — Rust WASM owns forward/backward/grads.
  * Single in-process engine: sharding tiny 16×16 nets is pure IPC tax.
  */
-import {
-  DEFAULT_CNN_CONFIG,
-  SIGNAL_LENGTH,
-  imageSizeForDataset,
-  makeImageDataset,
-  makeSignalDataset,
-  type CnnConfig,
-  type CnnDatasetId2D,
-  type CnnTrainSnapshot,
-  type FromTrainWorker,
-  type ImageExample,
-  type SignalExample,
-  type ToTrainWorker,
-} from "@ml-vis/core";
+import { DEFAULT_CNN_CONFIG, SIGNAL_LENGTH, imageSizeForDataset, makeImageDataset, makeSignalDataset, type CnnConfig, type CnnDatasetId2D, type CnnTrainSnapshot, type ImageExample, type SignalExample } from "@ml-vis/core/cnn";
+import { type FromTrainWorker, type ToTrainWorker } from "@ml-vis/core/workers";
 import init, { WasmCnnEngine } from "./pkg/cnn_burn.js";
 import wasmUrl from "./pkg/cnn_burn_bg.wasm?url";
 

@@ -14,7 +14,7 @@ import {
   type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { AutogradGraph } from "@ml-vis/core";
+import { AutogradGraph } from "@ml-vis/core/autograd";
 import {
   autogradKindFromDrag,
   autogradToFlow,

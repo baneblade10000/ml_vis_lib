@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { inferYDomain, renderCurve, type LossHistoryPoint } from "@ml-vis/core";
+import { inferYDomain, renderCurve } from "@ml-vis/core/charts";
+import { type LossHistoryPoint } from "@ml-vis/core/network";
 
 const TRAIN_STROKE = "rgb(148, 163, 184)"; // --nn-text-muted
 const TEST_STROKE = "rgb(15, 23, 42)"; // --nn-text

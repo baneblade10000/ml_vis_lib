@@ -1,9 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
-import {
-  renderValueMatrix,
-  weightColor,
-  weightValueNormalized,
-} from "@ml-vis/core";
+import { renderValueMatrix } from "@ml-vis/core/charts";
+import { weightColor, weightValueNormalized } from "@ml-vis/core/network";
 import { cnnGridPx } from "./cnnAdapter";
 import { useCnnMessages } from "./messages";
 

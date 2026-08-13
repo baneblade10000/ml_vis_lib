@@ -1,4 +1,4 @@
-import type { ComputationalGraph } from "@ml-vis/core";
+import { ComputationalGraph } from "@ml-vis/core/network";
 import { linkPartialDerivative } from "./graphAdapter";
 import { useNetworkMessages } from "./messages";
 

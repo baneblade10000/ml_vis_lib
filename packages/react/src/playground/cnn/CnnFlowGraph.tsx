@@ -19,7 +19,7 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { FeatureMapSnapshot } from "@ml-vis/core";
+import { FeatureMapSnapshot } from "@ml-vis/core/cnn";
 import {
   CNN_COL_GAP,
   CNN_ORIGIN_X,

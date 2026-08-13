@@ -1,4 +1,4 @@
-import { AUTOGRAD_PALETTE_OPS, OP_SPECS, type AutogradOp } from "@ml-vis/core";
+import { AUTOGRAD_PALETTE_OPS, OP_SPECS, type AutogradOp } from "@ml-vis/core/autograd";
 import { AUTOGRAD_DRAG_TYPE } from "./adapter";
 import { useAutogradMessages } from "./messages";
 

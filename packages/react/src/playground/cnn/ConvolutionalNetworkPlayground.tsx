@@ -1,22 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  CNN_DATASET_IDS_1D,
-  CNN_DATASET_IDS_2D,
-  DEFAULT_CNN_CONFIG,
-  TrainWorkerClient,
-  canUseTrainWorkers,
-  type CnnActivationId,
-  type CnnMode,
-  type CnnRegularizationId,
-  type CnnTrainSnapshot,
-  type FeatureMapSnapshot,
-  type ImageExample,
-  type LayerShape,
-  type LossHistoryPoint,
-  type PlaygroundOptimizerId,
-  type SignalExample,
-  type TrainSnapshot,
-} from "@ml-vis/core";
+import { CNN_DATASET_IDS_1D, CNN_DATASET_IDS_2D, DEFAULT_CNN_CONFIG, CnnTrainClient, canUseTrainWorkers, type CnnActivationId, type CnnCommandArgs, type CnnConfig, type CnnMode, type CnnRegularizationId, type CnnTrainSnapshot, type FeatureMapSnapshot, type ImageExample, type LayerShape, type LossHistoryPoint, type PlaygroundOptimizerId, type SignalExample } from "@ml-vis/core/cnn";
 import { NetworkLossChart } from "../network/NetworkLossChart";
 import { CnnFlowGraph } from "./CnnFlowGraph";
 import { CnnArchitecturePanel } from "./CnnArchitecturePanel";
@@ -106,10 +89,6 @@ function specKindLabel(kind: string, t: ReturnType<typeof useCnnMessages>): stri
   }
 }
 
-function isCnnSnapshot(s: TrainSnapshot | null): s is CnnTrainSnapshot {
-  return s?.kind === "cnn";
-}
-
 export function ConvolutionalNetworkPlayground({
   initialMode = "2d",
   toolbarStart,
@@ -139,7 +118,7 @@ export function ConvolutionalNetworkPlayground({
   const playVizRef = useRef<CnnPlayViz>({ probability: 0.5, loss: 0 });
   const trainingLiveRef = useRef(false);
   trainingLiveRef.current = playing;
-  const clientRef = useRef<TrainWorkerClient | null>(null);
+  const clientRef = useRef<CnnTrainClient | null>(null);
   const playingRef = useRef(false);
   playingRef.current = playing;
   const lastReactFlushRef = useRef(0);
@@ -228,17 +207,15 @@ export function ConvolutionalNetworkPlayground({
       console.warn("[cnn] Web Workers unavailable; CNN playground requires Workers");
       return;
     }
-    const client = new TrainWorkerClient({
+    const client = new CnnTrainClient({
       createWorker,
-      onTick: (s) => {
-        if (isCnnSnapshot(s)) applySnapshot(s);
-      },
+      onTick: applySnapshot,
       onError: (message) => console.error("[cnn train worker]", message),
     });
     clientRef.current = client;
     let cancelled = false;
     void client.init(structuredClone(initialConfig)).then((s) => {
-      if (!cancelled && isCnnSnapshot(s)) applySnapshot(s);
+      if (!cancelled) applySnapshot(s);
     });
     return () => {
       cancelled = true;
@@ -261,9 +238,15 @@ export function ConvolutionalNetworkPlayground({
     else client.pause();
   }, [playing]);
 
-  const cmd = useCallback((name: string, args?: unknown) => {
-    clientRef.current?.command(name, args);
-  }, []);
+  const cmd = useCallback(
+    <K extends keyof CnnCommandArgs>(
+      name: K,
+      ...rest: CnnCommandArgs[K] extends void ? [] : [args: CnnCommandArgs[K]]
+    ) => {
+      clientRef.current?.command(name, ...rest);
+    },
+    [],
+  );
 
   const reset = useCallback(() => {
     setPlaying(false);
@@ -289,7 +272,7 @@ export function ConvolutionalNetworkPlayground({
 
   const onDatasetChange = useCallback((id: string) => {
     setPlaying(false);
-    cmd("setDataset", { dataset: id });
+    cmd("setDataset", { dataset: id as CnnConfig["dataset"] });
   }, [cmd]);
 
   const onActivationChange = useCallback(

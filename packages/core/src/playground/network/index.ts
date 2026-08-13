@@ -143,3 +143,14 @@ export {
   PLAY_DISPLAY_DENSITY,
   X_DOMAIN,
 } from "./constants";
+
+// Train worker client + protocol types for the network engine.
+// Re-exported here so network consumers depend on a single subpath.
+export { NetworkTrainClient, canUseTrainWorkers } from "../workers";
+export type {
+  NetworkTrainSnapshot,
+  NetworkCommandArgs,
+  NetworkDataPoint,
+  NetworkWorkerPayload,
+  NetworkTrainClientOptions,
+} from "../workers";

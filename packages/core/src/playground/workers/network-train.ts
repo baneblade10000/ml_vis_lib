@@ -48,7 +48,7 @@ function buildSnapshot(e: PlaygroundEngine, fullBoundary: boolean): NetworkTrain
     e.refreshHiddenBoundariesFast();
   }
   e.pushLossHistory();
-  return {
+  const snapshot: NetworkTrainSnapshot = {
     kind: "network",
     config: structuredClone(e.config),
     epoch: e.epoch,
@@ -59,9 +59,14 @@ function buildSnapshot(e: PlaygroundEngine, fullBoundary: boolean): NetworkTrain
     curves: e.curves,
     targetCurve: e.targetCurve,
     graphSnapshot: e.graph.toSnapshot(),
-    trainData: clonePoints(e.trainData),
-    testData: clonePoints(e.testData),
   };
+  // Heavy data arrays only on full snapshots — the main engine already owns
+  // them, so sending them on every paint tick (≤30 Hz) was pure clone waste.
+  if (fullBoundary) {
+    snapshot.trainData = clonePoints(e.trainData);
+    snapshot.testData = clonePoints(e.testData);
+  }
+  return snapshot;
 }
 
 async function syncPool(): Promise<void> {

@@ -27,8 +27,14 @@ describe("PlaygroundEngine", () => {
     const withGrad = links.filter((l) => l.lastGradient !== 0);
     expect(withGrad.length).toBeGreaterThan(0);
     // Both early (into first hidden) and late (into output) edges should retain signal.
-    const intoHidden = withGrad.filter((l) => l.dest.kind === "dense");
-    const intoOutput = withGrad.filter((l) => l.dest.kind === "output");
+    // (Link.dest is typed as the nn.Node base, but the graph stores GraphNodes which
+    // carry a `kind` discriminator at runtime.)
+    const intoHidden = withGrad.filter(
+      (l) => (l.dest as unknown as { kind: string }).kind === "dense",
+    );
+    const intoOutput = withGrad.filter(
+      (l) => (l.dest as unknown as { kind: string }).kind === "output",
+    );
     expect(intoHidden.length).toBeGreaterThan(0);
     expect(intoOutput.length).toBeGreaterThan(0);
   });

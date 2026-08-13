@@ -50,7 +50,12 @@ export interface NetworkTrainSnapshot {
   targetCurve: number[] | null;
   /** Full graph weights/topology for syncing the main-thread display engine. */
   graphSnapshot: import("../network/graph/types").GraphSnapshot;
-  trainData: Array<{ x: number; y: number; label: number }>;
+  /**
+   * Train/test data — only sent on full snapshots (ready/rebuilt/pause/step),
+   * NOT on high-frequency ticks. The main-thread engine is the source of truth
+   * for data; cloning these every paint tick (≤30 Hz) was pure waste.
+   */
+  trainData?: Array<{ x: number; y: number; label: number }>;
   testData?: Array<{ x: number; y: number; label: number }>;
 }
 

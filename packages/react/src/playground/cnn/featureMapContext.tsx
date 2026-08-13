@@ -1,5 +1,5 @@
 import { createContext, useContext, type RefObject } from "react";
-import type { FeatureMapSnapshot } from "@ml-vis/core";
+import { FeatureMapSnapshot } from "@ml-vis/core/cnn";
 import type { RfLayerMeta, RfSelection } from "./receptiveField";
 
 /**

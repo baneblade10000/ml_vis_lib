@@ -1,4 +1,4 @@
-import type { LayerKind } from "@ml-vis/core";
+import { LayerKind } from "@ml-vis/core/cnn";
 
 /** Spatial layer row used to back-project a feature-map pixel to the input. */
 export type RfLayerMeta = {

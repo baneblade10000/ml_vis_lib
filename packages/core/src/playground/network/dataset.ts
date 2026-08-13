@@ -127,10 +127,10 @@ export function classifyCircleData(numSamples: number, noise: number): Example2D
   }
 
   for (let i = 0; i < numSamples / 2; i++) {
-    let r = randUniform(0, radius * 0.5);
-    let angle = randUniform(0, 2 * Math.PI);
-    let x = r * Math.sin(angle);
-    let y = r * Math.cos(angle);
+    const r = randUniform(0, radius * 0.5);
+    const angle = randUniform(0, 2 * Math.PI);
+    const x = r * Math.sin(angle);
+    const y = r * Math.cos(angle);
     const noiseX = randUniform(-radius, radius) * noise;
     const noiseY = randUniform(-radius, radius) * noise;
     const label = getCircleLabel({ x: x + noiseX, y: y + noiseY }, { x: 0, y: 0 });
@@ -138,10 +138,10 @@ export function classifyCircleData(numSamples: number, noise: number): Example2D
   }
 
   for (let i = 0; i < numSamples / 2; i++) {
-    let r = randUniform(radius * 0.7, radius);
-    let angle = randUniform(0, 2 * Math.PI);
-    let x = r * Math.sin(angle);
-    let y = r * Math.cos(angle);
+    const r = randUniform(radius * 0.7, radius);
+    const angle = randUniform(0, 2 * Math.PI);
+    const x = r * Math.sin(angle);
+    const y = r * Math.cos(angle);
     const noiseX = randUniform(-radius, radius) * noise;
     const noiseY = randUniform(-radius, radius) * noise;
     const label = getCircleLabel({ x: x + noiseX, y: y + noiseY }, { x: 0, y: 0 });

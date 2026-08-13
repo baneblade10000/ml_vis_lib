@@ -21,11 +21,30 @@ export default defineConfig({
     },
   ],
   resolve: {
-    // Dev: workspace source. Subpath exports must be mapped before the bare package.
+    // Dev: workspace source. Subpath exports must be mapped before the bare
+    // package, and the deeper workers/* regex before the bare workers barrel.
     alias: [
       {
         find: /^@ml-vis\/core\/workers\/(.+)$/,
         replacement: path.join(coreSrc, "playground/workers/$1.ts"),
+      },
+      { find: "@ml-vis/core/section", replacement: path.join(coreSrc, "section/index.ts") },
+      { find: "@ml-vis/core/signal", replacement: path.join(coreSrc, "signal/index.ts") },
+      { find: "@ml-vis/core/charts", replacement: path.join(coreSrc, "charts/index.ts") },
+      { find: "@ml-vis/core/i18n", replacement: path.join(coreSrc, "i18n/index.ts") },
+      {
+        find: "@ml-vis/core/network",
+        replacement: path.join(coreSrc, "playground/network/index.ts"),
+      },
+      { find: "@ml-vis/core/cnn", replacement: path.join(coreSrc, "playground/cnn/index.ts") },
+      {
+        find: "@ml-vis/core/autograd",
+        replacement: path.join(coreSrc, "playground/autograd/index.ts"),
+      },
+      { find: "@ml-vis/core/mlp", replacement: path.join(coreSrc, "playground/index.ts") },
+      {
+        find: "@ml-vis/core/workers",
+        replacement: path.join(coreSrc, "playground/workers/index.ts"),
       },
       { find: "@ml-vis/react", replacement: path.join(reactSrc, "index.ts") },
       { find: "@ml-vis/core", replacement: path.join(coreSrc, "index.ts") },

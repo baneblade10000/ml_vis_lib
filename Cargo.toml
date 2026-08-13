@@ -2,6 +2,12 @@
 members = ["crates/cnn_burn"]
 resolver = "2"
 
+# Release profile governs the Burn CNN WASM build (wasm-pack --release), which
+# is the only release artifact — the smoke binary is a hand-run dev tool
+# (dev profile). opt-level="s" was chosen for download size; benchmark
+# (2026-08): "s" = 227KB / 95KB gzip, "3" = 270KB / 114KB gzip (+20%). Switch to
+# "3" only if a measured training-FPS win justifies the extra ~19KB gzip, since
+# the wasm is lazy-loaded with a progress bar (not on the initial-page critical path).
 [profile.release]
 lto = true
 opt-level = "s"
