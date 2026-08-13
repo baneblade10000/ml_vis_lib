@@ -55,6 +55,7 @@ import {
   updateGraphCurves,
   updateGraphHiddenBoundaries,
   updateGraphHiddenCurves,
+  updateGraphInputFeatures,
   updateGraphOutputBoundary,
   updateGraphOutputCurve,
   updateWeightsGraph,
@@ -63,7 +64,15 @@ import {
   type GraphPosition,
 } from "./graph";
 import { normalizeGraphLayout } from "./graph/mlp-layout";
-import { CURVE_DENSITY, PLAY_BOUNDARY_STRIDE, PLAY_CURVE_STRIDE } from "./constants";
+import {
+  CURVE_DENSITY,
+  DEFAULT_HEATMAP_PRESET,
+  PLAY_CURVE_STRIDE,
+  heatmapPreset,
+  playBoundaryStride,
+  type HeatmapPreset,
+  type HeatmapPresetId,
+} from "./constants";
 import { sampleBias, sampleWeight, type WeightInitId } from "./weight-init";
 
 import type { PlaygroundOptimizerId } from "../optimizers";
@@ -128,6 +137,7 @@ export interface NetworkPlaygroundConfig {
   enabledFeatures: Record<string, boolean>;
   discretize?: boolean;
   architecturePreset: ArchitecturePresetId;
+  heatmapPreset: HeatmapPresetId;
 }
 
 export const DEFAULT_NETWORK_CONFIG: NetworkPlaygroundConfig = {
@@ -148,6 +158,7 @@ export const DEFAULT_NETWORK_CONFIG: NetworkPlaygroundConfig = {
   enabledFeatures: { ...DEFAULT_FEATURES_2D },
   discretize: false,
   architecturePreset: "mlp",
+  heatmapPreset: DEFAULT_HEATMAP_PRESET,
 };
 
 export interface LossHistoryPoint {
@@ -248,8 +259,10 @@ export class PlaygroundEngine {
     const problemType = this.config.problemType;
     const dataset = this.config.dataset;
     const enabledFeatures = { ...this.config.enabledFeatures };
+    const heatmapPresetId = this.config.heatmapPreset;
 
     this.config = this.cloneConfig(this.initialConfig);
+    this.config.heatmapPreset = heatmapPresetId;
     this.config.dataMode = dataMode;
 
     if (dataMode === "1d") {
@@ -520,17 +533,48 @@ export class PlaygroundEngine {
     this.refreshBoundaryInternal(this.boundaryNeedsInputRefresh);
   }
 
-  /** Fast output-only boundary/curve during Play (stride subsampling). */
-  refreshOutputBoundaryFast(stride = PLAY_BOUNDARY_STRIDE): void {
+  /**
+   * Play-quality fill of the paused-size stores. Cheap enough to run on the
+   * UI thread when adding layers/neurons so the graph can paint immediately;
+   * a later {@link refreshBoundary} (worker or idle) restores unique cells.
+   */
+  refreshBoundaryPreview(): void {
+    if (this.config.dataMode === "1d") {
+      this.refreshCurvesInternal(this.boundaryNeedsInputRefresh);
+      return;
+    }
+    const validation = this.graph.validate();
+    if (!validation.valid) {
+      this.boundary = computeBoundaries(this.network, this.config.enabledFeatures);
+      this.boundaryNeedsInputRefresh = false;
+      return;
+    }
+    const preset = this.heatmap();
+    if (this.boundaryNeedsInputRefresh) {
+      updateGraphInputFeatures(
+        this.config.enabledFeatures,
+        this.boundary,
+        preset.hidden,
+      );
+    }
+    this.refreshOutputBoundaryFast();
+    this.refreshHiddenBoundariesFast();
+    this.boundaryNeedsInputRefresh = false;
+  }
+
+  /** Fast output-only boundary/curve during Play (stride from heatmap preset). */
+  refreshOutputBoundaryFast(stride?: number): void {
     const validation = this.graph.validate();
     if (!validation.valid) return;
+    const preset = this.heatmap();
+    const step = stride ?? playBoundaryStride(preset);
     if (this.config.dataMode === "1d") {
       updateGraphOutputCurve(
         this.graph,
         this.config.enabledFeatures,
         this.curves,
         this.graph.outputId,
-        stride === PLAY_BOUNDARY_STRIDE ? PLAY_CURVE_STRIDE : stride,
+        PLAY_CURVE_STRIDE,
       );
       return;
     }
@@ -539,11 +583,11 @@ export class PlaygroundEngine {
       this.config.enabledFeatures,
       this.boundary,
       this.graph.outputId,
-      stride,
+      step,
     );
   }
 
-  /** Fast coarse refresh of hidden-node heatmaps/curves during Play. */
+  /** Fast hidden-node heatmap/curve refresh during Play. */
   refreshHiddenBoundariesFast(): void {
     const validation = this.graph.validate();
     if (!validation.valid) return;
@@ -556,12 +600,26 @@ export class PlaygroundEngine {
       );
       return;
     }
+    const preset = this.heatmap();
     updateGraphHiddenBoundaries(
       this.graph,
       this.config.enabledFeatures,
       this.boundary,
       this.graph.outputId,
+      preset.playHidden,
     );
+  }
+
+  heatmap(): HeatmapPreset {
+    return heatmapPreset(this.config.heatmapPreset);
+  }
+
+  setHeatmapPreset(id: HeatmapPresetId): void {
+    if (this.config.heatmapPreset === id) return;
+    this.config.heatmapPreset = id;
+    this.boundaryNeedsInputRefresh = true;
+    this.rebuildBoundaryStore();
+    this.refreshBoundary();
   }
 
   getLoss(dataPoints: Example2D[] = this.trainData): number {
@@ -797,7 +855,7 @@ export class PlaygroundEngine {
     }
     this.refreshMetrics();
     this.boundaryNeedsInputRefresh = true;
-    this.refreshBoundary();
+    this.refreshBoundaryPreview();
   }
 
   /** Change weight init scheme and re-sample weights (epoch resets). */
@@ -889,7 +947,11 @@ export class PlaygroundEngine {
       this.boundary = computeBoundaries(this.network, this.config.enabledFeatures);
       return;
     }
-    this.boundary = initGraphBoundaryStore(this.graph);
+    const preset = this.heatmap();
+    this.boundary = initGraphBoundaryStore(this.graph, true, {
+      output: preset.output,
+      hidden: preset.hidden,
+    });
   }
 
   private refreshTargetCurve(): void {
@@ -911,7 +973,10 @@ export class PlaygroundEngine {
       this.boundaryNeedsInputRefresh = false;
       return;
     }
+    const preset = this.heatmap();
     updateGraphBoundaries(this.graph, this.config.enabledFeatures, this.boundary, {
+      density: preset.output,
+      hiddenDensity: preset.hidden,
       refreshInputFeatures: refreshInputFeatures || this.boundaryNeedsInputRefresh,
     });
     this.boundaryNeedsInputRefresh = false;
@@ -975,7 +1040,7 @@ export class PlaygroundEngine {
     this.lossHistory.push({ epoch: 0, train: this.lossTrain, test: this.lossTest });
     this.boundaryNeedsInputRefresh = true;
     this.rebuildBoundaryStore();
-    this.refreshBoundary();
+    this.refreshBoundaryPreview();
   }
 
   private reinitAfterTopologyChange(): void {
@@ -987,7 +1052,7 @@ export class PlaygroundEngine {
     this.lossTest = this.getLoss(this.testData);
     this.boundaryNeedsInputRefresh = true;
     this.rebuildBoundaryStore();
-    this.refreshBoundary();
+    this.refreshBoundaryPreview();
   }
 
   private generateData(): void {
@@ -1020,3 +1085,4 @@ export class PlaygroundEngine {
 }
 
 export type { ArchitecturePresetId, GraphNodeKind, GraphPosition };
+export type { HeatmapPresetId } from "./constants";

@@ -14,9 +14,10 @@ export function matrixForDisplay(
   displayPx: number,
   coarseTo?: number,
   live = false,
+  playOutput = PLAY_DISPLAY_DENSITY,
 ): number[][] {
   if (live) {
-    let factor = Math.max(1, Math.floor(matrix.length / PLAY_DISPLAY_DENSITY));
+    let factor = Math.max(1, Math.floor(matrix.length / playOutput));
     while (factor > 1 && matrix.length % factor !== 0) factor -= 1;
     return factor > 1 ? reduceMatrix(matrix, factor) : matrix;
   }
@@ -98,10 +99,11 @@ export function paintHeatmapCanvas(
   smooth: boolean,
   coarseTo?: number,
   live = false,
+  playOutput = PLAY_DISPLAY_DENSITY,
 ): void {
   const px = size - 6;
   const mini = coarseTo !== undefined;
-  const reduced = matrixForDisplay(matrix, px, coarseTo, live);
+  const reduced = matrixForDisplay(matrix, px, coarseTo, live, playOutput);
   renderValueMatrix(heatmap, reduced, discretize);
 
   const dpr = mini ? 1 : window.devicePixelRatio || 1;
@@ -114,7 +116,7 @@ export function paintHeatmapCanvas(
 
 export function BiasIndicator({ bias }: { bias: number }) {
   // The bias square sits in the neuron's bottom-right corner. Its fill color
-  // encodes the bias via the diverging palette: deep blue for negative, sky cyan
+  // encodes the bias via the diverging palette: indigo for negative, cyan-blue
   // for positive, with the hue saturating toward the palette extremes as |bias|
   // grows (tanh-normalized, so small biases stay readable).
   return (

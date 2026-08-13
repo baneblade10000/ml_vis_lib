@@ -1,6 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import { MarkerType } from "@xyflow/react";
-import { INPUTS, MLP_COL_SPACING, MLP_NODE_SIZE, MLP_OUTPUT_NODE_SIZE, weightColor, weightMagnitude, weightValueNormalized, type ComputationalGraph, type GraphNodeKind } from "@ml-vis/core/network";
+import { INPUTS, MLP_NODE_SIZE, MLP_OUTPUT_NODE_SIZE, mlpColumnXsFromCounts, weightColor, weightMagnitude, weightValueNormalized, type ComputationalGraph, type GraphNodeKind } from "@ml-vis/core/network";
 
 // Single source of truth lives in @ml-vis/core (mlp-layout.ts); these re-export
 // the canonical values so layout geometry and rendered node sizes can never drift.
@@ -28,6 +28,7 @@ export type WeightMatrixPayload = {
   destLabels: string[];
   cells: WeightMatrixCellData[][];
   selectedEdgeId: string | null;
+  selectedNodeId: string | null;
   vizMode: EdgeVizMode;
   learningRate: number;
   cellPx: number;
@@ -63,10 +64,12 @@ export type WeightEdgeData = {
   vizMode: EdgeVizMode;
 };
 
-const MATRIX_CELL_MIN = 8;
-const MATRIX_CELL_MAX = 18;
-/** Horizontal room between adjacent neuron columns for a weight matrix. */
-const MATRIX_GAP = MLP_COL_SPACING - NODE_WIDTH;
+/** Square cell size shared by every weight matrix on the canvas. */
+export const MATRIX_CELL_PX = 28;
+/** Extra horizontal room around a matrix inside its layer gap. */
+const MATRIX_PAD = 32;
+/** Floor so a 1-column matrix does not glue neighboring layers. */
+const MATRIX_MIN_GAP = 72;
 
 /** Current ∂E/∂w used for visualization (batch mean → last batch → last sample). */
 export function linkPartialDerivative(link: {
@@ -113,18 +116,82 @@ function nodeDisplayLabel(graph: ComputationalGraph, id: string): string {
   return node?.label ?? id;
 }
 
-function matrixCellPx(rows: number, cols: number): number {
-  const dim = Math.max(rows, cols, 1);
-  const budget = MATRIX_GAP - 20;
-  const raw = Math.floor(budget / dim);
-  return Math.max(MATRIX_CELL_MIN, Math.min(MATRIX_CELL_MAX, raw));
-}
-
 function nodeOuterSize(graph: ComputationalGraph, id: string): { w: number; h: number } {
   const isOut = graph.nodes.get(id)?.kind === "output";
   return isOut
     ? { w: OUTPUT_NODE_WIDTH, h: OUTPUT_NODE_HEIGHT }
     : { w: NODE_WIDTH, h: NODE_HEIGHT };
+}
+
+type LayerNodes = { id: string }[][];
+
+/** Per-column X so each weight matrix fits at {@link MATRIX_CELL_PX}. */
+function matrixColumnXs(graph: ComputationalGraph, layers: LayerNodes): number[] {
+  const firstXs = (layers[0] ?? [])
+    .map((n) => graph.positions.get(n.id)?.x)
+    .filter((x): x is number => x != null);
+  const xs: number[] = [firstXs.length ? Math.min(...firstXs) : 72];
+  for (let i = 0; i < layers.length - 1; i++) {
+    const layer = layers[i]!;
+    const srcMaxW = Math.max(NODE_WIDTH, ...layer.map((n) => nodeOuterSize(graph, n.id).w));
+    const matrixW = layer.length * MATRIX_CELL_PX + 2;
+    const gap = Math.max(MATRIX_MIN_GAP, matrixW + MATRIX_PAD);
+    xs.push(xs[i]! + srcMaxW + gap);
+  }
+  return xs;
+}
+
+function applyColumnXs(
+  graph: ComputationalGraph,
+  layers: LayerNodes,
+  nodes: Node<NetworkNodeData>[],
+  colXs: number[],
+): Map<string, { x: number; y: number }> {
+  const idToCol = new Map<string, number>();
+  layers.forEach((layer, i) => {
+    for (const n of layer) idToCol.set(n.id, i);
+  });
+  const positions = new Map<string, { x: number; y: number }>();
+  for (const node of nodes) {
+    const stored = graph.positions.get(node.id) ?? node.position;
+    const col = idToCol.get(node.id);
+    const pos = col === undefined ? stored : { x: colXs[col]!, y: stored.y };
+    positions.set(node.id, pos);
+    node.position = pos;
+  }
+  return positions;
+}
+
+function applyMatrixColumnLayout(
+  graph: ComputationalGraph,
+  layers: LayerNodes,
+  nodes: Node<NetworkNodeData>[],
+): Map<string, { x: number; y: number }> {
+  return applyColumnXs(graph, layers, nodes, matrixColumnXs(graph, layers));
+}
+
+/** True when each layer is a vertical stack (same x), not a freeform graph. */
+function layersAreColumnar(graph: ComputationalGraph, layers: LayerNodes): boolean {
+  for (const layer of layers) {
+    const xs = layer
+      .map((n) => graph.positions.get(n.id)?.x)
+      .filter((x): x is number => x != null);
+    if (xs.length < 2) continue;
+    if (Math.max(...xs) - Math.min(...xs) > 8) return false;
+  }
+  return layers.some((layer) => layer.length > 0);
+}
+
+function applyGraphColumnLayout(
+  graph: ComputationalGraph,
+  layers: LayerNodes,
+  nodes: Node<NetworkNodeData>[],
+): void {
+  const firstXs = (layers[0] ?? [])
+    .map((n) => graph.positions.get(n.id)?.x)
+    .filter((x): x is number => x != null);
+  const originX = firstXs.length ? Math.min(...firstXs) : 72;
+  applyColumnXs(graph, layers, nodes, mlpColumnXsFromCounts(layers.map((l) => l.length), originX));
 }
 
 /** Build one weight-matrix node sitting in the gap between two layer columns. */
@@ -136,10 +203,12 @@ function buildWeightMatrixNode(
   options: {
     enabledFeatures: Record<string, boolean>;
     selectedEdgeId: string | null;
+    selectedNodeId: string | null;
     edgeVizMode: EdgeVizMode;
     learningRate: number;
     gradients: Map<string, number>;
     gradScale: number;
+    positions: Map<string, { x: number; y: number }>;
   },
 ): Node<NetworkNodeData> | null {
   if (!sourceIds.length || !destIds.length) return null;
@@ -156,7 +225,7 @@ function buildWeightMatrixNode(
     }
   }
 
-  const cellPx = matrixCellPx(destIds.length, sourceIds.length);
+  const cellPx = MATRIX_CELL_PX;
   const cells: WeightMatrixCellData[][] = destIds.map((destId) =>
     sourceIds.map((srcId) => {
       const link = linkByPair.get(`${srcId}\0${destId}`);
@@ -174,8 +243,8 @@ function buildWeightMatrixNode(
   const matrixW = sourceIds.length * cellPx + 2;
   const matrixH = destIds.length * cellPx + 2;
 
-  const srcPositions = sourceIds.map((id) => graph.positions.get(id));
-  const destPositions = destIds.map((id) => graph.positions.get(id));
+  const srcPositions = sourceIds.map((id) => options.positions.get(id) ?? graph.positions.get(id));
+  const destPositions = destIds.map((id) => options.positions.get(id) ?? graph.positions.get(id));
   if (srcPositions.some((p) => !p) || destPositions.some((p) => !p)) return null;
 
   const srcRight = Math.max(
@@ -217,6 +286,7 @@ function buildWeightMatrixNode(
         destLabels: destIds.map((id) => nodeDisplayLabel(graph, id)),
         cells,
         selectedEdgeId: options.selectedEdgeId,
+        selectedNodeId: options.selectedNodeId,
         vizMode: options.edgeVizMode,
         learningRate: options.learningRate,
         cellPx,
@@ -308,20 +378,28 @@ export function graphToFlow(
 
   if (layoutVizMode === "matrix") {
     const layers = graph.toLayeredNetwork();
+    const positions = applyMatrixColumnLayout(graph, layers, nodes);
     for (let i = 0; i < layers.length - 1; i++) {
       const sourceIds = layers[i]!.map((n) => n.id);
       const destIds = layers[i + 1]!.map((n) => n.id);
       const matrixNode = buildWeightMatrixNode(graph, i, sourceIds, destIds, {
         enabledFeatures: options.enabledFeatures,
         selectedEdgeId: options.selectedEdgeId,
+        selectedNodeId: options.selectedNodeId,
         edgeVizMode,
         learningRate,
         gradients,
         gradScale,
+        positions,
       });
       if (matrixNode) nodes.push(matrixNode);
     }
     return { nodes, edges: [] };
+  }
+
+  const layers = graph.toLayeredNetwork();
+  if (layersAreColumnar(graph, layers)) {
+    applyGraphColumnLayout(graph, layers, nodes);
   }
 
   for (const link of links) {
@@ -337,12 +415,19 @@ export function graphToFlow(
     const { stroke, strokeWidth, strokeOpacity } = edgeStrokeStyle(vizValue, sourceActive, {
       alreadyNormalized: isGradient,
     });
+    const incident =
+      !!options.selectedNodeId &&
+      (link.source.id === options.selectedNodeId || link.dest.id === options.selectedNodeId);
+    const dimmed = !!options.selectedNodeId && !incident;
+    const edgeSelected = options.selectedEdgeId === link.id;
+    const emphasized = incident || edgeSelected;
     edges.push({
       id: link.id,
       source: link.source.id,
       target: link.dest.id,
       type: "weight",
-      selected: options.selectedEdgeId === link.id,
+      selected: edgeSelected,
+      zIndex: emphasized ? 2 : 0,
       data: {
         weight: link.weight,
         gradient,
@@ -352,16 +437,18 @@ export function graphToFlow(
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        width: 16,
-        height: 16,
-        // Color the marker to match the edge stroke; react-flow keys the
-        // marker by the color string, so this is cheap.
-        color: sourceActive ? stroke : "rgba(148,163,184,0.25)",
+        width: emphasized ? 18 : 16,
+        height: emphasized ? 18 : 16,
+        color: dimmed
+          ? "rgba(148,163,184,0.18)"
+          : sourceActive
+            ? stroke
+            : "rgba(148,163,184,0.25)",
       },
       style: {
         stroke,
-        strokeWidth,
-        strokeOpacity,
+        strokeWidth: emphasized ? Math.max(3.5, strokeWidth) : strokeWidth,
+        strokeOpacity: dimmed ? 0.08 : emphasized ? 1 : strokeOpacity,
       },
     });
   }

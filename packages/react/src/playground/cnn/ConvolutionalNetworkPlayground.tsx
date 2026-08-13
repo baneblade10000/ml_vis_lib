@@ -11,6 +11,7 @@ import { formatCnnNodeLabel } from "./cnnAdapter";
 import { useCnnMessages } from "./messages";
 import { paintAllFeatureMapsAfterCommit } from "./featureMapPaint";
 import type { CnnPlayViz, CnnTrainingStats, FeatureMapStore } from "./featureMapContext";
+import { PlayStartingOverlay, dismissStartingAfterPaint } from "../PlayStartingOverlay";
 
 export interface ConvolutionalNetworkPlaygroundProps {
   initialMode?: CnnMode;
@@ -100,6 +101,7 @@ export function ConvolutionalNetworkPlayground({
 
   const [snapshot, setSnapshot] = useState<CnnTrainSnapshot | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [paintGeneration, setPaintGeneration] = useState(0);
   /** Curve + scalars — updated every worker tick (not throttled with RF snapshot). */
@@ -122,6 +124,7 @@ export function ConvolutionalNetworkPlayground({
   const playingRef = useRef(false);
   playingRef.current = playing;
   const lastReactFlushRef = useRef(0);
+  const awaitingFirstPlayPaintRef = useRef(false);
   const epochValRef = useRef<HTMLSpanElement>(null);
   const testAccValRef = useRef<HTMLSpanElement>(null);
   const trainAccValRef = useRef<HTMLSpanElement>(null);
@@ -158,6 +161,10 @@ export function ConvolutionalNetworkPlayground({
         featureMapRef.current = store;
       }
       flushToolbarDom(statsRef.current);
+      if (awaitingFirstPlayPaintRef.current && playingRef.current) {
+        awaitingFirstPlayPaintRef.current = false;
+        dismissStartingAfterPaint(setStarting);
+      }
 
       // Chart follows every tick (history is pushed each paint in the worker).
       if (snap.lossHistory.length > 0) {
@@ -234,8 +241,17 @@ export function ConvolutionalNetworkPlayground({
     const client = clientRef.current;
     if (!client) return;
     // Single-thread Rust is faster than shard IPC on this tiny net.
-    if (playing) client.play(96);
-    else client.pause();
+    if (playing) {
+      awaitingFirstPlayPaintRef.current = true;
+      client.play(96);
+    } else client.pause();
+  }, [playing]);
+
+  useEffect(() => {
+    if (!playing) {
+      awaitingFirstPlayPaintRef.current = false;
+      setStarting(false);
+    }
   }, [playing]);
 
   const cmd = useCallback(
@@ -438,10 +454,25 @@ export function ConvolutionalNetworkPlayground({
           </button>
           <button
             type="button"
-            className={`nn-btn nn-btn--primary${playing ? " playing" : ""}`}
-            onClick={() => setPlaying((p) => !p)}
+            className={`nn-btn nn-btn--primary${starting ? " starting" : playing ? " playing" : ""}`}
+            onClick={() => {
+              setPlaying((p) => {
+                const next = !p;
+                setStarting(next);
+                return next;
+              });
+            }}
           >
-            {playing ? t.pause : t.play}
+            {starting ? (
+              <>
+                <span className="nn-btn__spinner" aria-hidden />
+                {t.starting}
+              </>
+            ) : playing ? (
+              t.pause
+            ) : (
+              t.play
+            )}
           </button>
           <button type="button" className="nn-btn nn-btn--secondary" onClick={step}>
             {t.step}
@@ -509,6 +540,7 @@ export function ConvolutionalNetworkPlayground({
           probability={probability}
           fillHeight
         >
+          <PlayStartingOverlay visible={starting} label={t.startingHint} />
           <aside className="nn-flow-dock nn-flow-dock--left nn-flow-dock--wide">
             <CnnArchitecturePanel
               layers={snapshot.config.layers}
@@ -580,7 +612,7 @@ export function ConvolutionalNetworkPlayground({
               aria-label={t.weightsLegendAria}
             >
               <span className="nn-weight-legend__title">{t.weightsLegend}</span>
-              <div className="nn-weight-legend__bar" />
+              <div className="nn-weight-legend__bar nn-weight-legend__bar--zero-white" />
               <div className="nn-weight-legend__scale">
                 <span>−1</span>
                 <span>0</span>

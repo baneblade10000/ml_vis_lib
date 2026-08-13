@@ -7,6 +7,8 @@ export type NetworkMessages = {
   resetWeights: string;
   play: string;
   pause: string;
+  starting: string;
+  startingHint: string;
   step: string;
   epoch: string;
   testLoss: string;
@@ -19,6 +21,7 @@ export type NetworkMessages = {
   layoutViz: string;
   layoutVizGraph: string;
   layoutVizMatrix: string;
+  heatmapViz: string;
   edgeViz: string;
   edgeVizWeight: string;
   edgeVizGradient: string;
@@ -74,6 +77,8 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     resetWeights: "Reset weights",
     play: "Play",
     pause: "Pause",
+    starting: "Starting…",
+    startingHint: "Preparing model…",
     step: "Step",
     epoch: "Epoch",
     testLoss: "Test loss",
@@ -86,6 +91,7 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     layoutViz: "Weight display:",
     layoutVizGraph: "Edges",
     layoutVizMatrix: "Matrices",
+    heatmapViz: "Resolution:",
     edgeViz: "Connections",
     edgeVizWeight: "Weights",
     edgeVizGradient: "Gradients",
@@ -166,6 +172,8 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     resetWeights: "Сброс весов",
     play: "Пуск",
     pause: "Пауза",
+    starting: "Запуск…",
+    startingHint: "Подготовка модели…",
     step: "Шаг",
     epoch: "Эпоха",
     testLoss: "Loss (тест)",
@@ -178,6 +186,7 @@ export const networkMessages: Record<Locale, NetworkMessages> = {
     layoutViz: "Отображение весов:",
     layoutVizGraph: "Рёбра",
     layoutVizMatrix: "Матрицы",
+    heatmapViz: "Разрешение:",
     edgeViz: "Связи",
     edgeVizWeight: "Веса",
     edgeVizGradient: "Градиенты",

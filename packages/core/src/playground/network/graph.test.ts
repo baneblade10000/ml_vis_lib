@@ -11,6 +11,7 @@ import {
 import { constructInputIds } from "./inputs";
 import { Errors } from "./nn";
 import { PlaygroundEngine } from "./engine";
+import { MLP_COL_SPACING, mlpColumnXsFromCounts, mlpLayerGap } from "./graph/mlp-layout";
 
 describe("ComputationalGraph", () => {
   const features = { x: true, y: true, xSquared: false, ySquared: false, xTimesY: false, sinX: false, sinY: false };
@@ -60,5 +61,20 @@ describe("PlaygroundEngine presets", () => {
     expect(engine.epoch).toBe(20);
     expect(engine.boundary[engine.outputNodeId]).toBeDefined();
     expect(Number.isFinite(engine.lossTrain)).toBe(true);
+  });
+});
+
+describe("mlp layer spacing", () => {
+  it("keeps the default gap for small neighboring layers", () => {
+    expect(mlpLayerGap(2, 4)).toBe(MLP_COL_SPACING);
+    expect(mlpLayerGap(4, 4)).toBe(MLP_COL_SPACING);
+    expect(mlpLayerGap(16, 1)).toBe(MLP_COL_SPACING);
+  });
+
+  it("widens the gap when two neighboring layers are dense", () => {
+    expect(mlpLayerGap(16, 16)).toBeGreaterThan(MLP_COL_SPACING * 2);
+    const xs = mlpColumnXsFromCounts([2, 16, 16, 1]);
+    expect(xs[2]! - xs[1]!).toBe(mlpLayerGap(16, 16));
+    expect(xs[3]! - xs[2]!).toBe(MLP_COL_SPACING);
   });
 });

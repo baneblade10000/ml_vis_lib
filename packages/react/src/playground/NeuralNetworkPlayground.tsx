@@ -1,11 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DEFAULT_NETWORK_CONFIG, PlaygroundEngine, NetworkTrainClient, canUseTrainWorkers, type LossHistoryPoint, type NetworkAnyDatasetId, type NetworkDataMode, type NetworkPlaygroundConfig, type NetworkProblemType, type NetworkTrainSnapshot } from "@ml-vis/core/network";
+import {
+  DEFAULT_NETWORK_CONFIG,
+  HEATMAP_PRESET_IDS,
+  HEATMAP_PRESETS,
+  PlaygroundEngine,
+  NetworkTrainClient,
+  canUseTrainWorkers,
+  type HeatmapPresetId,
+  type LossHistoryPoint,
+  type NetworkAnyDatasetId,
+  type NetworkDataMode,
+  type NetworkPlaygroundConfig,
+  type NetworkProblemType,
+  type NetworkTrainSnapshot,
+} from "@ml-vis/core/network";
 import { createNetworkTrainWorker } from "@ml-vis/core/workers/createWorkers";
 import { paintAllBoundaries, paintAllBoundariesAfterCommit, paintBoundaryNode } from "./network/boundaryPaint";
 import type { CurveStore, TrainingStats } from "./network/NetworkBoundaryContext";
 import type { EdgeVizMode, LayoutVizMode } from "./network/graphAdapter";
 import { useNetworkMessages } from "./network/messages";
 import { NetworkGraphPane } from "./network/NetworkGraphPane";
+import { dismissStartingAfterPaint } from "./PlayStartingOverlay";
 
 
 export interface NeuralNetworkPlaygroundProps {
@@ -50,6 +65,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   }, [paintGeneration, tick]);
 
   const [playing, setPlaying] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [edgeVizMode, setEdgeVizMode] = useState<EdgeVizMode>("weight");
   const edgeVizModeRef = useRef<EdgeVizMode>("weight");
   edgeVizModeRef.current = edgeVizMode;
@@ -66,6 +82,8 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   const topologyEpochRef = useRef(0);
   const syncedTopologyEpochRef = useRef(0);
   const rebuildPromiseRef = useRef<Promise<void> | null>(null);
+  /** True after Play is sent to the worker, until the first live frame is on screen. */
+  const awaitingFirstPlayPaintRef = useRef(false);
 
   const syncRuntimeRefs = useCallback(() => {
     const engine = engineRef.current;
@@ -103,6 +121,10 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
       setLossHistory(engine.lossHistory.map((p) => ({ ...p })));
       paintBoundaryNode(engine.outputNodeId);
       paintAllBoundaries();
+      if (awaitingFirstPlayPaintRef.current && trainingLiveRef.current) {
+        awaitingFirstPlayPaintRef.current = false;
+        dismissStartingAfterPaint(setStarting);
+      }
       edgeVizBumpRef.current += 1;
       if (edgeVizModeRef.current === "gradient" && edgeVizBumpRef.current % 4 === 0) {
         bump();
@@ -184,9 +206,19 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     topologyEpochRef.current += 1;
     setPlaying(false);
     syncRuntimeRefs();
-    void syncWorkerFromMain("topology");
     requestPaint();
     bump();
+    if (trainClientRef.current) {
+      void syncWorkerFromMain("topology");
+      return;
+    }
+    const epoch = topologyEpochRef.current;
+    window.setTimeout(() => {
+      if (topologyEpochRef.current !== epoch) return;
+      engineRef.current.refreshBoundary();
+      syncRuntimeRefs();
+      requestPaint();
+    }, 0);
   }, [bump, requestPaint, syncRuntimeRefs, syncWorkerFromMain]);
 
   // Play/pause → worker owns trainEpoch; display engine only applies ticks.
@@ -195,6 +227,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     if (!client) {
       // Fallback: previous main-thread loop when Workers are missing.
       if (!playing) return;
+      awaitingFirstPlayPaintRef.current = true;
       const epochsPerSec = 75;
       let raf = 0;
       let lastTime = performance.now();
@@ -216,6 +249,10 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           syncRuntimeRefs();
           paintBoundaryNode(engine.outputNodeId);
           paintAllBoundaries();
+          if (awaitingFirstPlayPaintRef.current) {
+            awaitingFirstPlayPaintRef.current = false;
+            dismissStartingAfterPaint(setStarting);
+          }
         }
         raf = requestAnimationFrame(loop);
       };
@@ -229,6 +266,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
         .then(() => ensureWorkerSynced())
         .then(() => {
           if (cancelled || !trainClientRef.current || trainClientRef.current !== client) return;
+          awaitingFirstPlayPaintRef.current = true;
           client.play(75);
         });
       return () => {
@@ -237,6 +275,13 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     }
     client.pause();
   }, [playing, ensureWorkerSynced, syncRuntimeRefs]);
+
+  useEffect(() => {
+    if (!playing) {
+      awaitingFirstPlayPaintRef.current = false;
+      setStarting(false);
+    }
+  }, [playing]);
 
   useEffect(() => {
     if (wasPlayingRef.current && !playing) {
@@ -320,13 +365,8 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
 
   const onActivationChange = useCallback((activation: NetworkPlaygroundConfig["activation"]) => {
     engineRef.current.setActivation(activation);
-    topologyEpochRef.current += 1;
-    setPlaying(false);
-    syncRuntimeRefs();
-    syncWorkerFromMain("topology");
-    requestPaint();
-    bump();
-  }, [bump, requestPaint, syncRuntimeRefs, syncWorkerFromMain]);
+    afterTopologyEdit();
+  }, [afterTopologyEdit]);
 
   const onWeightInitChange = useCallback((weightInit: NetworkPlaygroundConfig["weightInit"]) => {
     engineRef.current.setWeightInit(weightInit);
@@ -349,6 +389,15 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     trainClientRef.current?.command("setRegularizationRate", { rate: regularizationRate });
     bump();
   }, [bump]);
+
+  const onHeatmapPresetChange = useCallback((preset: HeatmapPresetId) => {
+    engineRef.current.setHeatmapPreset(preset);
+    setPlaying(false);
+    syncRuntimeRefs();
+    trainClientRef.current?.command("setHeatmapPreset", { preset });
+    requestPaint();
+    bump();
+  }, [bump, requestPaint, syncRuntimeRefs]);
 
   const onDatasetChange = useCallback((dataset: NetworkAnyDatasetId) => {
     engineRef.current.setDataset(dataset);
@@ -483,10 +532,25 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           </button>
           <button
             type="button"
-            className={`nn-btn nn-btn--primary${playing ? " playing" : ""}`}
-            onClick={() => setPlaying((p) => !p)}
+            className={`nn-btn nn-btn--primary${starting ? " starting" : playing ? " playing" : ""}`}
+            onClick={() => {
+              setPlaying((p) => {
+                const next = !p;
+                setStarting(next);
+                return next;
+              });
+            }}
           >
-            {playing ? t.pause : t.play}
+            {starting ? (
+              <>
+                <span className="nn-btn__spinner" aria-hidden />
+                {t.starting}
+              </>
+            ) : playing ? (
+              t.pause
+            ) : (
+              t.play
+            )}
           </button>
           <button type="button" className="nn-btn nn-btn--secondary" onClick={step}>
             {t.step}
@@ -528,6 +592,23 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
               ))}
             </div>
           </div>
+          {engineRef.current.config.dataMode !== "1d" && (
+            <div className="nn-toolbar-weight-viz" role="group" aria-label={t.heatmapViz}>
+              <span className="nn-toolbar-weight-viz__label">{t.heatmapViz}</span>
+              <div className="nn-flat-switch">
+                {HEATMAP_PRESET_IDS.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`nn-flat-switch__btn${engineRef.current.config.heatmapPreset === id ? " selected" : ""}`}
+                    onClick={() => onHeatmapPresetChange(id)}
+                  >
+                    {HEATMAP_PRESETS[id].output}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <p className="nn-inspired-by">
@@ -573,6 +654,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
           paintGeneration={paintGeneration}
           tick={tick}
           playing={playing}
+          playStarting={starting}
           selectedNodeId={selectedNodeId}
           selectedEdgeId={selectedEdgeId}
           refitViewKey={refitViewKey}

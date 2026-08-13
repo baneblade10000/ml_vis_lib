@@ -1,5 +1,5 @@
 import { createContext, useContext, type RefObject } from "react";
-import { NetworkDataMode, NetworkProblemType } from "@ml-vis/core/network";
+import { NetworkDataMode, NetworkProblemType, NODE_BOUNDARY_DENSITY, PLAY_DISPLAY_DENSITY } from "@ml-vis/core/network";
 
 export type BoundaryStore = Record<string, number[][]>;
 export type CurveStore = Record<string, number[]>;
@@ -29,6 +29,16 @@ export const NetworkVizModeContext = createContext<NetworkVizMode>({
 export const TrainingStatsRefContext = createContext<RefObject<TrainingStats> | null>(null);
 
 export const TrainingLiveRefContext = createContext<RefObject<boolean> | null>(null);
+
+export type HeatmapPaintConfig = {
+  hidden: number;
+  playOutput: number;
+};
+
+export const HeatmapPaintContext = createContext<HeatmapPaintConfig>({
+  hidden: NODE_BOUNDARY_DENSITY,
+  playOutput: PLAY_DISPLAY_DENSITY,
+});
 
 /** Incremented when node heatmaps/curves should repaint from refs. */
 export const BoundaryPaintGenerationContext = createContext(0);

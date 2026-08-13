@@ -1,6 +1,8 @@
 import { constructInput, INPUTS } from "../inputs";
-import { DENSITY, NODE_BOUNDARY_DENSITY, X_DOMAIN } from "../constants";
+import { DENSITY, NODE_BOUNDARY_DENSITY, PLAY_NODE_BOUNDARY_DENSITY, X_DOMAIN } from "../constants";
 import { forwardPropGraph, forEachGraphNode, type ComputationalGraph } from "./computational-graph";
+
+export type BoundaryDensities = { output: number; hidden: number };
 
 function scaleLinear(domain: [number, number], range: [number, number], value: number): number {
   const [d0, d1] = domain;
@@ -8,28 +10,59 @@ function scaleLinear(domain: [number, number], range: [number, number], value: n
   return r0 + ((value - d0) / (d1 - d0)) * (r1 - r0);
 }
 
-function nodeBoundaryDensity(graph: ComputationalGraph, nodeId: string): number {
-  return nodeId === graph.outputId ? DENSITY : NODE_BOUNDARY_DENSITY;
+function resolveDensities(dens?: Partial<BoundaryDensities>): BoundaryDensities {
+  return {
+    output: dens?.output ?? DENSITY,
+    hidden: dens?.hidden ?? NODE_BOUNDARY_DENSITY,
+  };
+}
+
+function nodeBoundaryDensity(
+  graph: ComputationalGraph,
+  nodeId: string,
+  dens: BoundaryDensities,
+): number {
+  return nodeId === graph.outputId ? dens.output : dens.hidden;
 }
 
 /** Allocate boundary matrices (full res for output, coarse for other nodes). */
 export function initGraphBoundaryStore(
   graph: ComputationalGraph,
   includeInputFeatures = true,
+  dens?: Partial<BoundaryDensities>,
 ): Record<string, number[][]> {
+  const d = resolveDensities(dens);
   const boundary: Record<string, number[][]> = {};
   forEachGraphNode(graph, true, (node) => {
-    const density = nodeBoundaryDensity(graph, node.id);
+    const density = nodeBoundaryDensity(graph, node.id, d);
     boundary[node.id] = Array.from({ length: density }, () => new Array<number>(density));
   });
   if (includeInputFeatures) {
     for (const nodeId of Object.keys(INPUTS)) {
-      boundary[nodeId] = Array.from({ length: NODE_BOUNDARY_DENSITY }, () =>
-        new Array<number>(NODE_BOUNDARY_DENSITY),
-      );
+      boundary[nodeId] = Array.from({ length: d.hidden }, () => new Array<number>(d.hidden));
     }
   }
   return boundary;
+}
+
+export function updateGraphInputFeatures(
+  activeInputs: Record<string, boolean>,
+  boundary: Record<string, number[][]>,
+  hiddenDensity = NODE_BOUNDARY_DENSITY,
+  xDomain: [number, number] = X_DOMAIN,
+): void {
+  const fScale = (i: number) => scaleLinear([0, hiddenDensity - 1], xDomain, i);
+  for (let i = 0; i < hiddenDensity; i++) {
+    for (let j = 0; j < hiddenDensity; j++) {
+      const x = fScale(i);
+      const y = fScale(j);
+      for (const nodeId of Object.keys(INPUTS)) {
+        if (boundary[nodeId] && activeInputs[nodeId]) {
+          boundary[nodeId][i]![j] = INPUTS[nodeId].f(x, y);
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -42,33 +75,23 @@ export function updateGraphBoundaries(
   boundary: Record<string, number[][]>,
   options?: {
     density?: number;
+    hiddenDensity?: number;
     xDomain?: [number, number];
     /** Re-sample static input-feature surfaces (only needed when inputs change). */
     refreshInputFeatures?: boolean;
   },
 ): void {
   const density = options?.density ?? DENSITY;
+  const hiddenDensity = options?.hiddenDensity ?? NODE_BOUNDARY_DENSITY;
   const xDomain = options?.xDomain ?? X_DOMAIN;
   const refreshInputFeatures = options?.refreshInputFeatures ?? false;
-  const miniFactor = density / NODE_BOUNDARY_DENSITY;
+  const miniFactor = density / hiddenDensity;
 
   const xScale = (i: number) => scaleLinear([0, density - 1], xDomain, i);
   const yScale = (j: number) => scaleLinear([density - 1, 0], xDomain, j);
 
   if (refreshInputFeatures) {
-    const fScale = (i: number) =>
-      scaleLinear([0, NODE_BOUNDARY_DENSITY - 1], xDomain, i);
-    for (let i = 0; i < NODE_BOUNDARY_DENSITY; i++) {
-      for (let j = 0; j < NODE_BOUNDARY_DENSITY; j++) {
-        const x = fScale(i);
-        const y = fScale(j);
-        for (const nodeId of Object.keys(INPUTS)) {
-          if (boundary[nodeId] && activeInputs[nodeId]) {
-            boundary[nodeId][i]![j] = INPUTS[nodeId].f(x, y);
-          }
-        }
-      }
-    }
+    updateGraphInputFeatures(activeInputs, boundary, hiddenDensity, xDomain);
   }
 
   for (let i = 0; i < density; i++) {
@@ -97,10 +120,15 @@ export function computeGraphBoundaries(
   density = DENSITY,
   xDomain: [number, number] = X_DOMAIN,
   includeInputFeatures = true,
+  hiddenDensity = NODE_BOUNDARY_DENSITY,
 ): Record<string, number[][]> {
-  const boundary = initGraphBoundaryStore(graph, includeInputFeatures);
+  const boundary = initGraphBoundaryStore(graph, includeInputFeatures, {
+    output: density,
+    hidden: hiddenDensity,
+  });
   updateGraphBoundaries(graph, activeInputs, boundary, {
     density,
+    hiddenDensity,
     xDomain,
     refreshInputFeatures: includeInputFeatures,
   });
@@ -108,17 +136,19 @@ export function computeGraphBoundaries(
 }
 
 /**
- * Fast hidden-node boundary refresh at coarse density (for animation).
- * Only 10×10 forward passes, so it can run every paint frame during Play.
+ * Fast hidden-node boundary refresh at {@link PLAY_NODE_BOUNDARY_DENSITY}.
+ * Samples are block-filled into the paused-size store so Play stays cheap
+ * without reallocating matrices.
  */
 export function updateGraphHiddenBoundaries(
   graph: ComputationalGraph,
   activeInputs: Record<string, boolean>,
   boundary: Record<string, number[][]>,
   outputId: string,
+  playDensity = PLAY_NODE_BOUNDARY_DENSITY,
   xDomain: [number, number] = X_DOMAIN,
 ): void {
-  const density = NODE_BOUNDARY_DENSITY;
+  const density = playDensity;
   const xScale = (i: number) => scaleLinear([0, density - 1], xDomain, i);
   const yScale = (j: number) => scaleLinear([density - 1, 0], xDomain, j);
 
@@ -129,8 +159,29 @@ export function updateGraphHiddenBoundaries(
       forEachGraphNode(graph, true, (node) => {
         if (node.id === outputId) return;
         const store = boundary[node.id];
-        if (store) store[i]![j] = node.output;
+        if (store) fillPlayBlock(store, i, j, density, node.output);
       });
+    }
+  }
+}
+
+/** Nearest-neighbor upsample one Play sample into the paused-size store. */
+function fillPlayBlock(
+  store: number[][],
+  i: number,
+  j: number,
+  playDensity: number,
+  value: number,
+): void {
+  const n = store.length;
+  if (!n) return;
+  const i0 = Math.floor((i * n) / playDensity);
+  const i1 = Math.max(i0 + 1, Math.floor(((i + 1) * n) / playDensity));
+  const j0 = Math.floor((j * n) / playDensity);
+  const j1 = Math.max(j0 + 1, Math.floor(((j + 1) * n) / playDensity));
+  for (let ii = i0; ii < i1 && ii < n; ii++) {
+    for (let jj = j0; jj < j1 && jj < n; jj++) {
+      store[ii]![jj] = value;
     }
   }
 }

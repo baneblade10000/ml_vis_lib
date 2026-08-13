@@ -10,6 +10,8 @@ export interface CnnMessages {
   resetWeights: string;
   play: string;
   pause: string;
+  starting: string;
+  startingHint: string;
   step: string;
   epoch: string;
   testLoss: string;
@@ -86,6 +88,8 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     resetWeights: "Reset weights",
     play: "Play",
     pause: "Pause",
+    starting: "Starting…",
+    startingHint: "Preparing model…",
     step: "Step",
     epoch: "Epoch",
     testLoss: "Test loss",
@@ -153,7 +157,7 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     labelWrong: "wrong",
     arrangeLayout: "Arrange layout",
     weightsLegend: "Weights",
-    weightsLegendAria: "Weight color scale from −1 (deep blue) to +1 (sky cyan)",
+    weightsLegendAria: "Weight color scale from −1 (deep blue) through 0 (white) to +1 (sky cyan)",
     readoutProb: "Predicted class probabilities",
     class0: "Class 0",
     class1: "Class 1",
@@ -173,6 +177,8 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     resetWeights: "Сбросить веса",
     play: "Пуск",
     pause: "Пауза",
+    starting: "Запуск…",
+    startingHint: "Подготовка модели…",
     step: "Шаг",
     epoch: "Эпоха",
     testLoss: "Loss (тест)",
@@ -240,7 +246,7 @@ export const cnnMessages: Record<Locale, CnnMessages> = {
     labelWrong: "ошибка",
     arrangeLayout: "Выровнять схему",
     weightsLegend: "Веса",
-    weightsLegendAria: "Цвет весов от −1 (тёмно-синий) до +1 (голубой)",
+    weightsLegendAria: "Цвет весов от −1 (тёмно-синий) через 0 (белый) до +1 (голубой)",
     readoutProb: "Вероятности классов",
     class0: "Класс 0",
     class1: "Класс 1",

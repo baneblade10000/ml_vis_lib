@@ -262,6 +262,9 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
         case "setBatchSize":
           engine.config.batchSize = a.bs as number;
           break;
+        case "setHeatmapPreset":
+          engine.setHeatmapPreset(a.preset as never);
+          break;
         case "syncGraph":
           initFromPayload({
             config: engine.config,

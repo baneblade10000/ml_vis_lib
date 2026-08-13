@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { reduceMatrix } from "../../charts/mini-heatmap";
 import { boundaryToGridPoints, computeBoundaries } from "./boundary";
-import { valueToRgb, PALETTE_HIGH, PALETTE_LOW, PALETTE_MID } from "./colors";
-import { CURVE_DENSITY, DENSITY, NODE_BOUNDARY_DENSITY } from "./constants";
+import { valueToRgb, valueToRgbZeroWhite, PALETTE_HIGH, PALETTE_LOW, PALETTE_MID, PALETTE_ZERO_WHITE } from "./colors";
+import { CURVE_DENSITY, DENSITY, HEATMAP_PRESETS, NODE_BOUNDARY_DENSITY, PLAY_BOUNDARY_STRIDE, PLAY_DISPLAY_DENSITY } from "./constants";
 import { PlaygroundEngine } from "./engine";
 import { Activations } from "./nn";
 
@@ -50,6 +50,64 @@ describe("PlaygroundEngine", () => {
     expect(hiddenId && engine.boundary[hiddenId].length).toBe(NODE_BOUNDARY_DENSITY);
   });
 
+  it("paused hidden density divides output density; play output divides the paused grid", () => {
+    expect(DENSITY % NODE_BOUNDARY_DENSITY).toBe(0);
+    expect(DENSITY / PLAY_BOUNDARY_STRIDE).toBe(PLAY_DISPLAY_DENSITY);
+  });
+
+  it("heatmap presets keep output/hidden/play grids divisible", () => {
+    for (const preset of Object.values(HEATMAP_PRESETS)) {
+      expect(preset.output % preset.hidden).toBe(0);
+      expect(preset.output % preset.playOutput).toBe(0);
+    }
+  });
+
+  it("setHeatmapPreset resizes output and hidden boundary stores", () => {
+    const engine = new PlaygroundEngine({
+      networkShape: [3],
+      numHiddenLayers: 1,
+      heatmapPreset: "low",
+    });
+    const outputId = engine.graph.outputId;
+    const hiddenId = [...engine.graph.nodes.keys()].find(
+      (id) => id !== "x" && id !== "y" && id !== outputId,
+    );
+    expect(engine.boundary[outputId].length).toBe(HEATMAP_PRESETS.low.output);
+    expect(hiddenId && engine.boundary[hiddenId].length).toBe(HEATMAP_PRESETS.low.hidden);
+    engine.setHeatmapPreset("medium");
+    expect(engine.boundary[outputId].length).toBe(HEATMAP_PRESETS.medium.output);
+    expect(hiddenId && engine.boundary[hiddenId].length).toBe(HEATMAP_PRESETS.medium.hidden);
+    engine.refreshOutputBoundaryFast();
+    engine.refreshHiddenBoundariesFast();
+    expect(engine.boundary[outputId].length).toBe(HEATMAP_PRESETS.medium.output);
+    expect(hiddenId && engine.boundary[hiddenId].length).toBe(HEATMAP_PRESETS.medium.hidden);
+  });
+
+  it("play boundary refresh keeps paused store sizes", () => {
+    const engine = new PlaygroundEngine({ networkShape: [3], numHiddenLayers: 1 });
+    const outputId = engine.graph.outputId;
+    const hiddenId = [...engine.graph.nodes.keys()].find(
+      (id) => id !== "x" && id !== "y" && id !== outputId,
+    );
+    engine.refreshOutputBoundaryFast();
+    engine.refreshHiddenBoundariesFast();
+    expect(engine.boundary[outputId].length).toBe(DENSITY);
+    expect(hiddenId && engine.boundary[hiddenId].length).toBe(NODE_BOUNDARY_DENSITY);
+  });
+
+  it("addNeuron fills the new hidden heatmap without a full-resolution sweep", () => {
+    const engine = new PlaygroundEngine({ networkShape: [3], numHiddenLayers: 1 });
+    engine.addNeuron(0);
+    const hidden = [...engine.graph.nodes.values()].filter((n) => n.kind === "dense");
+    expect(hidden).toHaveLength(4);
+    for (const node of hidden) {
+      const grid = engine.boundary[node.id];
+      expect(grid.length).toBe(NODE_BOUNDARY_DENSITY);
+      expect(grid[0]!.some((v) => Number.isFinite(v))).toBe(true);
+    }
+    expect(engine.boundary[engine.outputNodeId].length).toBe(DENSITY);
+  });
+
   it("rebuilds boundary keys after applyTopologySnapshot (worker init path)", () => {
     const main = new PlaygroundEngine({ dataset: "circle", networkShape: [4], numHiddenLayers: 1 });
     main.addNeuron(0);
@@ -94,6 +152,23 @@ describe("mini-heatmap helpers", () => {
     expect(valueToRgb(-1)).toEqual(PALETTE_LOW);
     expect(valueToRgb(0)).toEqual(PALETTE_MID);
     expect(valueToRgb(1)).toEqual(PALETTE_HIGH);
+  });
+
+  it("valueToRgb keeps ±0.5 closer to midpoint than a linear ramp", () => {
+    const dist = (
+      a: { r: number; g: number; b: number },
+      b: { r: number; g: number; b: number },
+    ) => Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
+    const halfToMid = dist(valueToRgb(0.5), PALETTE_MID);
+    const endToMid = dist(PALETTE_HIGH, PALETTE_MID);
+    expect(halfToMid).toBeLessThan(endToMid * 0.4);
+    expect(dist(valueToRgb(-0.5), PALETTE_MID)).toBeLessThan(dist(PALETTE_LOW, PALETTE_MID) * 0.4);
+  });
+
+  it("valueToRgbZeroWhite maps 0 to white", () => {
+    expect(valueToRgbZeroWhite(-1)).toEqual(PALETTE_LOW);
+    expect(valueToRgbZeroWhite(0)).toEqual(PALETTE_ZERO_WHITE);
+    expect(valueToRgbZeroWhite(1)).toEqual(PALETTE_HIGH);
   });
 });
 

@@ -35,6 +35,7 @@ export {
   initGraphBoundaryStore,
   updateGraphBoundaries,
   updateGraphHiddenBoundaries,
+  updateGraphInputFeatures,
   updateGraphOutputBoundary,
 } from "./boundary";
 
@@ -47,6 +48,8 @@ export {
 
 export {
   layoutMlpFromLayers,
+  mlpColumnXsFromCounts,
+  mlpLayerGap,
   normalizeGraphLayout,
   MLP_COL_SPACING,
   MLP_ROW_SPACING,

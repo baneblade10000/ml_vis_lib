@@ -99,6 +99,7 @@ export type {
   ArchitecturePresetId,
   GraphNodeKind,
   GraphPosition,
+  HeatmapPresetId,
   LossHistoryPoint,
   PlaygroundOptimizerId,
   NetworkActivationId,
@@ -123,6 +124,8 @@ export {
   GraphNode,
   initGraphCurveStore,
   layoutMlpFromLayers,
+  mlpColumnXsFromCounts,
+  mlpLayerGap,
   MLP_COL_SPACING,
   MLP_NODE_SIZE,
   MLP_OUTPUT_NODE_SIZE,
@@ -140,12 +143,20 @@ export type {
 
 export {
   CURVE_DENSITY,
+  DEFAULT_HEATMAP_PRESET,
   DENSITY,
+  HEATMAP_PRESETS,
+  HEATMAP_PRESET_IDS,
   NODE_BOUNDARY_DENSITY,
   NODE_CURVE_DENSITY,
+  PLAY_BOUNDARY_STRIDE,
   PLAY_DISPLAY_DENSITY,
+  PLAY_NODE_BOUNDARY_DENSITY,
   X_DOMAIN,
+  heatmapPreset,
+  playBoundaryStride,
 } from "./constants";
+export type { HeatmapPreset } from "./constants";
 
 // Train worker client + protocol types for the network engine.
 // Re-exported here so network consumers depend on a single subpath.

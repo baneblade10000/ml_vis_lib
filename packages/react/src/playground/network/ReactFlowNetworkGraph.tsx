@@ -16,7 +16,7 @@ import {
   type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ComputationalGraph, GraphNodeKind, NetworkDataMode, NetworkProblemType } from "@ml-vis/core/network";
+import { ComputationalGraph, GraphNodeKind, heatmapPreset, NetworkDataMode, NetworkProblemType, type HeatmapPresetId } from "@ml-vis/core/network";
 import {
   flowKindFromDrag,
   graphToFlow,
@@ -30,6 +30,7 @@ import { networkEdgeTypes, networkNodeTypes } from "./NetworkFlowNodes";
 import { NetworkGraphActionsProvider } from "./NetworkWeightMatrixNode";
 import {
   BoundaryPaintGenerationContext,
+  HeatmapPaintContext,
   NetworkBoundaryRefContext,
   NetworkCurveRefContext,
   NetworkTargetCurveRefContext,
@@ -69,6 +70,7 @@ export interface ReactFlowNetworkGraphProps {
   paintGeneration?: number;
   edgeVizMode?: EdgeVizMode;
   layoutVizMode?: LayoutVizMode;
+  heatmapPreset?: HeatmapPresetId;
   learningRate?: number;
   boundaryRef: RefObject<Record<string, number[][]>>;
   curvesRef?: RefObject<CurveStore>;
@@ -315,6 +317,7 @@ function ReactFlowNetworkGraphInner({
           edge.style?.stroke === next.style?.stroke &&
           edge.style?.strokeWidth === next.style?.strokeWidth &&
           edge.style?.strokeOpacity === next.style?.strokeOpacity &&
+          edge.zIndex === next.zIndex &&
           edgeMarkerColor(edge.markerEnd) === edgeMarkerColor(next.markerEnd);
         const sameData =
           edge.data?.weight === next.data?.weight &&
@@ -324,7 +327,7 @@ function ReactFlowNetworkGraphInner({
           edge.data?.vizMode === next.data?.vizMode;
         if (sameStyle && sameData && edge.selected === selected) return edge;
         changed = true;
-        return { ...edge, data: next.data, style: next.style, markerEnd: next.markerEnd, selected };
+        return { ...edge, data: next.data, style: next.style, markerEnd: next.markerEnd, selected, zIndex: next.zIndex };
       });
       return changed ? nextEdges : current;
     });
@@ -523,24 +526,30 @@ export function ReactFlowNetworkGraph(props: ReactFlowNetworkGraphProps) {
   } as const;
   const emptyCurves = useMemo(() => ({ current: {} as CurveStore }), []);
   const emptyTarget = useMemo(() => ({ current: null as number[] | null }), []);
+  const paintCfg = useMemo(() => {
+    const preset = heatmapPreset(props.heatmapPreset);
+    return { hidden: preset.hidden, playOutput: preset.playOutput };
+  }, [props.heatmapPreset]);
 
   return (
     <NetworkVizModeContext.Provider value={vizMode}>
-      <NetworkBoundaryRefContext.Provider value={props.boundaryRef}>
-        <NetworkCurveRefContext.Provider value={props.curvesRef ?? emptyCurves}>
-          <NetworkTargetCurveRefContext.Provider value={props.targetCurveRef ?? emptyTarget}>
-            <TrainingStatsRefContext.Provider value={props.statsRef}>
-              <TrainingLiveRefContext.Provider value={props.trainingLiveRef ?? null}>
-                <BoundaryPaintGenerationContext.Provider value={props.paintGeneration ?? 0}>
-                  <ReactFlowProvider>
-                    <ReactFlowNetworkGraphInner {...props} />
-                  </ReactFlowProvider>
-                </BoundaryPaintGenerationContext.Provider>
-              </TrainingLiveRefContext.Provider>
-            </TrainingStatsRefContext.Provider>
-          </NetworkTargetCurveRefContext.Provider>
-        </NetworkCurveRefContext.Provider>
-      </NetworkBoundaryRefContext.Provider>
+      <HeatmapPaintContext.Provider value={paintCfg}>
+        <NetworkBoundaryRefContext.Provider value={props.boundaryRef}>
+          <NetworkCurveRefContext.Provider value={props.curvesRef ?? emptyCurves}>
+            <NetworkTargetCurveRefContext.Provider value={props.targetCurveRef ?? emptyTarget}>
+              <TrainingStatsRefContext.Provider value={props.statsRef}>
+                <TrainingLiveRefContext.Provider value={props.trainingLiveRef ?? null}>
+                  <BoundaryPaintGenerationContext.Provider value={props.paintGeneration ?? 0}>
+                    <ReactFlowProvider>
+                      <ReactFlowNetworkGraphInner {...props} />
+                    </ReactFlowProvider>
+                  </BoundaryPaintGenerationContext.Provider>
+                </TrainingLiveRefContext.Provider>
+              </TrainingStatsRefContext.Provider>
+            </NetworkTargetCurveRefContext.Provider>
+          </NetworkCurveRefContext.Provider>
+        </NetworkBoundaryRefContext.Provider>
+      </HeatmapPaintContext.Provider>
     </NetworkVizModeContext.Provider>
   );
 }

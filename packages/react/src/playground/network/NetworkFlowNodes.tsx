@@ -11,12 +11,13 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import { curveStrokeFromValues, inferYDomain, renderCurve, renderCurvePoints, renderTargetCurve } from "@ml-vis/core/charts";
-import { NODE_BOUNDARY_DENSITY, X_DOMAIN } from "@ml-vis/core/network";
+import { X_DOMAIN } from "@ml-vis/core/network";
 import type { DataPoint, NetworkNodeData, WeightEdgeData } from "./graphAdapter";
 import { paintHeatmapCanvas, paintTrainOverlay, BiasIndicator } from "./networkCanvasPaint";
 import { NODE_WIDTH, OUTPUT_NODE_WIDTH } from "./graphAdapter";
 import {
   BoundaryPaintGenerationContext,
+  HeatmapPaintContext,
   NetworkBoundaryRefContext,
   NetworkCurveRefContext,
   NetworkTargetCurveRefContext,
@@ -38,7 +39,7 @@ function NodeHeatmap({
   dimmed,
   trainData,
   smooth = true,
-  coarseTo,
+  mini = false,
 }: {
   nodeId: string;
   discretize: boolean;
@@ -46,18 +47,20 @@ function NodeHeatmap({
   dimmed?: boolean;
   trainData?: DataPoint[];
   smooth?: boolean;
-  coarseTo?: number;
+  mini?: boolean;
   paintGeneration?: number;
 }) {
   const boundaryRef = useContext(NetworkBoundaryRefContext);
   const paintGeneration = useContext(BoundaryPaintGenerationContext);
   const trainingLiveRef = useContext(TrainingLiveRefContext);
   const vizMode = useContext(NetworkVizModeContext);
+  const heatmapPaint = useContext(HeatmapPaintContext);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heatmapRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const px = size - 6;
   const regression = vizMode.problemType === "regression";
+  const coarseTo = mini ? heatmapPaint.hidden : undefined;
 
   const paintOverlay = useCallback(() => {
     if (!trainData?.length || !overlayRef.current) return;
@@ -83,8 +86,9 @@ function NodeHeatmap({
       live ? false : smooth,
       coarseTo,
       live,
+      heatmapPaint.playOutput,
     );
-  }, [boundaryRef, trainingLiveRef, nodeId, size, discretize, smooth, coarseTo]);
+  }, [boundaryRef, trainingLiveRef, nodeId, size, discretize, smooth, coarseTo, heatmapPaint.playOutput]);
 
   const paintRef = useRef(paint);
   paintRef.current = paint;
@@ -224,7 +228,7 @@ function NodeViz({
   dimmed,
   trainData,
   smooth = true,
-  coarseTo,
+  mini,
   showTarget,
 }: {
   nodeId: string;
@@ -233,7 +237,7 @@ function NodeViz({
   dimmed?: boolean;
   trainData?: DataPoint[];
   smooth?: boolean;
-  coarseTo?: number;
+  mini?: boolean;
   showTarget?: boolean;
   paintGeneration?: number;
 }) {
@@ -257,7 +261,7 @@ function NodeViz({
       dimmed={dimmed}
       trainData={trainData}
       smooth={smooth}
-      coarseTo={coarseTo}
+      mini={mini}
     />
   );
 }
@@ -307,7 +311,7 @@ export function FeatureFlowNode({
         size={NODE_WIDTH}
         dimmed={!data.active}
         smooth={false}
-        coarseTo={NODE_BOUNDARY_DENSITY}
+        mini
         paintGeneration={data.paintGeneration}
       />
       <span className="nn-flow-node-label nn-flow-node-label--left">{data.label}</span>
@@ -326,7 +330,7 @@ export function DenseFlowNode({
         discretize={data.discretize}
         size={NODE_WIDTH}
         smooth={false}
-        coarseTo={NODE_BOUNDARY_DENSITY}
+        mini
         paintGeneration={data.paintGeneration}
       />
     </BaseNetworkNode>
@@ -345,7 +349,7 @@ export function SumFlowNode({
         discretize={data.discretize}
         size={NODE_WIDTH}
         smooth={false}
-        coarseTo={NODE_BOUNDARY_DENSITY}
+        mini
         paintGeneration={data.paintGeneration}
       />
     </BaseNetworkNode>

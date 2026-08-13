@@ -8,6 +8,7 @@
 
 import type { GraphSnapshot } from "../network/graph/types";
 import type {
+  HeatmapPresetId,
   NetworkActivationId,
   NetworkPlaygroundConfig,
   NetworkRegularizationId,
@@ -46,6 +47,7 @@ export interface NetworkCommandArgs {
   setRegularization: { regularization: NetworkRegularizationId };
   setRegularizationRate: { rate: number };
   setBatchSize: { bs: number };
+  setHeatmapPreset: { preset: HeatmapPresetId };
   syncGraph: {
     graphSnapshot: GraphSnapshot;
     trainData?: NetworkDataPoint[];

@@ -49,9 +49,12 @@ export function WeightMatrixFlowNode({ data }: NodeProps<Node<NetworkNodeData>>)
 
   if (!matrix) return null;
 
-  const { cellPx, cells, selectedEdgeId, vizMode, learningRate, gradScale } = matrix;
+  const { cellPx, cells, selectedEdgeId, selectedNodeId, vizMode, learningRate, gradScale } = matrix;
   const cols = matrix.sourceIds.length;
   const rows = matrix.destIds.length;
+  const selectedCol = selectedNodeId ? matrix.sourceIds.indexOf(selectedNodeId) : -1;
+  const selectedRow = selectedNodeId ? matrix.destIds.indexOf(selectedNodeId) : -1;
+  const nodeInMatrix = selectedCol >= 0 || selectedRow >= 0;
   const hoverCell =
     hover && cells[hover.row]?.[hover.col]?.linkId ? cells[hover.row]![hover.col]! : null;
 
@@ -74,9 +77,11 @@ export function WeightMatrixFlowNode({ data }: NodeProps<Node<NetworkNodeData>>)
           row.map((cell, c) => {
             const empty = !cell.linkId;
             const selected = !!cell.linkId && cell.linkId === selectedEdgeId;
-            const rowHi = hover?.row === r;
-            const colHi = hover?.col === c;
+            const rowHi = hover?.row === r || r === selectedRow;
+            const colHi = hover?.col === c || c === selectedCol;
+            const band = !empty && (r === selectedRow || c === selectedCol);
             const cross = rowHi || colHi;
+            const dim = nodeInMatrix && !empty && !band && hover?.row !== r && hover?.col !== c;
             const value = empty ? 0 : cellVizValue(cell, vizMode, gradScale);
             const fill = empty
               ? "transparent"
@@ -91,7 +96,9 @@ export function WeightMatrixFlowNode({ data }: NodeProps<Node<NetworkNodeData>>)
                   "nn-weight-matrix__cell",
                   empty ? "nn-weight-matrix__cell--empty" : "",
                   selected ? "nn-weight-matrix__cell--selected" : "",
+                  band ? "nn-weight-matrix__cell--band" : "",
                   cross && !empty ? "nn-weight-matrix__cell--cross" : "",
+                  dim ? "nn-weight-matrix__cell--dim" : "",
                   hover?.row === r && hover?.col === c && !empty
                     ? "nn-weight-matrix__cell--hover"
                     : "",

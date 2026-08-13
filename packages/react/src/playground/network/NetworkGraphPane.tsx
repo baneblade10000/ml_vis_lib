@@ -19,6 +19,7 @@ import { DatasetThumbnail } from "./DatasetThumbnail";
 import { useNetworkMessages } from "./messages";
 import type { CurveStore, TrainingStats } from "./NetworkBoundaryContext";
 import type { EdgeVizMode, LayoutVizMode } from "./graphAdapter";
+import { PlayStartingOverlay } from "../PlayStartingOverlay";
 
 const DATASETS_2D_CLASSIFICATION: NetworkDatasetId[] = ["circle", "xor", "gauss", "spiral"];
 const DATASETS_2D_REGRESSION: NetworkDatasetId[] = ["sinSin"];
@@ -35,6 +36,7 @@ export type GraphPaneProps = {
   paintGeneration: number;
   tick: number;
   playing: boolean;
+  playStarting?: boolean;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
   refitViewKey: number;
@@ -84,6 +86,7 @@ export const NetworkGraphPane = memo(function NetworkGraphPane({
   paintGeneration,
   tick,
   playing,
+  playStarting = false,
   selectedNodeId,
   selectedEdgeId,
   refitViewKey,
@@ -146,6 +149,7 @@ export const NetworkGraphPane = memo(function NetworkGraphPane({
       paintGeneration={paintGeneration}
       edgeVizMode={edgeVizMode}
       layoutVizMode={layoutVizMode}
+      heatmapPreset={cfg.heatmapPreset}
       learningRate={cfg.learningRate}
       boundaryRef={boundaryRef}
       curvesRef={curvesRef}
@@ -166,6 +170,7 @@ export const NetworkGraphPane = memo(function NetworkGraphPane({
       layoutKey={tick}
       discretize={cfg.discretize}
     >
+      <PlayStartingOverlay visible={playStarting} label={t.startingHint} />
       <aside className="nn-flow-dock nn-flow-dock--left">
         <NetworkPalette />
         <NetworkArchitecturePanel
@@ -276,7 +281,7 @@ export const NetworkGraphPane = memo(function NetworkGraphPane({
         <div
           className="nn-weight-legend nn-weight-legend--dock"
           role="img"
-          aria-label="Weight color scale from −1 (deep blue) through 0 (mid blue) to +1 (sky cyan)"
+          aria-label="Weight color scale from −1 (indigo) through 0 (light-blue) to +1 (cyan-blue)"
         >
           <span className="nn-weight-legend__title">Weight</span>
           <div className="nn-weight-legend__bar" />
