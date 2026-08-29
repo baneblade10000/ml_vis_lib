@@ -23,6 +23,18 @@ export class ShardPool {
   private readonly createShardWorker: () => Worker;
   readonly shardCount: number;
   private readonly pending = new Set<Pending>();
+  /**
+   * Latest requested init config — drained by the spawn loop. Rapid
+   * re-inits (topology edit bursts) coalesce: only the newest config is
+   * spawned, and every caller awaits the same final promise. This also
+   * fixes the old hang where a new init's terminateAll() silently orphaned
+   * the previous init's per-worker promises (they never settled, so the
+   * coordinator's message chain froze forever).
+   */
+  private latestConfig: unknown = null;
+  private spawning = false;
+  private initTail: Promise<void> = Promise.resolve();
+  private disposed = false;
 
   constructor(options: ShardPoolOptions) {
     this.kind = options.kind;
@@ -31,7 +43,27 @@ export class ShardPool {
   }
 
   /** Spawn shards and init each with the same engine config. */
-  async init(config: unknown): Promise<void> {
+  init(config: unknown): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    this.latestConfig = config;
+    if (!this.spawning) {
+      this.spawning = true;
+      this.initTail = (async () => {
+        try {
+          while (!this.disposed && this.latestConfig !== null) {
+            const cfg = this.latestConfig;
+            this.latestConfig = null;
+            await this.spawnAll(cfg);
+          }
+        } finally {
+          this.spawning = false;
+        }
+      })();
+    }
+    return this.initTail;
+  }
+
+  private async spawnAll(config: unknown): Promise<void> {
     this.terminateAll();
     if (this.shardCount <= 1) return;
     const ready: Promise<void>[] = [];
@@ -88,6 +120,8 @@ export class ShardPool {
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.latestConfig = null;
     this.rejectPending("shard pool disposed");
     for (const w of this.workers) {
       try {

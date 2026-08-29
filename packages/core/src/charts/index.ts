@@ -10,11 +10,12 @@ export type { SignalMarker, SignalPlotSeries, SignalPlotPayload } from "./signal
 export { DecisionBoundaryPlot } from "./decision-boundary-plot";
 export type { DecisionBoundaryPayload } from "./decision-boundary-plot";
 
-export { reduceMatrix, renderValueMatrix } from "./mini-heatmap";
+export { isValueTile, reduceMatrix, renderValueMatrix, renderValueTile } from "./mini-heatmap";
 export type {
   RenderValueMatrixOptions,
   ValueMatrixLayout,
   ValueMatrixPalette,
+  ValueTile,
 } from "./mini-heatmap";
 
 export {

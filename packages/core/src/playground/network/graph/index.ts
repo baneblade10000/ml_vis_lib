@@ -33,11 +33,13 @@ export {
 export {
   computeGraphBoundaries,
   initGraphBoundaryStore,
+  sampleGraphBoundaryTiles,
   updateGraphBoundaries,
   updateGraphHiddenBoundaries,
   updateGraphInputFeatures,
   updateGraphOutputBoundary,
 } from "./boundary";
+export type { BoundaryTile, BoundaryTileStore } from "./boundary";
 
 export {
   initGraphCurveStore,

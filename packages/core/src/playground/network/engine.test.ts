@@ -4,6 +4,8 @@ import { boundaryToGridPoints, computeBoundaries } from "./boundary";
 import { valueToRgb, valueToRgbZeroWhite, PALETTE_HIGH, PALETTE_LOW, PALETTE_MID, PALETTE_ZERO_WHITE } from "./colors";
 import { CURVE_DENSITY, DENSITY, HEATMAP_PRESETS, NODE_BOUNDARY_DENSITY, PLAY_BOUNDARY_STRIDE, PLAY_DISPLAY_DENSITY } from "./constants";
 import { PlaygroundEngine } from "./engine";
+import { forwardPropGraph } from "./graph";
+import { constructInput } from "./inputs";
 import { Activations } from "./nn";
 
 describe("PlaygroundEngine", () => {
@@ -301,5 +303,64 @@ describe("computeBoundaries", () => {
     const outputId = engine.outputNodeId;
     expect(boundary[outputId].length).toBe(20);
     expect(boundary[outputId][0].length).toBe(20);
+  });
+});
+
+describe("sampleBoundaryTiles", () => {
+  it("returns play-density Float32 tiles for output and hidden nodes, skipping input features", () => {
+    const engine = new PlaygroundEngine({ networkShape: [3], numHiddenLayers: 1 });
+    const preset = engine.heatmap();
+    const tiles = engine.sampleBoundaryTiles();
+    const outputId = engine.graph.outputId;
+
+    expect(tiles[outputId]).toBeDefined();
+    expect(tiles[outputId]!.res).toBe(preset.playOutput);
+    expect(tiles[outputId]!.data.length).toBe(preset.playOutput ** 2);
+
+    const hiddenIds = [...engine.graph.nodes.keys()].filter(
+      (id) => id !== outputId && engine.graph.nodes.get(id)?.kind !== "input",
+    );
+    expect(hiddenIds.length).toBeGreaterThan(0);
+    for (const id of hiddenIds) {
+      expect(tiles[id]).toBeDefined();
+      expect(tiles[id]!.res).toBe(preset.playHidden);
+      expect(tiles[id]!.data.length).toBe(preset.playHidden ** 2);
+    }
+    // Input-feature nodes have no tiles — their surfaces are static in Play.
+    for (const id of engine.graph.inputIds) {
+      expect(tiles[id]).toBeUndefined();
+    }
+  });
+
+  it("matches forward-prop values at the sampled grid points", () => {
+    const engine = new PlaygroundEngine({ networkShape: [3], numHiddenLayers: 1 });
+    const tiles = engine.sampleBoundaryTiles();
+    const outputId = engine.graph.outputId;
+    const res = tiles[outputId]!.res;
+
+    // Corner + center samples, using the same domain mapping as the sampler.
+    const domain: [number, number] = [-6, 6];
+    const toX = (i: number) => domain[0] + (i / (res - 1)) * (domain[1] - domain[0]);
+    const toY = (j: number) => domain[1] - (j / (res - 1)) * (domain[1] - domain[0]);
+    for (const [i, j] of [
+      [0, 0],
+      [res - 1, res - 1],
+      [Math.floor(res / 2), Math.floor(res / 2)],
+    ]) {
+      const input = constructInput(toX(i), toY(j), engine.config.enabledFeatures);
+      forwardPropGraph(engine.graph, input, false);
+      // Float32 tile storage → ~7 significant digits.
+      expect(tiles[outputId]!.data[i! * res + j!]).toBeCloseTo(
+        engine.graph.getOutputNode().output,
+        6,
+      );
+    }
+  });
+
+  it("does not mutate the paused-size boundary store", () => {
+    const engine = new PlaygroundEngine({ networkShape: [3], numHiddenLayers: 1 });
+    const before = structuredClone(engine.boundary);
+    engine.sampleBoundaryTiles();
+    expect(engine.boundary).toEqual(before);
   });
 });

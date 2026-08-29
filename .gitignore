@@ -58,3 +58,6 @@ Thumbs.db
 *.log
 .cache/
 .vite/
+
+# Standalone project with its own git history (add as submodule or merge separately).
+multilayer-perceptron/

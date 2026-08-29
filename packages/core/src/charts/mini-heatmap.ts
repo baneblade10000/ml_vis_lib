@@ -47,6 +47,20 @@ const imageDataCache = new WeakMap<
   { w: number; h: number; image: ImageData }
 >();
 
+/**
+ * Square value raster as a flat Float32Array — same `[x][y]` indexing as the
+ * col-major matrices above (`data[x * res + y]`), but transferable between
+ * worker and main thread without structural-cloning boxed nested arrays.
+ */
+export interface ValueTile {
+  res: number;
+  data: Float32Array;
+}
+
+export function isValueTile(matrix: number[][] | ValueTile): matrix is ValueTile {
+  return !Array.isArray(matrix);
+}
+
 export type ValueMatrixLayout = "col-major" | "row-major";
 /** `diverging` = deep blue→sky cyan; `diverging-zero-white` = same with white at 0; `gray` = black→white. */
 export type ValueMatrixPalette = "diverging" | "diverging-zero-white" | "gray";
@@ -174,6 +188,49 @@ export function renderValueMatrix(
       image.data[++p] = g;
       image.data[++p] = b;
       image.data[++p] = alpha;
+    }
+  }
+  context.putImageData(image, 0, 0);
+}
+
+/**
+ * Render a flat Float32Array tile (see {@link ValueTile}) to a canvas.
+ * Equivalent to `renderValueMatrix(canvas, tileAsColMajorMatrix, discretize)`
+ * but without boxing the raster into nested arrays.
+ */
+export function renderValueTile(
+  canvas: HTMLCanvasElement,
+  tile: ValueTile,
+  discretize = false,
+): void {
+  const res = tile.res;
+  if (res <= 0 || tile.data.length < res * res) return;
+  if (canvas.width !== res || canvas.height !== res) {
+    canvas.width = res;
+    canvas.height = res;
+    imageDataCache.delete(canvas);
+  }
+  const context = canvas.getContext("2d");
+  if (!context) return;
+
+  let cached = imageDataCache.get(canvas);
+  if (!cached || cached.w !== res || cached.h !== res) {
+    cached = { w: res, h: res, image: context.createImageData(res, res) };
+    imageDataCache.set(canvas, cached);
+  }
+  const image = cached.image;
+
+  for (let y = 0, p = -1; y < res; y++) {
+    for (let x = 0; x < res; x++) {
+      let value = tile.data[x * res + y]!;
+      if (discretize) {
+        value = value >= 0 ? 1 : -1;
+      }
+      const { r, g, b } = valueToRgb(value);
+      image.data[++p] = r;
+      image.data[++p] = g;
+      image.data[++p] = b;
+      image.data[++p] = 255;
     }
   }
   context.putImageData(image, 0, 0);

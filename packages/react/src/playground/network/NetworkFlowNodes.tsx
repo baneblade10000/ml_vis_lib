@@ -24,7 +24,7 @@ import {
   NetworkVizModeContext,
   TrainingLiveRefContext,
 } from "./NetworkBoundaryContext";
-import { registerBoundaryPainter } from "./boundaryPaint";
+import { registerBoundaryPainter, getLiveBoundaryTile } from "./boundaryPaint";
 import { WeightMatrixFlowNode } from "./NetworkWeightMatrixNode";
 
 
@@ -74,7 +74,8 @@ function NodeHeatmap({
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
     const heatmap = heatmapRef.current;
-    const matrix = boundaryRef?.current?.[nodeId];
+    // Live worker tick tiles win over the paused-size engine store.
+    const matrix = getLiveBoundaryTile(nodeId) ?? boundaryRef?.current?.[nodeId];
     if (!canvas || !heatmap || !matrix) return;
     const live = trainingLiveRef?.current ?? false;
     paintHeatmapCanvas(

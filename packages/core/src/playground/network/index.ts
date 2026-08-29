@@ -132,10 +132,13 @@ export {
   normalizeGraphLayout,
   PALETTE_NODE_KINDS,
   presetLabel,
+  sampleGraphBoundaryTiles,
   updateGraphCurves,
   updateWeightsGraph,
 } from "./graph";
 export type {
+  BoundaryTile,
+  BoundaryTileStore,
   GraphEdgeDef,
   GraphSnapshot,
   PaletteNodeKind,

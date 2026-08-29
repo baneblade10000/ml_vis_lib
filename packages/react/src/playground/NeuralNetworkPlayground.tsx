@@ -15,7 +15,12 @@ import {
   type NetworkTrainSnapshot,
 } from "@ml-vis/core/network";
 import { createNetworkTrainWorker } from "@ml-vis/core/workers/createWorkers";
-import { paintAllBoundaries, paintAllBoundariesAfterCommit, paintBoundaryNode } from "./network/boundaryPaint";
+import {
+  paintAllBoundaries,
+  paintAllBoundariesAfterCommit,
+  paintBoundaryNode,
+  setLiveBoundaryTiles,
+} from "./network/boundaryPaint";
 import type { CurveStore, TrainingStats } from "./network/NetworkBoundaryContext";
 import type { EdgeVizMode, LayoutVizMode } from "./network/graphAdapter";
 import { useNetworkMessages } from "./network/messages";
@@ -82,6 +87,10 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   const topologyEpochRef = useRef(0);
   const syncedTopologyEpochRef = useRef(0);
   const rebuildPromiseRef = useRef<Promise<void> | null>(null);
+  /** Rebuild reason folded into one trailing message while another is in flight. */
+  const queuedSyncRef = useRef<"topology" | "dataset" | "reset" | "resetWeights" | "mode" | null>(null);
+  /** Debounce timer for collapsing rapid topology edits into one worker rebuild. */
+  const syncDebounceRef = useRef<number | null>(null);
   /** True after Play is sent to the worker, until the first live frame is on screen. */
   const awaitingFirstPlayPaintRef = useRef(false);
 
@@ -109,6 +118,8 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
         return;
       }
       engine.applyWorkerViz(snap);
+      // Play ticks carry transferred tiles; full snapshots restore the store.
+      setLiveBoundaryTiles(snap.boundaryTiles ?? null);
       boundaryRef.current = engine.boundary;
       curvesRef.current = engine.curves;
       targetCurveRef.current = engine.targetCurve;
@@ -166,24 +177,35 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
       });
     return () => {
       client.dispose();
+      if (syncDebounceRef.current !== null) {
+        window.clearTimeout(syncDebounceRef.current);
+        syncDebounceRef.current = null;
+      }
       trainClientRef.current = null;
       trainReadyRef.current = null;
     };
   }, [applyNetworkTick, workerPayload]);
 
-  const syncWorkerFromMain = useCallback(
-    (reason: "topology" | "dataset" | "reset" | "resetWeights" | "mode" = "topology") => {
+  const startRebuild = useCallback(
+    (reason: "topology" | "dataset" | "reset" | "resetWeights" | "mode"): Promise<void> => {
       const client = trainClientRef.current;
       if (!client) {
         syncedTopologyEpochRef.current = topologyEpochRef.current;
         return Promise.resolve();
       }
       const epochAtStart = topologyEpochRef.current;
-      const p = client.rebuild(reason, workerPayload()).then(() => {
+      const p: Promise<void> = client.rebuild(reason, workerPayload()).then(() => {
         if (rebuildPromiseRef.current === p) rebuildPromiseRef.current = null;
         // Only mark synced if no newer edit landed while we waited.
         if (topologyEpochRef.current === epochAtStart) {
           syncedTopologyEpochRef.current = epochAtStart;
+        }
+        // Fold edits that landed mid-rebuild into one trailing rebuild —
+        // bursts of add-neuron clicks must not queue dozens of messages.
+        if (queuedSyncRef.current) {
+          const queued = queuedSyncRef.current;
+          queuedSyncRef.current = null;
+          return startRebuild(queued);
         }
       });
       rebuildPromiseRef.current = p;
@@ -192,24 +214,70 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     [workerPayload],
   );
 
-  /** Wait until worker matches main topology (and any in-flight rebuild finishes). */
+  const syncWorkerFromMain = useCallback(
+    (reason: "topology" | "dataset" | "reset" | "resetWeights" | "mode" = "topology") => {
+      if (syncDebounceRef.current !== null) {
+        window.clearTimeout(syncDebounceRef.current);
+        syncDebounceRef.current = null;
+      }
+      if (rebuildPromiseRef.current) {
+        queuedSyncRef.current = reason;
+        return rebuildPromiseRef.current;
+      }
+      return startRebuild(reason);
+    },
+    [startRebuild],
+  );
+
+  /**
+   * Debounced topology sync. A worker rebuild costs seconds at large
+   * topologies (full-res boundary + shard pool respawn), so a burst of
+   * add-neuron clicks must collapse into one trailing rebuild — otherwise the
+   * serialized worker queue backs up and Play waits minutes to start.
+   */
+  const scheduleWorkerSync = useCallback(
+    (reason: "topology" | "dataset" | "reset" | "resetWeights" | "mode" = "topology") => {
+      if (syncDebounceRef.current !== null) window.clearTimeout(syncDebounceRef.current);
+      syncDebounceRef.current = window.setTimeout(() => {
+        syncDebounceRef.current = null;
+        void syncWorkerFromMain(reason);
+      }, 250);
+    },
+    [syncWorkerFromMain],
+  );
+
+  /** Wait until worker matches main topology and the rebuild chain is drained. */
   const ensureWorkerSynced = useCallback(async () => {
-    if (syncedTopologyEpochRef.current !== topologyEpochRef.current) {
-      await syncWorkerFromMain("topology");
-    } else if (rebuildPromiseRef.current) {
-      await rebuildPromiseRef.current;
+    for (;;) {
+      if (syncDebounceRef.current !== null) {
+        window.clearTimeout(syncDebounceRef.current);
+        syncDebounceRef.current = null;
+        await startRebuild("topology");
+        continue;
+      }
+      if (syncedTopologyEpochRef.current !== topologyEpochRef.current) {
+        await syncWorkerFromMain("topology");
+        continue;
+      }
+      if (rebuildPromiseRef.current) {
+        await rebuildPromiseRef.current;
+        continue;
+      }
+      return;
     }
-  }, [syncWorkerFromMain]);
+  }, [startRebuild, syncWorkerFromMain]);
 
   /** Topology edits on main must rebuild the train worker or ticks desync heatmaps. */
   const afterTopologyEdit = useCallback(() => {
     topologyEpochRef.current += 1;
     setPlaying(false);
+    // Stale tiles would keep painting the pre-edit network on new node ids.
+    setLiveBoundaryTiles(null);
     syncRuntimeRefs();
     requestPaint();
     bump();
     if (trainClientRef.current) {
-      void syncWorkerFromMain("topology");
+      scheduleWorkerSync("topology");
       return;
     }
     const epoch = topologyEpochRef.current;
@@ -219,7 +287,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
       syncRuntimeRefs();
       requestPaint();
     }, 0);
-  }, [bump, requestPaint, syncRuntimeRefs, syncWorkerFromMain]);
+  }, [bump, requestPaint, scheduleWorkerSync, syncRuntimeRefs]);
 
   // Play/pause → worker owns trainEpoch; display engine only applies ticks.
   useEffect(() => {
@@ -309,6 +377,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     engineRef.current.resetToInitial();
     topologyEpochRef.current += 1;
     setPlaying(false);
+    setLiveBoundaryTiles(null);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setRefitViewKey((n) => n + 1);
@@ -321,6 +390,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
   const resetWeights = () => {
     engineRef.current.resetWeights();
     setPlaying(false);
+    setLiveBoundaryTiles(null);
     syncRuntimeRefs();
     syncWorkerFromMain("resetWeights");
     requestPaint();
@@ -372,6 +442,7 @@ export function NeuralNetworkPlayground({ initialConfig, toolbarStart, toolbarEn
     engineRef.current.setWeightInit(weightInit);
     topologyEpochRef.current += 1;
     setPlaying(false);
+    setLiveBoundaryTiles(null);
     syncRuntimeRefs();
     syncWorkerFromMain("resetWeights");
     requestPaint();

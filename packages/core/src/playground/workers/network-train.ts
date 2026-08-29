@@ -1,7 +1,12 @@
 /// <reference lib="webworker" />
 import { PlaygroundEngine, type NetworkPlaygroundConfig } from "../network/engine";
 import type { GraphSnapshot } from "../network/graph/types";
-import type { FromTrainWorker, NetworkTrainSnapshot, ToTrainWorker } from "./protocol";
+import {
+  snapshotTransferables,
+  type FromTrainWorker,
+  type NetworkTrainSnapshot,
+  type ToTrainWorker,
+} from "./protocol";
 import { createPlayLoop } from "./runPlayLoop";
 import { ShardPool } from "./ShardPool";
 
@@ -12,6 +17,11 @@ let play: ReturnType<typeof createPlayLoop> | null = null;
 let pool: ShardPool | null = null;
 
 function post(msg: FromTrainWorker): void {
+  if ("snapshot" in msg && msg.snapshot) {
+    // Move tile buffers instead of cloning them (Play hot path).
+    self.postMessage(msg, snapshotTransferables(msg.snapshot));
+    return;
+  }
   self.postMessage(msg);
 }
 
@@ -37,15 +47,24 @@ function clonePoints(points: Array<{ x: number; y: number; label: number }>) {
   return points.map((p) => ({ x: p.x, y: p.y, label: p.label }));
 }
 
-function buildSnapshot(e: PlaygroundEngine, fullBoundary: boolean): NetworkTrainSnapshot {
+function buildSnapshot(
+  e: PlaygroundEngine,
+  fullBoundary: boolean,
+  /** Skip the full-res boundary sweep when the caller just refreshed it. */
+  skipBoundaryRefresh = false,
+): NetworkTrainSnapshot {
   if (fullBoundary) {
     e.refreshMetrics();
-    e.refreshBoundary();
+    if (!skipBoundaryRefresh) e.refreshBoundary();
   } else {
     e.lossTrain = e.getLoss(e.trainData);
     e.lossTest = e.getLoss(e.testData);
-    e.refreshOutputBoundaryFast();
-    e.refreshHiddenBoundariesFast();
+    if (e.config.dataMode !== "2d") {
+      // 1D curves are small — keep the store-based fast path. 2D play ticks
+      // sample fresh tiles below (transferred, not cloned).
+      e.refreshOutputBoundaryFast();
+      e.refreshHiddenBoundariesFast();
+    }
   }
   e.pushLossHistory();
   const snapshot: NetworkTrainSnapshot = {
@@ -55,16 +74,18 @@ function buildSnapshot(e: PlaygroundEngine, fullBoundary: boolean): NetworkTrain
     lossTrain: e.lossTrain,
     lossTest: e.lossTest,
     lossHistory: e.lossHistory.map((p) => ({ ...p })),
-    boundary: e.boundary,
     curves: e.curves,
     targetCurve: e.targetCurve,
     graphSnapshot: e.graph.toSnapshot(),
   };
-  // Heavy data arrays only on full snapshots — the main engine already owns
-  // them, so sending them on every paint tick (≤30 Hz) was pure clone waste.
   if (fullBoundary) {
+    snapshot.boundary = e.boundary;
+    // Heavy data arrays only on full snapshots — the main engine already owns
+    // them, so sending them on every paint tick (≤30 Hz) was pure clone waste.
     snapshot.trainData = clonePoints(e.trainData);
     snapshot.testData = clonePoints(e.testData);
+  } else if (e.config.dataMode === "2d") {
+    snapshot.boundaryTiles = e.sampleBoundaryTiles();
   }
   return snapshot;
 }
@@ -131,6 +152,7 @@ function ensurePlay(): ReturnType<typeof createPlayLoop> {
   return play;
 }
 
+/** @returns true when the engine's viz buffers were left fully refreshed. */
 function initFromPayload(
   payload: {
     config: NetworkPlaygroundConfig;
@@ -139,18 +161,18 @@ function initFromPayload(
     testData?: Array<{ x: number; y: number; label: number }>;
   },
   options?: { resetTraining?: boolean },
-): void {
+): boolean {
   play?.stop();
   const config = structuredClone(payload.config);
   if (!engine) {
     engine = new PlaygroundEngine(config);
-  } else {
-    engine.config = {
-      ...config,
-      networkShape: [...config.networkShape],
-      enabledFeatures: { ...config.enabledFeatures },
-    };
+    return true;
   }
+  engine.config = {
+    ...config,
+    networkShape: [...config.networkShape],
+    enabledFeatures: { ...config.enabledFeatures },
+  };
   if (payload.graphSnapshot) {
     // Rebuild boundary/curve stores for the snapshot node ids — swapping the
     // graph without this leaves heatmaps keyed to the bootstrap topology and
@@ -160,12 +182,16 @@ function initFromPayload(
       testData: payload.testData,
       resetTraining: options?.resetTraining,
     });
-  } else if (payload.trainData?.length) {
+    return true;
+  }
+  if (payload.trainData?.length) {
     engine.trainData = clonePoints(payload.trainData);
     if (payload.testData?.length) engine.testData = clonePoints(payload.testData);
     engine.refreshMetrics();
     engine.refreshBoundary();
+    return true;
   }
+  return false;
 }
 
 async function handleMessage(msg: ToTrainWorker): Promise<void> {
@@ -173,9 +199,11 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
     case "init": {
       pool?.dispose();
       pool = null;
-      initFromPayload(msg.config as { config: NetworkPlaygroundConfig; graphSnapshot?: GraphSnapshot });
+      const initRefreshed = initFromPayload(
+        msg.config as { config: NetworkPlaygroundConfig; graphSnapshot?: GraphSnapshot },
+      );
       await syncPool();
-      post({ type: "ready", snapshot: buildSnapshot(engine!, true) });
+      post({ type: "ready", snapshot: buildSnapshot(engine!, true, initRefreshed) });
       break;
     }
     case "setConfig": {
@@ -194,17 +222,21 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
         msg.reason === "reset" ||
         msg.reason === "resetWeights" ||
         msg.reason === "mode";
+      // initFromPayload / reset paths leave viz buffers freshly computed —
+      // skipping the second full-res sweep halves rebuild latency.
+      let vizRefreshed = false;
       if (msg.reason === "reset" || msg.reason === "resetWeights") {
         const payload = msg.payload as
           | { config: NetworkPlaygroundConfig; graphSnapshot?: GraphSnapshot }
           | undefined;
-        if (payload) initFromPayload(payload, { resetTraining: true });
+        if (payload) vizRefreshed = initFromPayload(payload, { resetTraining: true });
         else if (engine) {
           if (msg.reason === "reset") engine.resetToInitial();
           else engine.resetWeights();
+          vizRefreshed = true;
         }
       } else if (msg.payload) {
-        initFromPayload(
+        vizRefreshed = initFromPayload(
           msg.payload as { config: NetworkPlaygroundConfig; graphSnapshot?: GraphSnapshot },
           { resetTraining },
         );
@@ -213,7 +245,7 @@ async function handleMessage(msg: ToTrainWorker): Promise<void> {
       }
       await syncPool();
       if (engine) {
-        const snapshot = buildSnapshot(engine, true);
+        const snapshot = buildSnapshot(engine, true, vizRefreshed);
         post({ type: "tick", snapshot });
         post({ type: "rebuilt", reason: msg.reason, snapshot });
       }

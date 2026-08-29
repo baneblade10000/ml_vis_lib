@@ -7,6 +7,7 @@ import type { CnnConfig, FeatureMapSnapshot, TrainingStats } from "../cnn/engine
 import type { LayerKind, LayerShape } from "../cnn/layers/base";
 import type { ImageExample, SignalExample } from "../cnn/gallery";
 import type { LossHistoryPoint, NetworkPlaygroundConfig } from "../network/engine";
+import type { BoundaryTile } from "../network/graph";
 import type { PlaygroundConfig, PlaygroundPayload } from "../types";
 
 export type TrainRebuildReason = "topology" | "dataset" | "reset" | "resetWeights" | "mode";
@@ -43,8 +44,18 @@ export interface NetworkTrainSnapshot {
   lossTrain: number;
   lossTest: number;
   lossHistory: LossHistoryPoint[];
-  /** Node id → boundary heatmap matrix. */
-  boundary: Record<string, number[][]>;
+  /**
+   * Paused-size node heatmaps — only sent on full snapshots
+   * (ready/rebuilt/pause/step). Play ticks send {@link boundaryTiles} instead:
+   * a full-store structural clone per tick was the dominant cost of Play.
+   */
+  boundary?: Record<string, number[][]>;
+  /**
+   * Play-density tiles (2D), transferred zero-copy on play ticks. Keyed like
+   * {@link boundary}; input-feature nodes are absent (their surfaces are
+   * static while training).
+   */
+  boundaryTiles?: Record<string, BoundaryTile>;
   /** Node id → activation curve samples. */
   curves: Record<string, number[]>;
   targetCurve: number[] | null;
@@ -85,3 +96,11 @@ export type FromTrainWorker =
   | { type: "tick"; snapshot: TrainSnapshot }
   | { type: "rebuilt"; reason: TrainRebuildReason; snapshot: TrainSnapshot }
   | { type: "error"; message: string };
+
+/** Buffers inside a snapshot that should move (not copy) across postMessage. */
+export function snapshotTransferables(snapshot: TrainSnapshot): Transferable[] {
+  if (snapshot.kind !== "network" || !snapshot.boundaryTiles) return [];
+  return Object.values(snapshot.boundaryTiles)
+    .map((tile: BoundaryTile) => tile.data.buffer)
+    .filter((buffer): buffer is ArrayBuffer => buffer.byteLength > 0);
+}

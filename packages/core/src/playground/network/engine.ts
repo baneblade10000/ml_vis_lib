@@ -51,6 +51,7 @@ import {
   GraphNode,
   initGraphBoundaryStore,
   initGraphCurveStore,
+  sampleGraphBoundaryTiles,
   updateGraphBoundaries,
   updateGraphCurves,
   updateGraphHiddenBoundaries,
@@ -60,6 +61,7 @@ import {
   updateGraphOutputCurve,
   updateWeightsGraph,
   type ArchitecturePresetId,
+  type BoundaryTileStore,
   type GraphNodeKind,
   type GraphPosition,
 } from "./graph";
@@ -365,7 +367,8 @@ export class PlaygroundEngine {
     lossTrain: number;
     lossTest: number;
     lossHistory: LossHistoryPoint[];
-    boundary: Record<string, number[][]>;
+    /** Paused-size store — present on full snapshots only (pause/step/rebuild). */
+    boundary?: Record<string, number[][]>;
     curves: Record<string, number[]>;
     targetCurve: number[] | null;
     graphSnapshot: import("./graph/types").GraphSnapshot;
@@ -376,9 +379,9 @@ export class PlaygroundEngine {
     this.lossTrain = payload.lossTrain;
     this.lossTest = payload.lossTest;
     this.lossHistory = payload.lossHistory.map((p) => ({ ...p }));
-    // Only adopt viz buffers when they cover the live output node — a stale
-    // worker tick after addNeuron would otherwise blank the heatmaps.
-    if (payload.boundary[this.graph.outputId]) {
+    // Full snapshots carry the paused-size store; Play ticks send transfer
+    // tiles instead (handled by the UI layer) and must not clobber it.
+    if (payload.boundary && payload.boundary[this.graph.outputId]) {
       this.boundary = payload.boundary;
     }
     this.curves = payload.curves;
@@ -607,6 +610,23 @@ export class PlaygroundEngine {
       this.boundary,
       this.graph.outputId,
       preset.playHidden,
+    );
+  }
+
+  /**
+   * Play-quality boundary tiles (2D) as fresh Float32Arrays — no store
+   * mutation, ready for a zero-copy transfer to the UI thread. Callers that
+   * need the paused-size store should use {@link refreshBoundary} instead.
+   */
+  sampleBoundaryTiles(): BoundaryTileStore {
+    const validation = this.graph.validate();
+    if (!validation.valid) return {};
+    const preset = this.heatmap();
+    return sampleGraphBoundaryTiles(
+      this.graph,
+      this.config.enabledFeatures,
+      this.graph.outputId,
+      { playOutput: preset.playOutput, playHidden: preset.playHidden },
     );
   }
 

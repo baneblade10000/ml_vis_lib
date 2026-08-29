@@ -4,6 +4,10 @@ import { forwardPropGraph, forEachGraphNode, type ComputationalGraph } from "./c
 
 export type BoundaryDensities = { output: number; hidden: number };
 
+/** Live play raster for one node: `data[x * res + y]` over the input grid. */
+export type BoundaryTile = { res: number; data: Float32Array };
+export type BoundaryTileStore = Record<string, BoundaryTile>;
+
 function scaleLinear(domain: [number, number], range: [number, number], value: number): number {
   const [d0, d1] = domain;
   const [r0, r1] = range;
@@ -219,4 +223,61 @@ export function updateGraphOutputBoundary(
       }
     }
   }
+}
+
+/**
+ * Sample Play-density boundary tiles without touching the paused-size store.
+ *
+ * Same forward-prop sweeps as {@link updateGraphOutputBoundary} +
+ * {@link updateGraphHiddenBoundaries}, but values land in small Float32Arrays
+ * sized to the Play densities — ready for a zero-copy `postMessage` transfer
+ * and a canvas upscale, instead of a block-filled full-res nested-matrix clone.
+ * Input-feature nodes are skipped: their surfaces are static during training,
+ * so the UI keeps the full-resolution matrices from the last full snapshot.
+ */
+export function sampleGraphBoundaryTiles(
+  graph: ComputationalGraph,
+  activeInputs: Record<string, boolean>,
+  outputId: string,
+  dens: { playOutput: number; playHidden: number },
+  xDomain: [number, number] = X_DOMAIN,
+): BoundaryTileStore {
+  const tiles: BoundaryTileStore = {};
+  // forEachGraphNode(ignoreInputs=true): input-feature surfaces are static
+  // during training — the UI keeps their full-res matrices from full snapshots.
+  forEachGraphNode(graph, true, (node) => {
+    const res = node.id === outputId ? dens.playOutput : dens.playHidden;
+    tiles[node.id] = { res, data: new Float32Array(res * res) };
+  });
+  const outputTile = tiles[outputId];
+  if (outputTile) {
+    const density = outputTile.res;
+    const xScale = (i: number) => scaleLinear([0, density - 1], xDomain, i);
+    const yScale = (j: number) => scaleLinear([density - 1, 0], xDomain, j);
+    for (let i = 0; i < density; i++) {
+      for (let j = 0; j < density; j++) {
+        const input = constructInput(xScale(i), yScale(j), activeInputs);
+        forwardPropGraph(graph, input, false);
+        outputTile.data[i * density + j] = graph.getOutputNode().output;
+      }
+    }
+  }
+  const hidden = Object.entries(tiles).filter(([id]) => id !== outputId);
+  if (hidden.length > 0) {
+    const density = hidden[0]![1].res;
+    const xScale = (i: number) => scaleLinear([0, density - 1], xDomain, i);
+    const yScale = (j: number) => scaleLinear([density - 1, 0], xDomain, j);
+    for (let i = 0; i < density; i++) {
+      for (let j = 0; j < density; j++) {
+        const input = constructInput(xScale(i), yScale(j), activeInputs);
+        forwardPropGraph(graph, input, false);
+        forEachGraphNode(graph, true, (node) => {
+          if (node.id === outputId) return;
+          const tile = tiles[node.id];
+          if (tile) tile.data[i * density + j] = node.output;
+        });
+      }
+    }
+  }
+  return tiles;
 }

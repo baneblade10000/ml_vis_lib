@@ -1,4 +1,10 @@
-import { reduceMatrix, renderValueMatrix } from "@ml-vis/core/charts";
+import {
+  isValueTile,
+  reduceMatrix,
+  renderValueMatrix,
+  renderValueTile,
+  type ValueTile,
+} from "@ml-vis/core/charts";
 import {
   CLASS_0_HEX,
   CLASS_1_HEX,
@@ -93,7 +99,7 @@ export function paintTrainOverlay(
 export function paintHeatmapCanvas(
   canvas: HTMLCanvasElement,
   heatmap: HTMLCanvasElement,
-  matrix: number[][],
+  matrix: number[][] | ValueTile,
   size: number,
   discretize: boolean,
   smooth: boolean,
@@ -103,8 +109,13 @@ export function paintHeatmapCanvas(
 ): void {
   const px = size - 6;
   const mini = coarseTo !== undefined;
-  const reduced = matrixForDisplay(matrix, px, coarseTo, live, playOutput);
-  renderValueMatrix(heatmap, reduced, discretize);
+  if (isValueTile(matrix)) {
+    // Play tick tile: already play-sized — render and let drawImage upscale.
+    renderValueTile(heatmap, matrix, discretize);
+  } else {
+    const reduced = matrixForDisplay(matrix, px, coarseTo, live, playOutput);
+    renderValueMatrix(heatmap, reduced, discretize);
+  }
 
   const dpr = mini ? 1 : window.devicePixelRatio || 1;
   const ctx = ensureCanvasSize(canvas, px, dpr);
