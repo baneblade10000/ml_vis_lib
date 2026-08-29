@@ -1,0 +1,7 @@
+[package.metadata.wasm-pack.profile.release]
+# Additional optimization flags for wasm-pack
+wasm-opt = ["-Os", "--enable-mutable-globals", "--enable-bulk-memory", "--enable-reference-types"]
+
+[package.metadata.wasm-pack.profile.dev]
+# Development build settings
+wasm-opt = false
