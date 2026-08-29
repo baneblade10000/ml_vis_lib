@@ -2,8 +2,8 @@
 /**
  * Grad shard — own Rust WasmCnnEngine (CPU). Parent fans out batch indices.
  */
-import init, { WasmCnnEngine } from "./pkg/cnn_burn.js";
-import wasmUrl from "./pkg/cnn_burn_bg.wasm?url";
+import init, { WasmCnnEngine } from "./pkg/cnn.js";
+import wasmUrl from "./pkg/cnn_bg.wasm?url";
 
 declare const self: DedicatedWorkerGlobalScope;
 

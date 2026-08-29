@@ -1,6 +1,6 @@
 /**
  * Lightweight tensor types for gallery datasets / UI.
- * Training tensors live in Burn WASM.
+ * Training tensors live in CNN WASM.
  */
 
 /** One channel of a 2-D feature map: `map[row][col]`. */

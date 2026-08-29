@@ -1,23 +1,23 @@
-/** Lazy-load Burn CNN WASM with download progress (demo dock / tooling). */
+/** Lazy-load CNN WASM with download progress (demo dock / tooling). */
 
-import type { WasmCnnEngine as WasmCnnEngineType } from "./pkg/cnn_burn";
+import type { WasmCnnEngine as WasmCnnEngineType } from "./pkg/cnn";
 
-export type BurnLoadPhase = "idle" | "fetch" | "compile" | "ready" | "error";
+export type WasmLoadPhase = "idle" | "fetch" | "compile" | "ready" | "error";
 
-export interface BurnLoadProgress {
-  phase: BurnLoadPhase;
+export interface WasmLoadProgress {
+  phase: WasmLoadPhase;
   loaded: number;
   total: number;
   ratio: number | null;
   error?: string;
 }
 
-export interface BurnCnnModule {
+export interface CnnWasmModule {
   WasmCnnEngine: new (config_json: string) => WasmCnnEngineType;
   default: (moduleOrBytes?: Response | BufferSource | WebAssembly.Module) => Promise<unknown>;
 }
 
-let cached: Promise<BurnCnnModule> | null = null;
+let cached: Promise<CnnWasmModule> | null = null;
 
 function concatChunks(chunks: Uint8Array[], totalLen: number): Uint8Array {
   const out = new Uint8Array(totalLen);
@@ -30,19 +30,19 @@ function concatChunks(chunks: Uint8Array[], totalLen: number): Uint8Array {
 }
 
 function wasmAssetUrl(): string {
-  return new URL("./pkg/cnn_burn_bg.wasm", import.meta.url).href;
+  return new URL("./pkg/cnn_bg.wasm", import.meta.url).href;
 }
 
-export function loadBurnCnn(
-  onProgress?: (p: BurnLoadProgress) => void,
-): Promise<BurnCnnModule> {
+export function loadCnnWasm(
+  onProgress?: (p: WasmLoadProgress) => void,
+): Promise<CnnWasmModule> {
   if (cached) return cached;
 
   cached = (async () => {
     onProgress?.({ phase: "fetch", loaded: 0, total: 0, ratio: null });
     const res = await fetch(wasmAssetUrl());
     if (!res.ok) {
-      const err = `Failed to fetch Burn WASM (${res.status})`;
+      const err = `Failed to fetch CNN WASM (${res.status})`;
       onProgress?.({ phase: "error", loaded: 0, total: 0, ratio: null, error: err });
       throw new Error(err);
     }
@@ -74,7 +74,7 @@ export function loadBurnCnn(
       total: bytes.byteLength,
       ratio: 1,
     });
-    const mod = (await import("./pkg/cnn_burn.js")) as unknown as BurnCnnModule;
+    const mod = (await import("./pkg/cnn.js")) as unknown as CnnWasmModule;
     await mod.default(bytes);
     onProgress?.({
       phase: "ready",

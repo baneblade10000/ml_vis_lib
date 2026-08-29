@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /**
  * Legacy JS CNN worker — disabled.
- * Playground uses Burn WASM via `packages/playground/src/burn/cnnTrainWorker.ts`.
+ * Playground uses CNN WASM via `packages/playground/src/wasm/cnn/cnnTrainWorker.ts`.
  */
 import type { FromTrainWorker, ToTrainWorker } from "./protocol";
 
@@ -12,7 +12,7 @@ self.onmessage = (ev: MessageEvent<ToTrainWorker>) => {
   const out: FromTrainWorker = {
     type: "error",
     message:
-      "JS CNN train worker removed. Use createBurnCnnTrainWorker() from the playground (Burn WASM).",
+      "JS CNN train worker removed. Use createCnnTrainWorker() from the playground app (CNN WASM).",
   };
   if (msg.type !== "dispose") self.postMessage(out);
 };

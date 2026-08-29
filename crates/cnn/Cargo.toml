@@ -1,5 +1,5 @@
 [package]
-name = "cnn_burn"
+name = "cnn"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
@@ -10,7 +10,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "cnn_burn_smoke"
+name = "cnn_smoke"
 path = "src/bin/smoke.rs"
 
 [features]

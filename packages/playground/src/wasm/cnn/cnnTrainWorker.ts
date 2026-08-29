@@ -5,8 +5,8 @@
  */
 import { DEFAULT_CNN_CONFIG, SIGNAL_LENGTH, imageSizeForDataset, makeImageDataset, makeSignalDataset, type CnnConfig, type CnnDatasetId2D, type CnnTrainSnapshot, type ImageExample, type SignalExample } from "@ml-vis/core/cnn";
 import { type FromTrainWorker, type ToTrainWorker } from "@ml-vis/core/workers";
-import init, { WasmCnnEngine } from "./pkg/cnn_burn.js";
-import wasmUrl from "./pkg/cnn_burn_bg.wasm?url";
+import init, { WasmCnnEngine } from "./pkg/cnn.js";
+import wasmUrl from "./pkg/cnn_bg.wasm?url";
 
 declare const self: DedicatedWorkerGlobalScope;
 

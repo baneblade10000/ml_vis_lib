@@ -1,5 +1,5 @@
 /**
- * Type-safe wrapper around {@link TrainWorkerClient} for the CNN (Burn WASM) engine.
+ * Type-safe wrapper around {@link TrainWorkerClient} for the CNN (CNN WASM) engine.
  *
  * `TrainWorkerClient` is an intentionally untyped transport (the shared worker
  * protocol is engine-agnostic). This wrapper re-adds the per-engine types that
@@ -39,7 +39,7 @@ export interface CnnCommandArgs {
 }
 
 export interface CnnTrainClientOptions {
-  /** Factory for the train worker (Burn WASM). Required unless `client` is given. */
+  /** Factory for the train worker (CNN WASM). Required unless `client` is given. */
   createWorker?: () => Worker;
   /** Inject an existing transport (used by tests). */
   client?: TrainWorkerClient;

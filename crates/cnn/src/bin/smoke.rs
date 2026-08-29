@@ -1,9 +1,9 @@
 //! Native smoke for PlaygroundEngine (CPU / optional GPU).
 
-use cnn_burn::config::CnnConfig;
-use cnn_burn::engine::PlaygroundEngine;
-use cnn_burn::gpu::GpuContext;
-use cnn_burn::IMAGE_SIZE;
+use cnn::config::CnnConfig;
+use cnn::engine::PlaygroundEngine;
+use cnn::gpu::GpuContext;
+use cnn::IMAGE_SIZE;
 
 fn main() {
     let mut cfg = CnnConfig::default();

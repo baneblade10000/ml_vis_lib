@@ -48,7 +48,7 @@ export type {
   PoolKind,
 } from "./engine";
 
-// Train worker client + protocol types for the CNN engine (Burn WASM).
+// Train worker client + protocol types for the CNN engine (CNN WASM).
 // Re-exported here so CNN consumers depend on a single subpath.
 export { CnnTrainClient, canUseTrainWorkers } from "../workers";
 export type {

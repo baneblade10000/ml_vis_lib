@@ -1,6 +1,6 @@
 /**
  * CNN playground config + snapshot types.
- * Training / forward / backward live in Burn WASM (`packages/playground` burn worker).
+ * Training / forward / backward live in the CNN WASM crate (`packages/playground/src/wasm/cnn` worker).
  */
 import type { CnnDatasetId2D, CnnDatasetId1D } from "./gallery";
 import type { CnnActivationId } from "./activations";

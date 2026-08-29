@@ -3421,12 +3421,12 @@
   }
 }
 
-/* Burn WASM lazy dock */
+/* CNN WASM lazy dock */
 .viz-page--immersive {
   position: relative;
 }
 
-.burn-cnn-dock {
+.cnn-wasm-dock {
   position: absolute;
   right: 0.75rem;
   bottom: 0.75rem;
@@ -3445,68 +3445,68 @@
   color: var(--nn-text-secondary, #445);
 }
 
-.burn-cnn-dock__head {
+.cnn-wasm-dock__head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 0.5rem;
 }
 
-.burn-cnn-dock__title {
+.cnn-wasm-dock__title {
   font-size: 0.8125rem;
   color: var(--nn-text, #111);
 }
 
-.burn-cnn-dock__hint {
+.cnn-wasm-dock__hint {
   opacity: 0.7;
   font-size: 0.6875rem;
 }
 
-.burn-cnn-dock__progress {
+.cnn-wasm-dock__progress {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
 }
 
-.burn-cnn-dock__bar {
+.cnn-wasm-dock__bar {
   height: 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--nn-border, #ccd) 70%, transparent);
   overflow: hidden;
 }
 
-.burn-cnn-dock__bar-fill {
+.cnn-wasm-dock__bar-fill {
   height: 100%;
   border-radius: inherit;
   background: var(--nn-accent, #3b82f6);
   transition: width 120ms linear;
 }
 
-.burn-cnn-dock__meta {
+.cnn-wasm-dock__meta {
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
 }
 
-.burn-cnn-dock__actions {
+.cnn-wasm-dock__actions {
   display: flex;
   gap: 0.4rem;
   flex-wrap: wrap;
 }
 
-.burn-cnn-dock__stats {
+.cnn-wasm-dock__stats {
   margin: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.35rem;
 }
 
-.burn-cnn-dock__stats > div {
+.cnn-wasm-dock__stats > div {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
 }
 
-.burn-cnn-dock__stats dt {
+.cnn-wasm-dock__stats dt {
   margin: 0;
   font-size: 0.625rem;
   text-transform: uppercase;
@@ -3514,14 +3514,14 @@
   opacity: 0.7;
 }
 
-.burn-cnn-dock__stats dd {
+.cnn-wasm-dock__stats dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
   color: var(--nn-text, #111);
   font-weight: 600;
 }
 
-.burn-cnn-dock__error {
+.cnn-wasm-dock__error {
   margin: 0;
   color: #b42318;
   line-height: 1.35;

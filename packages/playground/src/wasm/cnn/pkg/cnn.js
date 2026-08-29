@@ -1,4 +1,4 @@
-/* @ts-self-types="./cnn_burn.d.ts" */
+/* @ts-self-types="./cnn.d.ts" */
 
 export class WasmCnnEngine {
     static __wrap(ptr) {
@@ -657,7 +657,7 @@ function __wbg_get_imports() {
     };
     return {
         __proto__: null,
-        "./cnn_burn_bg.js": import0,
+        "./cnn_bg.js": import0,
     };
 }
 
@@ -1006,7 +1006,7 @@ async function __wbg_init(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('cnn_burn_bg.wasm', import.meta.url);
+        module_or_path = new URL('cnn_bg.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 

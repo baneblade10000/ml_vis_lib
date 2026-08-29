@@ -1,6 +1,6 @@
 /**
  * Layer taxonomy + shape types for CNN UI / worker snapshots.
- * No forward/backward — compute is Burn WASM only.
+ * No forward/backward — compute is CNN WASM only.
  */
 
 export type LayerKind =

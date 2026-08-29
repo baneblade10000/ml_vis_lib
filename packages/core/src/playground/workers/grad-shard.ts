@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /**
  * Grad-shard worker: MLP / network replicas only.
- * CNN grads are Burn WASM — not sharded in JS.
+ * CNN grads are computed in WASM — not sharded in JS.
  */
 import { PlaygroundEngine, type NetworkPlaygroundConfig } from "../network/engine";
 import { ComputationalGraph } from "../network/graph/computational-graph";
@@ -42,7 +42,7 @@ self.onmessage = (ev: MessageEvent<ToGradShard>) => {
         if (kind === "cnn") {
           post({
             type: "error",
-            message: "CNN grad shards removed — use Burn WASM train worker.",
+            message: "CNN grad shards removed — use the CNN WASM train worker.",
           });
           break;
         }
@@ -86,7 +86,7 @@ self.onmessage = (ev: MessageEvent<ToGradShard>) => {
       }
       case "compute": {
         if (kind === "cnn") {
-          post({ type: "error", message: "CNN grad shards removed — use Burn WASM." });
+          post({ type: "error", message: "CNN grad shards removed — use the CNN WASM train worker." });
         } else if (kind === "network" && network) {
           network.loadParams(msg.weights);
           network.zeroGradAccumulators();
