@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/cnn_burn"]
+members = ["crates/cnn", "crates/transformer"]
 resolver = "2"
 
 # Release profile governs the Burn CNN WASM build (wasm-pack --release), which
@@ -8,6 +8,11 @@ resolver = "2"
 # (2026-08): "s" = 227KB / 95KB gzip, "3" = 270KB / 114KB gzip (+20%). Switch to
 # "3" only if a measured training-FPS win justifies the extra ~19KB gzip, since
 # the wasm is lazy-loaded with a progress bar (not on the initial-page critical path).
+# Tests are math-heavy (transformer training loops); unoptimized debug builds
+# are ~10x slower. opt-level for the test profile only — dev binaries unchanged.
+[profile.test]
+opt-level = 2
+
 [profile.release]
 lto = true
 opt-level = "s"

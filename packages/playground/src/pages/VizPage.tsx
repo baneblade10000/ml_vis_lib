@@ -4,9 +4,11 @@ import {
   ComputationalGraphPlayground,
   ConvolutionalNetworkPlayground,
   NeuralNetworkPlayground,
+  TransformerPlayground,
   useI18n,
 } from "@ml-vis/react";
-import { createBurnCnnTrainWorker } from "../burn/createBurnCnnTrainWorker";
+import { createCnnTrainWorker } from "../wasm/cnn/createCnnTrainWorker";
+import { createTransformerTrainWorker } from "../wasm/transformer/createTransformerTrainWorker";
 import { LocaleSwitcher } from "../LocaleSwitcher";
 import { usePlaygroundT } from "../i18n";
 import { getVisualizationById } from "../visualizations";
@@ -15,6 +17,7 @@ const IMMERSIVE_COMPONENTS = {
   "computational-graph": ComputationalGraphPlayground,
   "neural-network": NeuralNetworkPlayground,
   "convolutional-network": ConvolutionalNetworkPlayground,
+  transformer: TransformerPlayground,
 } as const;
 
 export function VizPage() {
@@ -36,21 +39,26 @@ export function VizPage() {
   );
 
   if (immersive && ImmersiveComponent) {
-    const isCnn = viz.id === "convolutional-network";
-    // CNN needs createWorker and is rendered explicitly above; the else branch only
-    // ever renders the other immersive components (toolbar props only), so narrow
-    // the union away from the CNN component for this render.
+    // CNN/transformer need createWorker and are rendered explicitly below; the
+    // else branch only renders the other immersive components (toolbar props
+    // only), so narrow the union for that render.
     const ImmersiveToolbarComponent = ImmersiveComponent as ComponentType<{
       toolbarStart?: ReactNode;
       toolbarEnd?: ReactNode;
     }>;
     return (
       <div className="viz-page viz-page--immersive">
-        {isCnn ? (
+        {viz.id === "convolutional-network" ? (
           <ConvolutionalNetworkPlayground
             toolbarStart={backLink}
             toolbarEnd={<LocaleSwitcher />}
-            createWorker={createBurnCnnTrainWorker}
+            createWorker={createCnnTrainWorker}
+          />
+        ) : viz.id === "transformer" ? (
+          <TransformerPlayground
+            toolbarStart={backLink}
+            toolbarEnd={<LocaleSwitcher />}
+            createWorker={createTransformerTrainWorker}
           />
         ) : (
           <ImmersiveToolbarComponent toolbarStart={backLink} toolbarEnd={<LocaleSwitcher />} />

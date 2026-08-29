@@ -15,6 +15,7 @@ export default defineConfig([
       i18n: "src/i18n/index.ts",
       network: "src/playground/network/index.ts",
       cnn: "src/playground/cnn/index.ts",
+      transformer: "src/playground/transformer/index.ts",
       autograd: "src/playground/autograd/index.ts",
       mlp: "src/playground/index.ts",
       workers: "src/playground/workers/index.ts",

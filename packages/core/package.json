@@ -41,6 +41,10 @@
       "import": { "types": "./dist/cnn.d.ts", "default": "./dist/cnn.js" },
       "require": { "types": "./dist/cnn.d.cts", "default": "./dist/cnn.cjs" }
     },
+    "./transformer": {
+      "import": { "types": "./dist/transformer.d.ts", "default": "./dist/transformer.js" },
+      "require": { "types": "./dist/transformer.d.cts", "default": "./dist/transformer.cjs" }
+    },
     "./autograd": {
       "import": { "types": "./dist/autograd.d.ts", "default": "./dist/autograd.js" },
       "require": { "types": "./dist/autograd.d.cts", "default": "./dist/autograd.cjs" }

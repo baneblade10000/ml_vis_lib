@@ -38,6 +38,10 @@ export default defineConfig({
       },
       { find: "@ml-vis/core/cnn", replacement: path.join(coreSrc, "playground/cnn/index.ts") },
       {
+        find: "@ml-vis/core/transformer",
+        replacement: path.join(coreSrc, "playground/transformer/index.ts"),
+      },
+      {
         find: "@ml-vis/core/autograd",
         replacement: path.join(coreSrc, "playground/autograd/index.ts"),
       },

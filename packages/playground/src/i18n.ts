@@ -14,6 +14,8 @@ export type PlaygroundMessages = {
   vizConvolutionalNetworkDescription: string;
   vizSignalLabTitle: string;
   vizSignalLabDescription: string;
+  vizTransformerTitle: string;
+  vizTransformerDescription: string;
   mobileStubService: string;
   mobileStubTitle: string;
   mobileStubBody: string;
@@ -42,6 +44,9 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizSignalLabTitle: "Signals & Transforms",
     vizSignalLabDescription:
       "Convolution, cross-correlation, Fourier transform, convolution theorem.",
+    vizTransformerTitle: "Transformer",
+    vizTransformerDescription:
+      "Encoder-decoder seq2seq in Rust/WASM: self- and cross-attention heatmaps.",
     mobileStubService: "Interactive visualizations service",
     mobileStubTitle: "Access from mobile devices is not supported",
     mobileStubBody:
@@ -70,6 +75,9 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizSignalLabTitle: "Сигналы и преобразования",
     vizSignalLabDescription:
       "Свёртка, кросс-корреляция, Фурье, теорема о свёртке.",
+    vizTransformerTitle: "Трансформер",
+    vizTransformerDescription:
+      "Encoder-decoder seq2seq на Rust/WASM: теплокарты self- и cross-attention.",
     mobileStubService: "Сервис интерактивных визуализаций",
     mobileStubTitle: "Доступ с мобильных устройств ограничен",
     mobileStubBody:

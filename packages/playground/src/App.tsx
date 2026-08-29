@@ -5,6 +5,7 @@ import { useIsMobile } from "./hooks/useIsMobile";
 import { CatalogPage } from "./pages/CatalogPage";
 import { VizPage } from "./pages/VizPage";
 import "./network-playground.css";
+import "./transformer-playground.css";
 
 function AppContent() {
   const location = useLocation();

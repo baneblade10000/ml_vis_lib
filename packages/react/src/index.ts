@@ -18,6 +18,12 @@ export { ConvolutionalNetworkPlayground } from "./playground/cnn/ConvolutionalNe
 export type { ConvolutionalNetworkPlaygroundProps } from "./playground/cnn/ConvolutionalNetworkPlayground";
 export { SignalPlayground } from "./playground/signal/SignalPlayground";
 export type { SignalPlaygroundProps } from "./playground/signal/SignalPlayground";
+export { TransformerPlayground } from "./playground/transformer/TransformerPlayground";
+export type {
+  TransformerPlaygroundProps,
+  ToTransformerWorkerMessage,
+  AttentionKind,
+} from "./playground/transformer/TransformerPlayground";
 
 export {
   I18nProvider,
