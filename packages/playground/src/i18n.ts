@@ -16,6 +16,8 @@ export type PlaygroundMessages = {
   vizSignalLabDescription: string;
   vizTransformerTitle: string;
   vizTransformerDescription: string;
+  vizTransformerFlowTitle: string;
+  vizTransformerFlowDescription: string;
   mobileStubService: string;
   mobileStubTitle: string;
   mobileStubBody: string;
@@ -47,6 +49,9 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizTransformerTitle: "Transformer",
     vizTransformerDescription:
       "Encoder-decoder seq2seq in Rust/WASM: self- and cross-attention heatmaps.",
+    vizTransformerFlowTitle: "TransformerFlow — Constructor",
+    vizTransformerFlowDescription:
+      "Build a transformer graph block by block: data-flow matrices, training, embeddings, attention diagnostics.",
     mobileStubService: "Interactive visualizations service",
     mobileStubTitle: "Access from mobile devices is not supported",
     mobileStubBody:
@@ -78,6 +83,9 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizTransformerTitle: "Трансформер",
     vizTransformerDescription:
       "Encoder-decoder seq2seq на Rust/WASM: теплокарты self- и cross-attention.",
+    vizTransformerFlowTitle: "TransformerFlow — конструктор",
+    vizTransformerFlowDescription:
+      "Сборка вычислительного графа трансформера по блокам: матрицы потока данных, обучение, эмбеддинги, диагностика внимания.",
     mobileStubService: "Сервис интерактивных визуализаций",
     mobileStubTitle: "Доступ с мобильных устройств ограничен",
     mobileStubBody:

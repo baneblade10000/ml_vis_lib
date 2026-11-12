@@ -232,6 +232,21 @@
   width: 100%;
 }
 
+/* TransformerFlow is embedded from public/ as a full page in an iframe. */
+.viz-page:has(.transformer-flow-frame) {
+  display: flex;
+  flex-direction: column;
+}
+
+.transformer-flow-frame {
+  width: 100%;
+  height: calc(100dvh - 8rem);
+  min-height: 640px;
+  border: 1px solid var(--nn-border-strong);
+  border-radius: var(--nn-radius-lg);
+  background: var(--nn-surface);
+}
+
 .viz-page-top {
   display: flex;
   align-items: center;

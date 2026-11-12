@@ -15,6 +15,7 @@ export type VisualizationId =
   | "computational-graph"
   | "convolutional-network"
   | "transformer"
+  | "transformer-flow"
   | "signal-lab";
 
 export interface VisualizationEntry {
@@ -34,6 +35,16 @@ function ConvolutionalNetworkWithWasm() {
 function TransformerWithWasm() {
   return createElement(TransformerPlayground, {
     createWorker: createTransformerTrainWorker,
+  });
+}
+
+// TransformerFlow ships as a self-contained page in public/ (own runtime and
+// styles), so the catalog entry embeds it rather than mounting a component.
+function TransformerFlowFrame() {
+  return createElement("iframe", {
+    className: "transformer-flow-frame",
+    src: `${import.meta.env.BASE_URL}transformer-constructor.html`,
+    title: "TransformerFlow",
   });
 }
 
@@ -58,6 +69,13 @@ export const visualizations: VisualizationEntry[] = [
     titleKey: "vizTransformerTitle",
     descriptionKey: "vizTransformerDescription",
     component: TransformerWithWasm,
+  },
+  {
+    id: "transformer-flow",
+    path: "/viz/transformer-flow",
+    titleKey: "vizTransformerFlowTitle",
+    descriptionKey: "vizTransformerFlowDescription",
+    component: TransformerFlowFrame,
   },
   {
     id: "convolutional-network",
