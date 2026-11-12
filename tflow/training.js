@@ -1,0 +1,13 @@
+(function(root){
+'use strict';
+class TrainingSession{
+ constructor(model,settings={}){this.model=model;this.settings={lr:.02,objective:'ce',optimizer:'adam',clip:3,maxSteps:500,patience:12,goal:0,metric:'loss',validationEvery:5,restoreBest:true,...settings};this.steps=model.step;this.stale=0;this.bestStep=model.step;this.state='paused';this.reason='Готово к обучению';this.history=[];this.record();this.bestScore=this.score(this.validation);this.best=model.snapshot();}
+ score(metrics){return this.settings.metric==='accuracy'?-metrics.accuracy:metrics.loss;}
+ record(gradientNorm=0){const objective=this.settings.objective;this.training=this.model.evaluate(this.model.data.train,objective);this.validation=this.model.evaluate(this.model.data.validation,objective);const embeddingNorm=Math.sqrt(this.model.E.slice(2).reduce((sum,row)=>sum+row.reduce((a,v)=>a+v*v,0),0));this.history.push({step:this.steps,loss:this.training.loss,validationLoss:this.validation.loss,accuracy:this.training.accuracy,validationAccuracy:this.validation.accuracy,gradientNorm,embeddingNorm});}
+ advance(){if(this.state==='stopped')return false;this.state='running';if(this.steps>=this.settings.maxSteps){this.stop('Достигнут предел шагов');return false;}const g=this.model.train(this.model.data.train,this.settings);this.steps++;if(this.steps%this.settings.validationEvery===0||this.steps===this.settings.maxSteps||this.steps===1){this.record(g.gradientNorm);const score=this.score(this.validation);if(score<this.bestScore-1e-5){this.bestScore=score;this.bestStep=this.steps;this.best=this.model.snapshot();this.stale=0;}else this.stale++;const value=this.settings.metric==='accuracy'?this.validation.accuracy:this.validation.loss;const goal=this.settings.goal;if(goal>0&&(this.settings.metric==='accuracy'?value>=goal:value<=goal)){this.stop('Достигнута целевая метрика');return false;}if(this.settings.patience>0&&this.stale>=this.settings.patience){this.stop('Контрольная метрика перестала улучшаться');return false;}}
+ if(this.steps>=this.settings.maxSteps){this.stop('Достигнут предел шагов');return false;}return true;}
+ pause(){if(this.state!=='stopped'){this.state='paused';this.reason='Обучение приостановлено';}}
+ stop(reason){this.state='stopped';this.reason=reason;if(this.settings.restoreBest&&this.best){this.model.restore(this.best);this.training=this.model.evaluate(this.model.data.train,this.settings.objective);this.validation=this.model.evaluate(this.model.data.validation,this.settings.objective);}}
+}
+if(typeof module!=='undefined')module.exports=TrainingSession;else root.TFlow.TrainingSession=TrainingSession;
+})(typeof globalThis!=='undefined'?globalThis:this);
