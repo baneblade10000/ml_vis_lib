@@ -2255,10 +2255,11 @@
   box-shadow: 0 0 0 3px rgba(220, 38, 58, 0.18);
 }
 
-/* A value or a gradient shows up as a pass reaches its node: let it fade in. */
+/* A value or a gradient shows up as a pass reaches its node: let it fade in.
+   Edge labels are left out — React Flow re-creates the edge elements on every
+   graph update, which would replay the fade for all of them. */
 .ag-node-value,
-.ag-node-grad,
-.ag-edge-label {
+.ag-node-grad {
   animation: ag-value-in 0.25s ease-out;
 }
 
