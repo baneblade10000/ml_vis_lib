@@ -1,10 +1,17 @@
 import type { Edge, Node } from "@xyflow/react";
-import { OP_SPECS, type AutogradGraph, type AutogradOp } from "@ml-vis/core/autograd";
+import { OP_SPECS, type AutogradGraph, type AutogradOp, type AutogradPass } from "@ml-vis/core/autograd";
+import { weightColor } from "@ml-vis/core/network";
 
 export const AUTOGRAD_DRAG_TYPE = "application/reactflow-autograd";
 
 export const AUTOGRAD_NODE_WIDTH = 96;
 export const AUTOGRAD_NODE_HEIGHT = 64;
+
+/** A node's role in the step-by-step passes: what the last step worked on, or what the next one will. */
+export type AutogradStepRole = {
+  state: "active" | "next";
+  pass: AutogradPass;
+};
 
 export type AutogradNodeData = {
   op: AutogradOp;
@@ -14,24 +21,36 @@ export type AutogradNodeData = {
   grad: number;
   isLeaf: boolean;
   isOutput: boolean;
+  /** Whether the node's gradient is shown; it becomes known as the backward pass reaches the node. */
   showGrad: boolean;
-  /** Whether computed op-node values are revealed. Leaves always show theirs. */
-  showValues: boolean;
+  /** Whether the node's value is known; operations get it as the forward pass reaches them. */
+  computed: boolean;
+  step: AutogradStepRole | null;
   selected: boolean;
 };
 
 export type AutogradEdgeData = {
   localDer: number;
-  showGrad: boolean;
+  /** Whether the local derivative is known; the backward pass sets it when it goes through the edge's target. */
+  hasLocalDer: boolean;
+  /** Whether the edge feeds the node the last step worked on: a forward step read its value, a backward step pushed a gradient back along it. */
+  stepInput: boolean;
 };
 
-/** Diverging color for a gradient magnitude: crimson (+) → grey (0) → indigo (−). */
+/** Smallest blend toward the endpoint: a gradient label has to stay readable. */
+const GRAD_INK_FLOOR = 0.35;
+/** |∂| at which the label reaches the scale endpoint. */
+const GRAD_SATURATION = 4;
+
+/**
+ * Text color for a gradient on the numeric scale (negative → white at 0 →
+ * positive), linearly in |grad|. No gradient takes the muted ink: white, the
+ * scale's zero, would be invisible on a node.
+ */
 export function gradColor(grad: number): string {
   if (!Number.isFinite(grad) || grad === 0) return "#94a3b8";
-  const mag = Math.min(1, Math.abs(grad) / 4);
-  return grad > 0
-    ? `rgba(220, 38, 58, ${0.35 + mag * 0.55})`
-    : `rgba(79, 70, 229, ${0.35 + mag * 0.55})`;
+  const mag = Math.min(1, Math.abs(grad) / GRAD_SATURATION);
+  return weightColor(Math.sign(grad) * (GRAD_INK_FLOOR + (1 - GRAD_INK_FLOOR) * mag), 1);
 }
 
 export function autogradToFlow(
@@ -39,12 +58,17 @@ export function autogradToFlow(
   options: {
     selectedNodeId: string | null;
     selectedEdgeId: string | null;
-    showGrad: boolean;
-    showValues: boolean;
   },
 ): { nodes: Node<AutogradNodeData>[]; edges: Edge<AutogradEdgeData>[] } {
   const nodes: Node<AutogradNodeData>[] = [];
   const edges: Edge<AutogradEdgeData>[] = [];
+  const lastStep = graph.lastStep;
+  const nextStep = graph.nextStep;
+  const stepOf = (id: string): AutogradStepRole | null => {
+    if (lastStep?.id === id) return { state: "active", pass: lastStep.pass };
+    if (nextStep?.id === id) return { state: "next", pass: nextStep.pass };
+    return null;
+  };
 
   for (const node of graph.nodes.values()) {
     const pos = graph.positions.get(node.id) ?? { x: 0, y: 0 };
@@ -66,8 +90,9 @@ export function autogradToFlow(
         grad: node.grad,
         isLeaf: node.isLeaf,
         isOutput,
-        showGrad: options.showGrad,
-        showValues: options.showValues,
+        showGrad: graph.hasGrad(node.id),
+        computed: graph.isComputed(node.id),
+        step: stepOf(node.id),
         selected: options.selectedNodeId === node.id,
       },
     });
@@ -80,7 +105,11 @@ export function autogradToFlow(
       target: edge.target,
       type: "autograd",
       selected: options.selectedEdgeId === edge.id,
-      data: { localDer: edge.localDer, showGrad: options.showGrad },
+      data: {
+        localDer: edge.localDer,
+        hasLocalDer: graph.hasLocalDer(edge.id),
+        stepInput: edge.target === lastStep?.id,
+      },
     });
   }
 

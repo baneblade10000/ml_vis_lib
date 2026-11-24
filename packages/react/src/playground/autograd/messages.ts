@@ -3,11 +3,24 @@ import { useLocale } from "../../i18n";
 
 export type AutogradMessages = {
   forward: string;
+  step: string;
+  stepTitle: string;
+  stepTitleBackward: string;
+  stepDone: string;
+  stepNextForward: string;
+  stepNextBackward: string;
+  stepActiveForward: string;
+  stepActiveBackward: string;
   backward: string;
   reset: string;
   preset: string;
   presetExpr: string;
   presetNeuron: string;
+  presetSigmoid: string;
+  presetHinge: string;
+  presetTwoLayer: string;
+  presetMlp: string;
+  presetAttention: string;
   blocks: string;
   paletteHint: string;
   value: string;
@@ -55,11 +68,24 @@ const OP_LABELS_RU: Record<string, string> = {
 export const autogradMessages: Record<Locale, AutogradMessages> = {
   en: {
     forward: "Forward",
+    step: "Step",
+    stepTitle: "Compute the next node",
+    stepTitleBackward: "Push the gradient through the next node",
+    stepDone: "Forward and backward passes complete",
+    stepNextForward: "To be computed by the next step",
+    stepNextBackward: "The next step pushes a gradient through this node",
+    stepActiveForward: "Computed by this step",
+    stepActiveBackward: "This step pushed a gradient through this node",
     backward: "Backward",
     reset: "Reset",
     preset: "Preset",
     presetExpr: "(a + b) · c",
     presetNeuron: "Neuron tanh(w·x + b)",
+    presetSigmoid: "Sigmoid σ(w·x + b)",
+    presetHinge: "Hinge loss max(0, 1 − y·ŷ)",
+    presetTwoLayer: "Two-layer network",
+    presetMlp: "MLP 2 → 3 → 1",
+    presetAttention: "Attention (2 positions)",
     blocks: "Operations",
     paletteHint: "Click or drag onto canvas · Connect handles · Del to remove",
     value: "value",
@@ -79,11 +105,24 @@ export const autogradMessages: Record<Locale, AutogradMessages> = {
   },
   ru: {
     forward: "Прямой ход",
+    step: "Шаг",
+    stepTitle: "Вычислить следующий узел",
+    stepTitleBackward: "Распространить градиент через следующий узел",
+    stepDone: "Прямой и обратный ход завершены",
+    stepNextForward: "Будет вычислен на следующем шаге",
+    stepNextBackward: "Следующий шаг распространит градиент через этот узел",
+    stepActiveForward: "Вычислен на этом шаге",
+    stepActiveBackward: "На этом шаге градиент распространён через этот узел",
     backward: "Обратный ход",
     reset: "Сброс",
     preset: "Пример",
     presetExpr: "(a + b) · c",
     presetNeuron: "Нейрон tanh(w·x + b)",
+    presetSigmoid: "Сигмоид σ(w·x + b)",
+    presetHinge: "Hinge loss max(0, 1 − y·ŷ)",
+    presetTwoLayer: "Двухслойная сеть",
+    presetMlp: "MLP 2 → 3 → 1",
+    presetAttention: "Attention (2 позиции)",
     blocks: "Операции",
     paletteHint: "Клик или перетаскивание на холст · Соединяйте порты · Del — удалить",
     value: "значение",

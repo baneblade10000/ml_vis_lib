@@ -28,14 +28,14 @@ export interface TransformerConfigDto {
 
 /** Mirrors `TransformerConfig::default()` in Rust. */
 export const DEFAULT_TRANSFORMER_CONFIG: TransformerConfigDto = {
-  alphabetSize: 20,
+  alphabetSize: 40,
   dModel: 32,
   heads: 4,
   encLayers: 2,
   decLayers: 2,
   ffDim: 64,
-  maxLen: 6,
-  learningRate: 0.003,
+  maxLen: 10,
+  learningRate: 0.001,
   seed: 42,
 };
 

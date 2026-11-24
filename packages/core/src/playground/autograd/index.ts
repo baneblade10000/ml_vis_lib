@@ -15,8 +15,10 @@ export type {
   AutogradOp,
   AutogradEdgeDef,
   AutogradNodeDef,
+  AutogradPass,
   AutogradPosition,
   AutogradSnapshot,
+  AutogradStep,
   OpSpec,
 } from "./types";
 

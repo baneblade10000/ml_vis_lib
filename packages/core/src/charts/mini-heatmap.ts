@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-import { valueToRgb, valueToRgbZeroWhite } from "../playground/network/colors";
+import { valueToRgb } from "../playground/network/colors";
 
 /** Average each factor×factor block in a square matrix. */
 export function reduceMatrix(matrix: number[][], factor: number): number[][] {
@@ -62,8 +62,11 @@ export function isValueTile(matrix: number[][] | ValueTile): matrix is ValueTile
 }
 
 export type ValueMatrixLayout = "col-major" | "row-major";
-/** `diverging` = deep blue→sky cyan; `diverging-zero-white` = same with white at 0; `gray` = black→white. */
-export type ValueMatrixPalette = "diverging" | "diverging-zero-white" | "gray";
+/**
+ * `diverging` is the numeric scale (negative → white at 0 → positive);
+ * `gray` is the semantic black→white scheme for images and feature maps.
+ */
+export type ValueMatrixPalette = "diverging" | "gray";
 
 export interface RenderValueMatrixOptions {
   discretize?: boolean;
@@ -72,7 +75,8 @@ export interface RenderValueMatrixOptions {
   palette?: ValueMatrixPalette;
   /**
    * Stretch the matrix into the full palette range using its own min/max.
-   * Defaults to true for `gray`, false for `diverging`.
+   * Defaults to true for `gray`, false for `diverging`. On `diverging` the
+   * stretch is symmetric, so 0 stays white.
    */
   autoscale?: boolean;
 }
@@ -84,6 +88,11 @@ function sample(
   layout: ValueMatrixLayout,
 ): number {
   return layout === "row-major" ? matrix[y]![x]! : matrix[x]![y]!;
+}
+
+/** Snap to the sign's endpoint; an exact 0 stays at the white zero. */
+function discretized(value: number): number {
+  return value > 0 ? 1 : value < 0 ? -1 : 0;
 }
 
 function matrixRange(
@@ -160,12 +169,13 @@ export function renderValueMatrix(
   const image = cached.image;
   const range = autoscale ? matrixRange(matrix, width, height, layout) : { min: -1, max: 1 };
   const span = range.max - range.min;
+  const peak = Math.max(Math.abs(range.min), Math.abs(range.max)) || 1;
 
   for (let y = 0, p = -1; y < height; y++) {
     for (let x = 0; x < width; x++) {
       let value = sample(matrix, x, y, layout);
       if (discretize) {
-        value = value >= 0 ? 1 : -1;
+        value = discretized(value);
       }
 
       let r: number;
@@ -177,11 +187,7 @@ export function renderValueMatrix(
         const g8 = Math.round(Math.pow(t, 0.85) * 255);
         r = g = b = g8;
       } else {
-        const mapped = autoscale ? ((value - range.min) / span) * 2 - 1 : value;
-        ({ r, g, b } =
-          palette === "diverging-zero-white"
-            ? valueToRgbZeroWhite(mapped)
-            : valueToRgb(mapped));
+        ({ r, g, b } = valueToRgb(autoscale ? value / peak : value));
       }
 
       image.data[++p] = r;
@@ -224,7 +230,7 @@ export function renderValueTile(
     for (let x = 0; x < res; x++) {
       let value = tile.data[x * res + y]!;
       if (discretize) {
-        value = value >= 0 ? 1 : -1;
+        value = discretized(value);
       }
       const { r, g, b } = valueToRgb(value);
       image.data[++p] = r;

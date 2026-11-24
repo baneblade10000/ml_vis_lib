@@ -45,8 +45,6 @@ export interface TransformerMessages {
   keyAxis: string;
   loadingWasm: string;
   wasmError: string;
-  inspiredBy: string;
-  inspiredBySource: string;
 }
 
 const en: TransformerMessages = {
@@ -61,7 +59,7 @@ const en: TransformerMessages = {
   task: "Task",
   taskTranslate: "Translate RU→EN",
   taskTranslateHint:
-    "Translate a Russian phrase word-by-word; cross-attention learns the word alignment (adjective and noun swap places)",
+    "Translate a Russian phrase word-by-word; cross-attention learns the word alignment (adjectives and the adverb change places)",
   taskReverse: "Reverse",
   taskReverseHint: "The decoder must emit the input words in reverse order",
   encoder: "Encoder",
@@ -89,8 +87,6 @@ const en: TransformerMessages = {
   keyAxis: "keys",
   loadingWasm: "Loading Rust engine…",
   wasmError: "WASM engine error",
-  inspiredBy: "Inspired by",
-  inspiredBySource: "Attention Is All You Need",
 };
 
 const ru: TransformerMessages = {
@@ -105,7 +101,7 @@ const ru: TransformerMessages = {
   task: "Задача",
   taskTranslate: "Перевод RU→EN",
   taskTranslateHint:
-    "Пословный перевод русской фразы; cross-attention учит выравнивание слов (прилагательное и существительное меняются местами)",
+    "Пословный перевод русской фразы; cross-attention учит выравнивание слов (прилагательные и наречие меняют место)",
   taskReverse: "Реверс",
   taskReverseHint: "Декодер должен выдать входные слова в обратном порядке",
   encoder: "Энкодер",
@@ -133,8 +129,6 @@ const ru: TransformerMessages = {
   keyAxis: "ключи",
   loadingWasm: "Загрузка Rust-движка…",
   wasmError: "Ошибка WASM-движка",
-  inspiredBy: "По мотивам",
-  inspiredBySource: "Attention Is All You Need",
 };
 
 export const transformerMessages: Record<Locale, TransformerMessages> = { en, ru };

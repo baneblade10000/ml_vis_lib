@@ -36,6 +36,15 @@ export interface AutogradSnapshot {
   positions: Record<string, AutogradPosition>;
 }
 
+/** Which way a pass over the graph goes: values, then gradients. */
+export type AutogradPass = "forward" | "backward";
+
+/** One step of a pass: the operation node it worked on. */
+export interface AutogradStep {
+  id: string;
+  pass: AutogradPass;
+}
+
 export interface OpSpec {
   symbol: string;
   label: string;

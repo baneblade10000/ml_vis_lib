@@ -27,8 +27,6 @@ import { autogradEdgeTypes, autogradNodeTypes } from "./AutogradFlowNodes";
 export interface AutogradFlowGraphProps {
   graph: AutogradGraph;
   version: number;
-  showGrad: boolean;
-  showValues: boolean;
   children?: ReactNode;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
@@ -81,8 +79,6 @@ function viewportForNodes(
 function AutogradFlowGraphInner({
   graph,
   version,
-  showGrad,
-  showValues,
   children,
   selectedNodeId,
   selectedEdgeId,
@@ -101,10 +97,10 @@ function AutogradFlowGraphInner({
   const draggingRef = useRef(new Set<string>());
 
   const { nodes: computedNodes, edges: computedEdges } = useMemo(
-    () => autogradToFlow(graph, { selectedNodeId, selectedEdgeId, showGrad, showValues }),
+    () => autogradToFlow(graph, { selectedNodeId, selectedEdgeId }),
     // version bumps whenever the engine mutates the graph.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [graph, version, selectedNodeId, selectedEdgeId, showGrad, showValues],
+    [graph, version, selectedNodeId, selectedEdgeId],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(computedNodes);

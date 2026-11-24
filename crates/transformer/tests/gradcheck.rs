@@ -79,12 +79,11 @@ fn backward_matches_numeric_gradients() {
 
 #[test]
 fn translate_task_converges() {
-    let mut config = TransformerConfig::default();
-    config.learning_rate = 0.003;
+    let config = TransformerConfig::default();
     let mut model = Model::new(config.clone());
     let mut rng = rand::rngs::StdRng::seed_from_u64(321);
     let mut ema = 0.0f32;
-    for _ in 0..12000 {
+    for _ in 0..18000 {
         let sample = transformer::tasks::sample_sequence(
             transformer::tasks::TransformerTask::Translate,
             &config,
@@ -99,15 +98,26 @@ fn translate_task_converges() {
         ema = if ema == 0.0 { loss } else { 0.98 * ema + 0.02 * loss };
     }
     assert!(ema < 0.1, "translate loss did not converge: {ema}");
-    let sample = transformer::tasks::sample_sequence(
-        transformer::tasks::TransformerTask::Translate,
-        &config,
-        &mut rng,
-    );
-    let mut enc = sample.input.clone();
-    enc.push(config.eos());
-    let (tokens, _) = model.greedy_decode(&enc, config.max_len + 1);
-    assert_eq!(&tokens[..sample.target.len()], &sample.target[..], "translate greedy mismatch");
+
+    // A whole sentence is several independent word choices, so a single decoded
+    // sample is too noisy a verdict: require near-perfect greedy decoding.
+    let samples = 100;
+    let mut exact = 0;
+    for _ in 0..samples {
+        let sample = transformer::tasks::sample_sequence(
+            transformer::tasks::TransformerTask::Translate,
+            &config,
+            &mut rng,
+        );
+        let mut enc = sample.input.clone();
+        enc.push(config.eos());
+        let (tokens, _) = model.greedy_decode(&enc, sample.target.len() + 1);
+        let decoded = &tokens[..sample.target.len().min(tokens.len())];
+        if tokens.len() == sample.target.len() + 1 && *decoded == sample.target[..] {
+            exact += 1;
+        }
+    }
+    assert!(exact >= 95, "only {exact}/{samples} sentences translated exactly");
 }
 
 #[test]

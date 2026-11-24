@@ -1,4 +1,10 @@
-import { CLASS_0_HEX, CLASS_1_HEX, valueToRgb } from "../playground/network/colors";
+import {
+  CLASS_0_HEX,
+  CLASS_1_HEX,
+  rgbToCss,
+  relativeLuminance,
+  valueToRgb,
+} from "../playground/network/colors";
 
 export type CurvePoint = { x: number; y: number; label: number };
 
@@ -13,6 +19,8 @@ export function renderCurve(
     xDomain?: [number, number];
     yDomain?: [number, number];
     stroke?: string;
+    /** Wide outline drawn under the stroke, for strokes that pale into the background. */
+    halo?: string;
     fill?: boolean;
     lineWidth?: number;
     /** Clear canvas before drawing (default true). */
@@ -86,6 +94,15 @@ export function renderCurve(
     ctx.closePath();
     ctx.fillStyle = "rgba(120, 120, 160, 0.1)";
     ctx.fill();
+  }
+
+  if (options?.halo) {
+    strokePath();
+    ctx.strokeStyle = options.halo;
+    ctx.lineWidth = lineWidth * 2;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.stroke();
   }
 
   strokePath();
@@ -187,13 +204,32 @@ export function renderTargetCurve(
   ctx.setLineDash([]);
 }
 
-/** Color a curve stroke from the mean activation using the heatmap palette. */
-export function curveStrokeFromValues(values: number[]): string {
-  if (!values.length) return "rgb(90, 90, 110)";
+function meanValue(values: number[]): number {
   let sum = 0;
   for (const v of values) sum += v;
-  const { r, g, b } = valueToRgb(sum / values.length);
-  return `rgb(${r}, ${g}, ${b})`;
+  return sum / values.length;
+}
+
+/** Color a curve stroke from the mean activation using the numeric scale. */
+export function curveStrokeFromValues(values: number[]): string {
+  if (!values.length) return "rgb(90, 90, 110)";
+  return rgbToCss(valueToRgb(meanValue(values)));
+}
+
+const HALO_MIN_LUMINANCE = 0.5;
+const HALO_MAX_ALPHA = 0.6;
+
+/**
+ * Outline that keeps a scale-colored curve readable: a curve whose mean sits
+ * near 0 strokes white and would vanish on a white node, so the outline
+ * strengthens as the stroke pales. `undefined` when the stroke is dark enough.
+ */
+export function curveHaloFromValues(values: number[]): string | undefined {
+  if (!values.length) return undefined;
+  const luminance = relativeLuminance(valueToRgb(meanValue(values)));
+  const strength = ((luminance - HALO_MIN_LUMINANCE) / (1 - HALO_MIN_LUMINANCE)) * HALO_MAX_ALPHA;
+  if (strength <= 0) return undefined;
+  return `rgba(15, 23, 42, ${Math.min(HALO_MAX_ALPHA, strength).toFixed(3)})`;
 }
 
 export function inferYDomain(values: number[], pad = 0.15): [number, number] {

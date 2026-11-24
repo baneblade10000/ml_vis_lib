@@ -1,6 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import { MarkerType } from "@xyflow/react";
-import { INPUTS, MLP_NODE_SIZE, MLP_OUTPUT_NODE_SIZE, mlpColumnXsFromCounts, weightColor, weightMagnitude, weightValueNormalized, type ComputationalGraph, type GraphNodeKind } from "@ml-vis/core/network";
+import { INPUTS, MLP_NODE_SIZE, MLP_OUTPUT_NODE_SIZE, mlpColumnXsFromCounts, scaleText, weightColor, weightMagnitude, weightValueNormalized, type ComputationalGraph, type GraphNodeKind } from "@ml-vis/core/network";
 
 // Single source of truth lives in @ml-vis/core (mlp-layout.ts); these re-export
 // the canonical values so layout geometry and rendered node sizes can never drift.
@@ -62,6 +62,8 @@ export type WeightEdgeData = {
   learningRate: number;
   active: boolean;
   vizMode: EdgeVizMode;
+  /** Text color of the hover label, which sits on its own white pill. */
+  ink: string;
 };
 
 /** Square cell size shared by every weight matrix on the canvas. */
@@ -91,6 +93,7 @@ function edgeStrokeStyle(
   opts?: { alreadyNormalized?: boolean },
 ): {
   stroke: string;
+  ink: string;
   strokeWidth: number;
   strokeOpacity: number;
 } {
@@ -99,11 +102,12 @@ function edgeStrokeStyle(
   const mag = opts?.alreadyNormalized
     ? Math.min(1, Math.abs(value))
     : weightMagnitude(value);
-  const stroke = weightColor(
-    opts?.alreadyNormalized ? Math.max(-1, Math.min(1, value)) : weightValueNormalized(value),
-  );
+  const normalized = opts?.alreadyNormalized
+    ? Math.max(-1, Math.min(1, value))
+    : weightValueNormalized(value);
   return {
-    stroke,
+    stroke: weightColor(normalized),
+    ink: scaleText(normalized),
     // 2px floor for faint values, ~7.5px ceiling at full magnitude.
     strokeWidth: 2 + mag * 5.5,
     strokeOpacity: active ? 0.45 + mag * 0.55 : 0.12,
@@ -412,7 +416,7 @@ export function graphToFlow(
       const ratio = Math.abs(gradient) / gradScale;
       vizValue = Math.sign(gradient) * Math.sqrt(ratio);
     }
-    const { stroke, strokeWidth, strokeOpacity } = edgeStrokeStyle(vizValue, sourceActive, {
+    const { stroke, ink, strokeWidth, strokeOpacity } = edgeStrokeStyle(vizValue, sourceActive, {
       alreadyNormalized: isGradient,
     });
     const incident =
@@ -434,6 +438,7 @@ export function graphToFlow(
         learningRate,
         active: sourceActive,
         vizMode: edgeVizMode,
+        ink,
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,

@@ -10,7 +10,14 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { curveStrokeFromValues, inferYDomain, renderCurve, renderCurvePoints, renderTargetCurve } from "@ml-vis/core/charts";
+import {
+  curveHaloFromValues,
+  curveStrokeFromValues,
+  inferYDomain,
+  renderCurve,
+  renderCurvePoints,
+  renderTargetCurve,
+} from "@ml-vis/core/charts";
 import { X_DOMAIN } from "@ml-vis/core/network";
 import type { DataPoint, NetworkNodeData, WeightEdgeData } from "./graphAdapter";
 import { paintHeatmapCanvas, paintTrainOverlay, BiasIndicator } from "./networkCanvasPaint";
@@ -195,6 +202,7 @@ function NodeCurve({
     renderCurve(canvas, values, {
       yDomain,
       stroke: curveStrokeFromValues(values),
+      halo: curveHaloFromValues(values),
       fill: !dimmed,
       clear: false,
       baseline: false,
@@ -476,7 +484,7 @@ export const WeightFlowEdge = function WeightFlowEdge({
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               borderColor: style?.stroke as string | undefined,
-              color: style?.stroke as string | undefined,
+              color: data?.ink,
             }}
           >
             {vizMode === "gradient" ? (

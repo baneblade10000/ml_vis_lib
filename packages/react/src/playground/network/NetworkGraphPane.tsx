@@ -1,6 +1,7 @@
 import { memo, type RefObject } from "react";
 import {
   PlaygroundEngine,
+  numericScaleGradient,
   type Dataset1DId,
   type LossHistoryPoint,
   type NetworkAnyDatasetId,
@@ -281,10 +282,10 @@ export const NetworkGraphPane = memo(function NetworkGraphPane({
         <div
           className="nn-weight-legend nn-weight-legend--dock"
           role="img"
-          aria-label="Weight color scale from −1 (indigo) through 0 (light-blue) to +1 (cyan-blue)"
+          aria-label="Weight color scale from −1 (indigo) through 0 (white) to +1 (cyan-blue)"
         >
           <span className="nn-weight-legend__title">Weight</span>
-          <div className="nn-weight-legend__bar" />
+          <div className="nn-weight-legend__bar" style={{ background: numericScaleGradient() }} />
           <div className="nn-weight-legend__scale">
             <span>−1</span>
             <span>0</span>

@@ -1,5 +1,3 @@
-import { tokenChipStyle } from "./tokenColors";
-
 export interface TokenStripProps {
   tokens: number[];
   /** Display label per token id (from the snapshot). */
@@ -21,7 +19,6 @@ export function TokenStrip({ tokens, labels, tone = "input", expected }: TokenSt
             className={`tf-token${special ? " tf-token--special" : ""}${
               correct === true ? " tf-token--ok" : correct === false ? " tf-token--bad" : ""
             }`}
-            style={special ? undefined : tokenChipStyle(tok, labels.length - 2)}
           >
             {labels[tok] ?? "?"}
             {correct === true && <i className="tf-token__mark" aria-hidden>✓</i>}

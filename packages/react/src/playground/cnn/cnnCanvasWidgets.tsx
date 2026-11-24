@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { renderValueMatrix } from "@ml-vis/core/charts";
-import { weightColorZeroWhite, weightValueNormalized } from "@ml-vis/core/network";
+import { weightColor, weightValueNormalized } from "@ml-vis/core/network";
 import { CNN_CELL_PX, cnnGridPx } from "./cnnAdapter";
 import type { RfRect } from "./receptiveField";
 
@@ -38,7 +38,7 @@ export function normalizeWeightMap(map: number[][]): number[][] {
   return map.map((row) => row.map((w) => weightValueNormalized(w)));
 }
 
-/** Per-filter bias chip — diverging palette with white at 0. */
+/** Per-filter bias chip on the numeric scale. */
 export function ConvBiasIndicator({ bias }: { bias: number }) {
   return (
     <span
@@ -46,7 +46,7 @@ export function ConvBiasIndicator({ bias }: { bias: number }) {
       data-sign={bias >= 0 ? "pos" : "neg"}
       aria-hidden
       title={`bias ${bias.toFixed(3)}`}
-      style={{ background: weightColorZeroWhite(weightValueNormalized(bias)) }}
+      style={{ background: weightColor(weightValueNormalized(bias)) }}
     />
   );
 }
@@ -79,10 +79,7 @@ export function KernelMini({
     const canvas = canvasRef.current;
     const heat = heatRef.current;
     if (!canvas || !heat || !rows || !cols) return;
-    renderValueMatrix(heat, normalizeWeightMap(map), {
-      layout: "row-major",
-      palette: "diverging-zero-white",
-    });
+    renderValueMatrix(heat, normalizeWeightMap(map), { layout: "row-major" });
     const { w: bw, h: bh } = cnnGridPx(rows, cols);
     canvas.width = bw;
     canvas.height = bh;

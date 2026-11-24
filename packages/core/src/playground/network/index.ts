@@ -68,21 +68,25 @@ export type {
 export {
   CLASS_0_HEX,
   CLASS_1_HEX,
-  PALETTE_HIGH,
-  PALETTE_LOW,
-  PALETTE_MID,
-  PALETTE_ZERO_WHITE,
+  NUMERIC_NEGATIVE,
+  NUMERIC_POSITIVE,
+  NUMERIC_ZERO,
+  isPale,
   mixProbabilityColor,
+  numericScaleGradient,
   probabilityColorRgb,
   probabilityToRgba,
+  relativeLuminance,
+  rgbToCss,
+  scaleInk,
+  scaleText,
   valueToRgb,
-  valueToRgbZeroWhite,
   weightColor,
   weightColorQuantized,
-  weightColorZeroWhite,
   weightMagnitude,
   weightValueNormalized,
 } from "./colors";
+export type { Rgb } from "./colors";
 
 export { boundaryToGridPoints, computeBoundaries, examplesToSamples } from "./boundary";
 

@@ -1351,8 +1351,8 @@
 
 /* Bias indicator: a small square tucked into the neuron's bottom-right
    corner. A white rounded border keeps it legible over any heatmap color; the
-   fill color encodes the bias via the diverging palette (deep blue negative /
-   sky cyan positive), saturating as |bias| grows. */
+   fill color encodes the bias via the numeric scale (indigo negative, white
+   at 0, cyan-blue positive), saturating as |bias| grows. */
 .nn-flow-bias {
   position: absolute;
   right: 4px;
@@ -1541,7 +1541,8 @@
   margin-bottom: 0.25rem !important;
 }
 
-/* Diverging weight-color legend. */
+/* Diverging weight-color legend. The bar's gradient is set inline from the
+   numeric scale (numericScaleGradient in @ml-vis/core), never in CSS. */
 .nn-weight-legend {
   display: flex;
   flex-direction: column;
@@ -1583,34 +1584,7 @@
   width: 9rem;
   height: 0.5rem;
   border-radius: 999px;
-  background: linear-gradient(
-    to right,
-    #3d41b9 0%,
-    #4d61d1 12.5%,
-    #5a7ce5 25%,
-    #648ff3 37.5%,
-    #6999fa 50%,
-    #6098f6 62.5%,
-    #4f96ef 75%,
-    #3793e5 87.5%,
-    #1a90d9 100%
-  );
   border: 1px solid var(--nn-border, #e2e8f0);
-}
-
-.nn-weight-legend__bar--zero-white {
-  background: linear-gradient(
-    to right,
-    #3d41b9 0%,
-    #8587d3 12.5%,
-    #bfc0e8 25%,
-    #eaeaf7 37.5%,
-    #ffffff 50%,
-    #e6f3fb 62.5%,
-    #b3daf2 75%,
-    #6eb9e7 87.5%,
-    #1a90d9 100%
-  );
 }
 
 .nn-weight-legend__scale {
@@ -2196,12 +2170,25 @@
   font-size: 0.6875rem;
 }
 
+/* Label beside the select, so the select sits level with the toolbar buttons. */
 .ag-toolbar-preset {
+  flex-direction: row;
+  align-items: center;
   gap: 0.375rem;
+  margin-left: 0.375rem;
 }
 
 .ag-toolbar-preset .network-training-label {
   margin: 0;
+}
+
+.ag-toolbar-preset .nn-select {
+  width: auto;
+}
+
+.ag-toolbar-step:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .ag-value-field {
@@ -2255,6 +2242,30 @@
 .ag-node--sink {
   border-color: #0f172a;
   background: #f8fafc;
+}
+
+/* Step-by-step passes: the operation the next step works on, and the one the last step worked on */
+.ag-node.ag-node--next {
+  border-style: dashed;
+  border-color: var(--nn-accent);
+}
+
+.ag-node.ag-node--active {
+  border-color: var(--nn-crimson);
+  box-shadow: 0 0 0 3px rgba(220, 38, 58, 0.18);
+}
+
+/* A value or a gradient shows up as a pass reaches its node: let it fade in. */
+.ag-node-value,
+.ag-node-grad,
+.ag-edge-label {
+  animation: ag-value-in 0.25s ease-out;
+}
+
+@keyframes ag-value-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .ag-node-head {

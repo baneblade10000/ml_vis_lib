@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CNN_DATASET_IDS_1D, CNN_DATASET_IDS_2D, DEFAULT_CNN_CONFIG, CnnTrainClient, canUseTrainWorkers, type CnnActivationId, type CnnCommandArgs, type CnnConfig, type CnnMode, type CnnRegularizationId, type CnnTrainSnapshot, type FeatureMapSnapshot, type ImageExample, type LayerShape, type LossHistoryPoint, type PlaygroundOptimizerId, type SignalExample } from "@ml-vis/core/cnn";
+import { numericScaleGradient } from "@ml-vis/core/network";
 import { NetworkLossChart } from "../network/NetworkLossChart";
 import { CnnFlowGraph } from "./CnnFlowGraph";
 import { CnnArchitecturePanel } from "./CnnArchitecturePanel";
@@ -612,7 +613,7 @@ export function ConvolutionalNetworkPlayground({
               aria-label={t.weightsLegendAria}
             >
               <span className="nn-weight-legend__title">{t.weightsLegend}</span>
-              <div className="nn-weight-legend__bar nn-weight-legend__bar--zero-white" />
+              <div className="nn-weight-legend__bar" style={{ background: numericScaleGradient() }} />
               <div className="nn-weight-legend__scale">
                 <span>−1</span>
                 <span>0</span>

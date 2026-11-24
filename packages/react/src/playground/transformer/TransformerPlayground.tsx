@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_TRANSFORMER_CONFIG } from "@ml-vis/core/transformer";
 import type { TransformerSnapshot, TransformerTaskId } from "@ml-vis/core/transformer";
 import { useTransformerMessages } from "./messages";
 import { AttentionHeatmap } from "./AttentionHeatmap";
@@ -40,7 +41,8 @@ export function TransformerPlayground({
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [task, setTask] = useState<TransformerTaskId>(initialTask);
-  const [lr, setLr] = useState(LEARNING_RATES[1]);
+  // The worker builds its engine on the same default, so both start equal.
+  const [lr, setLr] = useState(DEFAULT_TRANSFORMER_CONFIG.learningRate);
   const [layer, setLayer] = useState(0);
   const [head, setHead] = useState<number | "mean">("mean");
   const [focus, setFocus] = useState<{ kind: AttentionKind; layer: number } | null>(null);
@@ -183,12 +185,6 @@ export function TransformerPlayground({
             </select>
           </label>
         </div>
-        <p className="nn-inspired-by">
-          {t.inspiredBy}{" "}
-          <a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener noreferrer">
-            {t.inspiredBySource}
-          </a>
-        </p>
         <div className="nn-toolbar-group nn-toolbar-group--params">
           <div className="nn-toolbar-stat">
             <span className="label">{t.stepCount}</span>
@@ -298,9 +294,6 @@ export function TransformerPlayground({
                     head={head}
                     rowLabels={encLabels}
                     colLabels={encLabels}
-                    rowTokens={snapshot.encInTokens}
-                    colTokens={snapshot.encInTokens}
-                    alphabetSize={snapshot.alphabetSize}
                   />
                   <AttentionHeatmap
                     title={t.decSelfTitle}
@@ -309,20 +302,15 @@ export function TransformerPlayground({
                     head={head}
                     rowLabels={decLabels}
                     colLabels={decLabels}
-                    rowTokens={snapshot.decInTokens}
-                    colTokens={snapshot.decInTokens}
-                    alphabetSize={snapshot.alphabetSize}
                   />
                   <AttentionHeatmap
                     title={t.crossTitle}
                     hint={t.crossHint}
+                    kind="cross"
                     matrices={snapshot.attention.cross[layer]}
                     head={head}
                     rowLabels={decLabels}
                     colLabels={encLabels}
-                    rowTokens={snapshot.decInTokens}
-                    colTokens={snapshot.encInTokens}
-                    alphabetSize={snapshot.alphabetSize}
                   />
                 </div>
               </div>

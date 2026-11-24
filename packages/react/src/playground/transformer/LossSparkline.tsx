@@ -12,7 +12,13 @@ export function LossSparkline({ history, width = 150, height = 40 }: LossSparkli
   if (points < 2) {
     return (
       <svg className="tf-sparkline" width={width} height={height} role="img">
-        <line x1={0} y1={height - 2} x2={width} y2={height - 2} stroke="#cbd5e1" strokeDasharray="3 3" />
+        <line
+          className="tf-sparkline__baseline"
+          x1={0}
+          y1={height - 2}
+          x2={width}
+          y2={height - 2}
+        />
       </svg>
     );
   }
@@ -27,7 +33,7 @@ export function LossSparkline({ history, width = 150, height = 40 }: LossSparkli
   });
   return (
     <svg className="tf-sparkline" width={width} height={height} role="img">
-      <polyline points={coords.join(" ")} fill="none" stroke="#2563eb" strokeWidth={1.5} />
+      <polyline className="tf-sparkline__line" points={coords.join(" ")} fill="none" strokeWidth={1.5} />
     </svg>
   );
 }

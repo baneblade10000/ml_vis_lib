@@ -1,6 +1,6 @@
 import { AutogradGraph } from "./graph";
 import { AUTOGRAD_PRESETS, buildAutogradPreset, type AutogradPresetId } from "./presets";
-import { OP_SPECS, type AutogradOp, type AutogradPosition } from "./types";
+import { OP_SPECS, type AutogradOp, type AutogradPosition, type AutogradStep } from "./types";
 
 export interface CompGraphConfig {
   preset: AutogradPresetId;
@@ -15,6 +15,12 @@ export const DEFAULT_COMPGRAPH_CONFIG: CompGraphConfig = {
  * `PlaygroundEngine` for the neural-network layout. Owns the current graph,
  * runs forward/backward on demand, and exposes editing operations used by the
  * builder UI.
+ *
+ * Values and gradients become known only as a pass computes them: none on load
+ * or after an edit, one node per {@link CompGraphEngine.runStep}, all of them
+ * on {@link CompGraphEngine.runForward} and {@link CompGraphEngine.runBackward}.
+ * `runStep` goes through the forward pass first and, once that is complete,
+ * through the backward pass.
  */
 export class CompGraphEngine {
   config: CompGraphConfig;
@@ -33,14 +39,14 @@ export class CompGraphEngine {
     const value = op === "const" ? 1 : 0;
     const label = spec.leaf ? undefined : spec.label;
     const node = this.graph.addNode(op, { position, value, label });
-    this.recompute();
+    this.invalidate();
     return node.id;
   }
 
   connectNodes(sourceId: string, targetId: string): boolean {
     const edge = this.graph.connect(sourceId, targetId);
     if (!edge) return false;
-    this.recompute();
+    this.invalidate();
     return true;
   }
 
@@ -48,21 +54,21 @@ export class CompGraphEngine {
     const edge = [...this.graph.edges.values()].find((e) => e.source === sourceId && e.target === targetId);
     if (!edge) return false;
     this.graph.removeEdge(edge.id);
-    this.recompute();
+    this.invalidate();
     return true;
   }
 
   removeEdge(edgeId: string): boolean {
     if (!this.graph.edges.has(edgeId)) return false;
     this.graph.removeEdge(edgeId);
-    this.recompute();
+    this.invalidate();
     return true;
   }
 
   removeNode(nodeId: string): boolean {
     if (!this.graph.nodes.has(nodeId)) return false;
     this.graph.removeNode(nodeId);
-    this.recompute();
+    this.invalidate();
     return true;
   }
 
@@ -70,18 +76,18 @@ export class CompGraphEngine {
     this.graph.setPosition(nodeId, position);
   }
 
-  /** Update an editable leaf (input / const) scalar and refresh forward + backward. */
+  /** Update an editable leaf (input / const) scalar; every computed value and gradient goes stale with it. */
   setNodeValue(nodeId: string, value: number): boolean {
     const node = this.graph.getNode(nodeId);
     if (!node || !node.isLeaf || !Number.isFinite(value)) return false;
     node.value = value;
-    this.recompute();
+    this.invalidate();
     return true;
   }
 
   setOutput(nodeId: string): void {
     this.graph.setOutput(nodeId);
-    this.recompute();
+    this.invalidate();
   }
 
   loadPreset(preset: AutogradPresetId): void {
@@ -90,13 +96,18 @@ export class CompGraphEngine {
   }
 
   /**
-   * Refresh topology + forward values after a structural edit. Gradients are
-   * intentionally NOT recomputed here: the UI reveals them only when the user
-   * runs the backward pass, so a graph edit leaves any shown gradients stale.
+   * Refresh topology after a graph edit and drop every computed value and
+   * gradient: nothing is known about the edited graph until the user runs a
+   * pass.
    */
-  recompute(): void {
+  invalidate(): void {
     this.graph.recomputeTopoOrder();
-    this.graph.forward();
+    this.graph.resetPasses();
+  }
+
+  /** Run one step of whichever pass is up next; returns it, or null once the forward and backward passes are complete. */
+  runStep(): AutogradStep | null {
+    return this.graph.step();
   }
 
   runForward(): void {

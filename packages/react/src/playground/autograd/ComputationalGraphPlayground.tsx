@@ -33,12 +33,6 @@ export function ComputationalGraphPlayground({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [preset, setPreset] = useState<AutogradPresetId>(engine.config.preset);
-  // Gradients are revealed only after the user runs the backward pass; any edit
-  // or a fresh forward pass invalidates them until Backward is pressed again.
-  const [gradsVisible, setGradsVisible] = useState(false);
-  // Computed op-node values are revealed only after the user runs a pass; on
-  // initial load, reset, or preset change the graph shows leaf values alone.
-  const [valuesVisible, setValuesVisible] = useState(false);
   const addSlotRef = useRef(0);
 
   const bump = useCallback(() => setVersion((v) => v + 1), []);
@@ -48,12 +42,10 @@ export function ComputationalGraphPlayground({
     return { x: 60 + (n % 4) * 130, y: 40 + Math.floor(n / 4) * 90 };
   }, []);
 
-  // A structural/value edit keeps leaf scalars in place but stales the computed
-  // op-node values and gradients — both stay hidden until the next pass.
+  // A structural/value edit keeps leaf scalars in place but stales every computed
+  // value and gradient — all stay hidden until the next pass.
   const afterEdit = useCallback(() => {
-    engine.recompute();
-    setValuesVisible(false);
-    setGradsVisible(false);
+    engine.invalidate();
     bump();
   }, [engine, bump]);
 
@@ -102,25 +94,24 @@ export function ComputationalGraphPlayground({
     afterEdit();
   }, [engine, afterEdit]);
 
+  const onStep = useCallback(() => {
+    engine.runStep();
+    bump();
+  }, [engine, bump]);
+
   const onForward = useCallback(() => {
     engine.runForward();
-    setValuesVisible(true);
-    setGradsVisible(false);
     bump();
   }, [engine, bump]);
 
   const onBackward = useCallback(() => {
     engine.runBackward();
-    setValuesVisible(true);
-    setGradsVisible(true);
     bump();
   }, [engine, bump]);
 
   const onReset = useCallback(() => {
     engine.reset();
     addSlotRef.current = 0;
-    setValuesVisible(false);
-    setGradsVisible(false);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setFitKey((k) => k + 1);
@@ -131,8 +122,6 @@ export function ComputationalGraphPlayground({
     engine.loadPreset(next);
     addSlotRef.current = 0;
     setPreset(next);
-    setValuesVisible(false);
-    setGradsVisible(false);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setFitKey((k) => k + 1);
@@ -142,9 +131,19 @@ export function ComputationalGraphPlayground({
   const presetLabels: Record<AutogradPresetId, string> = {
     expr: t.presetExpr,
     neuron: t.presetNeuron,
+    sigmoid: t.presetSigmoid,
+    hinge: t.presetHinge,
+    twolayer: t.presetTwoLayer,
+    mlp: t.presetMlp,
+    attention: t.presetAttention,
   };
 
-  const outputNode = engine.graph.getNode(engine.graph.outputId);
+  const graph = engine.graph;
+  const outputNode = graph.getNode(graph.outputId);
+  const nextStep = graph.nextStep;
+  const forward = graph.forwardProgress();
+  const backward = graph.backwardProgress();
+  const stepTitles = { forward: t.stepTitle, backward: t.stepTitleBackward };
 
   return (
     <div className="nn-playground nn-playground--immersive">
@@ -153,6 +152,16 @@ export function ComputationalGraphPlayground({
           {toolbarStart}
           <button type="button" className="nn-btn nn-btn--ghost" onClick={onReset}>
             {t.reset}
+          </button>
+          <button
+            type="button"
+            className="nn-btn nn-btn--ghost ag-toolbar-step"
+            onClick={onStep}
+            disabled={nextStep === null}
+            title={nextStep ? stepTitles[nextStep.pass] : t.stepDone}
+            data-testid="autograd-step"
+          >
+            {t.step}
           </button>
           <button type="button" className="nn-btn nn-btn--primary" onClick={onForward}>
             {t.forward}
@@ -178,9 +187,21 @@ export function ComputationalGraphPlayground({
 
         <div className="nn-toolbar-group nn-toolbar-group--params">
           <div className="nn-toolbar-stat">
+            <span className="label">{t.forward}</span>
+            <span className="value">
+              {forward.done} / {forward.total}
+            </span>
+          </div>
+          <div className="nn-toolbar-stat">
+            <span className="label">{t.backward}</span>
+            <span className="value">
+              {backward.done} / {backward.total}
+            </span>
+          </div>
+          <div className="nn-toolbar-stat">
             <span className="label">{t.value}</span>
             <span className="value">
-              {valuesVisible && outputNode ? fmt(outputNode.value) : "—"}
+              {outputNode && graph.isComputed(outputNode.id) ? fmt(outputNode.value) : "—"}
             </span>
           </div>
           {toolbarEnd}
@@ -189,10 +210,8 @@ export function ComputationalGraphPlayground({
 
       <div className="nn-immersive-body">
         <AutogradFlowGraph
-          graph={engine.graph}
+          graph={graph}
           version={version}
-          showGrad={gradsVisible}
-          showValues={valuesVisible}
           fitViewKey={`${preset}:${fitKey}`}
           selectedNodeId={selectedNodeId}
           selectedEdgeId={selectedEdgeId}
@@ -207,11 +226,9 @@ export function ComputationalGraphPlayground({
           <aside className="nn-flow-dock nn-flow-dock--left">
             <AutogradPalette onAddOp={onAddOp} />
             <AutogradInspector
-              graph={engine.graph}
+              graph={graph}
               version={version}
-              showGrad={gradsVisible}
-              showValues={valuesVisible}
-              selectedNodeId={selectedNodeId}
+                  selectedNodeId={selectedNodeId}
               selectedEdgeId={selectedEdgeId}
               onSetNodeValue={onSetNodeValue}
               onSetOutput={onSetOutput}

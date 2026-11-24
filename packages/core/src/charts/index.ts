@@ -19,6 +19,7 @@ export type {
 } from "./mini-heatmap";
 
 export {
+  curveHaloFromValues,
   curveStrokeFromValues,
   inferYDomain,
   renderCurve,

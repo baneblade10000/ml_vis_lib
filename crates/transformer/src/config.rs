@@ -20,14 +20,14 @@ pub struct TransformerConfig {
 impl Default for TransformerConfig {
     fn default() -> Self {
         Self {
-            alphabet_size: 20,
+            alphabet_size: 40,
             d_model: 32,
             heads: 4,
             enc_layers: 2,
             dec_layers: 2,
             ff_dim: 64,
-            max_len: 6,
-            learning_rate: 0.003,
+            max_len: 10,
+            learning_rate: 0.001,
             seed: 42,
         }
     }

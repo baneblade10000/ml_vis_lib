@@ -9,8 +9,6 @@ function fmt(value: number): string {
 export function AutogradInspector({
   graph,
   version,
-  showGrad,
-  showValues,
   selectedNodeId,
   selectedEdgeId,
   onSetNodeValue,
@@ -20,8 +18,6 @@ export function AutogradInspector({
 }: {
   graph: AutogradGraph;
   version: number;
-  showGrad: boolean;
-  showValues: boolean;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
   onSetNodeValue: (id: string, value: number) => void;
@@ -54,7 +50,7 @@ export function AutogradInspector({
           <span className="label">{t.inspectorTo}</span>
           <span className="value">{graph.getNode(edge.target)?.label ?? edge.target}</span>
         </div>
-        {showGrad && (
+        {graph.hasLocalDer(edge.id) && (
           <div className="nn-network-inspector-row">
             <span className="label">{t.inspectorLocalDer}</span>
             <span className="value">{fmt(edge.localDer)}</span>
@@ -91,15 +87,13 @@ export function AutogradInspector({
           />
         </label>
       ) : (
-        showValues && (
-          <div className="nn-network-inspector-row">
-            <span className="label">{t.value}</span>
-            <span className="value">{fmt(node.value)}</span>
-          </div>
-        )
+        <div className="nn-network-inspector-row">
+          <span className="label">{t.value}</span>
+          <span className="value">{graph.isComputed(node.id) ? fmt(node.value) : "—"}</span>
+        </div>
       )}
 
-      {showGrad && (
+      {graph.hasGrad(node.id) && (
         <div className="nn-network-inspector-row">
           <span className="label">{t.grad}</span>
           <span className="value">{fmt(node.grad)}</span>

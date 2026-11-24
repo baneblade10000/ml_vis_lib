@@ -1,13 +1,25 @@
 import { evaluateOp, localDerivatives } from "./ops";
-import { OP_SPECS, type AutogradOp, type AutogradPosition, type AutogradSnapshot } from "./types";
+import {
+  OP_SPECS,
+  type AutogradOp,
+  type AutogradPosition,
+  type AutogradSnapshot,
+  type AutogradStep,
+} from "./types";
 
 export class AutogradNode {
   id: string;
   op: AutogradOp;
   label?: string;
-  /** Editable scalar for leaf nodes; computed result for operations after forward(). */
+  /**
+   * Editable scalar for leaf nodes; the result of the operation once the
+   * forward pass reached it — see {@link AutogradGraph.isComputed}.
+   */
   value: number;
-  /** d(output)/d(this) after backward(). */
+  /**
+   * d(output)/d(this) as far as the backward pass has accumulated it — see
+   * {@link AutogradGraph.hasGrad}.
+   */
   grad = 0;
 
   constructor(id: string, op: AutogradOp, value = 0, label?: string) {
@@ -26,7 +38,10 @@ export class AutogradEdge {
   id: string;
   source: string;
   target: string;
-  /** Local partial d(target.value)/d(source.value) after backward(). */
+  /**
+   * Local partial d(target.value)/d(source.value) once the backward pass went
+   * through the target — see {@link AutogradGraph.hasLocalDer}.
+   */
   localDer = 0;
 
   constructor(id: string, source: string, target: string) {
@@ -52,6 +67,15 @@ export class AutogradGraph {
   outputId = "";
   positions = new Map<string, AutogradPosition>();
   private topoOrder: string[] = [];
+  /** Operation nodes whose value is current. */
+  private computedIds = new Set<string>();
+  /** Operation nodes the backward pass has pushed a gradient through. */
+  private backwardIds = new Set<string>();
+  /** Whether the backward pass has seeded the output gradient. */
+  private backwardSeeded = false;
+  /** Nodes whose gradient the backward pass has seeded or accumulated so far. */
+  private gradIds = new Set<string>();
+  private last: AutogradStep | null = null;
 
   getNode(id: string): AutogradNode | undefined {
     return this.nodes.get(id);
@@ -155,6 +179,7 @@ export class AutogradGraph {
     return false;
   }
 
+  /** Re-derive the topological order after a topology change; every value and gradient computed so far goes stale with it. */
   recomputeTopoOrder(): void {
     const order: string[] = [];
     const visited = new Set<string>();
@@ -177,44 +202,181 @@ export class AutogradGraph {
     if (!this.outputId || !this.nodes.has(this.outputId)) {
       this.outputId = this.pickOutputId();
     }
+    this.resetPasses();
+  }
+
+  /**
+   * Forget all progress of both passes, leaving the graph as before either
+   * ran: the values and gradients computed so far stay in place, but are no
+   * longer current. Topology changes do this on their own; changing a leaf
+   * value has to call it explicitly.
+   */
+  resetPasses(): void {
+    this.computedIds.clear();
+    this.backwardIds.clear();
+    this.backwardSeeded = false;
+    this.gradIds.clear();
+    this.last = null;
+  }
+
+  /** Whether the node's value is current: a leaf's always is, an operation's once the forward pass reached it. */
+  isComputed(nodeId: string): boolean {
+    const node = this.nodes.get(nodeId);
+    return !!node && (node.isLeaf || this.computedIds.has(nodeId));
+  }
+
+  /**
+   * Whether the node's gradient is known: once the backward pass seeded or
+   * accumulated it — for every node once the pass is complete.
+   */
+  hasGrad(nodeId: string): boolean {
+    return this.nodes.has(nodeId) && (this.gradIds.has(nodeId) || this.isBackwardComplete());
+  }
+
+  /** Whether the edge's local derivative is known: once the backward pass went through the operation it feeds. */
+  hasLocalDer(edgeId: string): boolean {
+    const edge = this.edges.get(edgeId);
+    return !!edge && this.backwardIds.has(edge.target);
+  }
+
+  private nextForwardId(): string | null {
+    for (const id of this.topoOrder) {
+      const node = this.nodes.get(id);
+      if (node && !node.isLeaf && !this.computedIds.has(id)) return id;
+    }
+    return null;
+  }
+
+  private nextBackwardId(): string | null {
+    for (let i = this.topoOrder.length - 1; i >= 0; i--) {
+      const id = this.topoOrder[i];
+      const node = this.nodes.get(id);
+      if (node && !node.isLeaf && !this.backwardIds.has(id)) return id;
+    }
+    return null;
+  }
+
+  private isBackwardComplete(): boolean {
+    return this.backwardSeeded && this.nextBackwardId() === null;
+  }
+
+  /** What the next {@link step} does: the forward pass until it is complete, then the backward pass; null once both are. */
+  get nextStep(): AutogradStep | null {
+    const id = this.nextForwardId();
+    if (id !== null) return { id, pass: "forward" };
+    const backwardId = this.nextBackwardId();
+    return backwardId === null ? null : { id: backwardId, pass: "backward" };
+  }
+
+  /** The operation node the last {@link step} worked on; null after a whole pass or any change to the graph. */
+  get lastStep(): AutogradStep | null {
+    return this.last;
+  }
+
+  private countOperations(): number {
+    let total = 0;
+    for (const node of this.nodes.values()) {
+      if (!node.isLeaf) total += 1;
+    }
+    return total;
+  }
+
+  /** How far the forward pass has got: operation nodes with a value so far, and in total. */
+  forwardProgress(): { done: number; total: number } {
+    return { done: this.computedIds.size, total: this.countOperations() };
+  }
+
+  /** How far the backward pass has got: operation nodes it pushed a gradient through so far, and in total. */
+  backwardProgress(): { done: number; total: number } {
+    return { done: this.backwardIds.size, total: this.countOperations() };
+  }
+
+  /** Write `value` of one operation node from its current inputs. */
+  private evaluate(node: AutogradNode): void {
+    const inputs = this.inputEdges(node.id).map((e) => this.nodes.get(e.source)?.value ?? 0);
+    node.value = evaluateOp(node.op, inputs);
+  }
+
+  /** Push `node`'s gradient through its operation: set the local derivative of each input edge and add to the inputs' gradients. */
+  private propagate(node: AutogradNode): void {
+    const inEdges = this.inputEdges(node.id);
+    const inputs = inEdges.map((e) => this.nodes.get(e.source)?.value ?? 0);
+    const ders = localDerivatives(node.op, inputs, node.value);
+    inEdges.forEach((edge, idx) => {
+      const local = ders[idx] ?? 0;
+      edge.localDer = local;
+      const source = this.nodes.get(edge.source);
+      if (source) {
+        source.grad += node.grad * local;
+        this.gradIds.add(source.id);
+      }
+    });
+  }
+
+  /** Start the backward pass from scratch: zero every gradient, then seed the output's with d(output)/d(output) = 1. */
+  private startBackward(): void {
+    for (const node of this.nodes.values()) node.grad = 0;
+    for (const edge of this.edges.values()) edge.localDer = 0;
+    this.gradIds.clear();
+    const output = this.outputId ? this.nodes.get(this.outputId) : undefined;
+    if (output) {
+      output.grad = 1;
+      this.gradIds.add(output.id);
+    }
+    this.backwardSeeded = true;
   }
 
   /** Forward pass: compute `value` for every operation node in topological order. */
   forward(): void {
+    this.resetPasses();
     for (const id of this.topoOrder) {
       const node = this.nodes.get(id);
       if (!node || node.isLeaf) continue;
-      const inputs = this.inputEdges(id).map((e) => this.nodes.get(e.source)?.value ?? 0);
-      node.value = evaluateOp(node.op, inputs);
+      this.evaluate(node);
+      this.computedIds.add(id);
     }
   }
 
   /**
-   * Reverse-mode autodiff: seed the output gradient to 1 and propagate through
-   * the reversed topological order, accumulating node grads and per-edge local
-   * derivatives (chain rule).
+   * Reverse-mode autodiff over the values of the last forward pass: seed the
+   * output gradient to 1 and propagate through the reversed topological
+   * order, accumulating node grads and per-edge local derivatives (chain rule).
    */
   backward(): void {
-    for (const node of this.nodes.values()) node.grad = 0;
-    for (const edge of this.edges.values()) edge.localDer = 0;
-    if (!this.outputId) return;
-
-    const output = this.nodes.get(this.outputId);
-    if (output) output.grad = 1;
-
+    this.backwardIds.clear();
+    this.last = null;
+    this.startBackward();
     for (let i = this.topoOrder.length - 1; i >= 0; i--) {
       const node = this.nodes.get(this.topoOrder[i]);
       if (!node || node.isLeaf) continue;
-      const inEdges = this.inputEdges(node.id);
-      const inputs = inEdges.map((e) => this.nodes.get(e.source)?.value ?? 0);
-      const ders = localDerivatives(node.op, inputs, node.value);
-      inEdges.forEach((edge, idx) => {
-        const local = ders[idx] ?? 0;
-        edge.localDer = local;
-        const source = this.nodes.get(edge.source);
-        if (source) source.grad += node.grad * local;
-      });
+      this.propagate(node);
+      this.backwardIds.add(node.id);
     }
+  }
+
+  /**
+   * One step of whichever pass is up next. A forward step computes the first
+   * operation node in topological order without a value, so every input of it
+   * is ready. A backward step seeds the output gradient if it is the first,
+   * then pushes the gradient through the last operation node in topological
+   * order that is not done yet. Returns the step, or null once both passes
+   * are complete.
+   */
+  step(): AutogradStep | null {
+    const next = this.nextStep;
+    if (!next) return null;
+
+    const node = this.nodes.get(next.id)!;
+    if (next.pass === "forward") {
+      this.evaluate(node);
+      this.computedIds.add(node.id);
+    } else {
+      if (!this.backwardSeeded) this.startBackward();
+      this.propagate(node);
+      this.backwardIds.add(node.id);
+    }
+    this.last = next;
+    return next;
   }
 
   toSnapshot(): AutogradSnapshot {

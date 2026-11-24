@@ -9,6 +9,8 @@ import {
   CLASS_0_HEX,
   CLASS_1_HEX,
   PLAY_DISPLAY_DENSITY,
+  isPale,
+  rgbToCss,
   valueToRgb,
   weightColor,
   weightValueNormalized,
@@ -84,13 +86,15 @@ export function paintTrainOverlay(
     ctx.beginPath();
     ctx.arc(mapX(point.x), mapY(point.y), 2.5, 0, Math.PI * 2);
     if (regression) {
-      const { r, g, b } = valueToRgb(point.label);
-      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+      const rgb = valueToRgb(point.label);
+      ctx.fillStyle = rgbToCss(rgb);
+      // Labels near 0 fill white; they need a dark rim to stay visible.
+      ctx.strokeStyle = isPale(rgb) ? "rgba(15, 23, 42, 0.55)" : "rgba(255, 255, 255, 0.75)";
     } else {
       ctx.fillStyle = point.label > 0 ? CLASS_1_HEX : CLASS_0_HEX;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
     }
     ctx.fill();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
     ctx.lineWidth = 0.75;
     ctx.stroke();
   }
@@ -127,9 +131,9 @@ export function paintHeatmapCanvas(
 
 export function BiasIndicator({ bias }: { bias: number }) {
   // The bias square sits in the neuron's bottom-right corner. Its fill color
-  // encodes the bias via the diverging palette: indigo for negative, cyan-blue
-  // for positive, with the hue saturating toward the palette extremes as |bias|
-  // grows (tanh-normalized, so small biases stay readable).
+  // encodes the bias via the numeric scale: indigo for negative, white at 0,
+  // cyan-blue for positive, saturating toward the scale endpoints as |bias|
+  // grows (tanh-normalized, so large biases saturate instead of clamping).
   return (
     <span
       className="nn-flow-bias"

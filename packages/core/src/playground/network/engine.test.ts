@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
+// @ts-expect-error -- core has no Node types; the test runner provides the module.
+import { readFileSync } from "node:fs";
 import { reduceMatrix } from "../../charts/mini-heatmap";
 import { boundaryToGridPoints, computeBoundaries } from "./boundary";
-import { valueToRgb, valueToRgbZeroWhite, PALETTE_HIGH, PALETTE_LOW, PALETTE_MID, PALETTE_ZERO_WHITE } from "./colors";
+import {
+  NUMERIC_NEGATIVE,
+  NUMERIC_POSITIVE,
+  NUMERIC_ZERO,
+  numericScaleGradient,
+  rgbToCss,
+  scaleInk,
+  scaleText,
+  valueToRgb,
+} from "./colors";
 import { CURVE_DENSITY, DENSITY, HEATMAP_PRESETS, NODE_BOUNDARY_DENSITY, PLAY_BOUNDARY_STRIDE, PLAY_DISPLAY_DENSITY } from "./constants";
 import { PlaygroundEngine } from "./engine";
 import { forwardPropGraph } from "./graph";
@@ -149,28 +160,58 @@ describe("mini-heatmap helpers", () => {
     ];
     expect(reduceMatrix(matrix, 2)[0][0]).toBe(1.5);
   });
+});
 
-  it("valueToRgb returns palette endpoints", () => {
-    expect(valueToRgb(-1)).toEqual(PALETTE_LOW);
-    expect(valueToRgb(0)).toEqual(PALETTE_MID);
-    expect(valueToRgb(1)).toEqual(PALETTE_HIGH);
+describe("numeric color scale", () => {
+  type Rgb = { r: number; g: number; b: number };
+  const dist = (a: Rgb, b: Rgb) => Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
+  const hex = ({ r, g, b }: Rgb) =>
+    `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+
+  it("maps −1, 0 and +1 to the negative, zero and positive tokens", () => {
+    expect(valueToRgb(-1)).toEqual(NUMERIC_NEGATIVE);
+    expect(valueToRgb(0)).toEqual(NUMERIC_ZERO);
+    expect(valueToRgb(1)).toEqual(NUMERIC_POSITIVE);
   });
 
-  it("valueToRgb keeps ±0.5 closer to midpoint than a linear ramp", () => {
-    const dist = (
-      a: { r: number; g: number; b: number },
-      b: { r: number; g: number; b: number },
-    ) => Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
-    const halfToMid = dist(valueToRgb(0.5), PALETTE_MID);
-    const endToMid = dist(PALETTE_HIGH, PALETTE_MID);
-    expect(halfToMid).toBeLessThan(endToMid * 0.4);
-    expect(dist(valueToRgb(-0.5), PALETTE_MID)).toBeLessThan(dist(PALETTE_LOW, PALETTE_MID) * 0.4);
+  it("blends each side toward the white zero", () => {
+    expect(dist(valueToRgb(0.5), NUMERIC_ZERO)).toBeLessThan(dist(NUMERIC_POSITIVE, NUMERIC_ZERO) * 0.4);
+    expect(dist(valueToRgb(-0.5), NUMERIC_ZERO)).toBeLessThan(dist(NUMERIC_NEGATIVE, NUMERIC_ZERO) * 0.4);
   });
 
-  it("valueToRgbZeroWhite maps 0 to white", () => {
-    expect(valueToRgbZeroWhite(-1)).toEqual(PALETTE_LOW);
-    expect(valueToRgbZeroWhite(0)).toEqual(PALETTE_ZERO_WHITE);
-    expect(valueToRgbZeroWhite(1)).toEqual(PALETTE_HIGH);
+  it("samples the legend gradient from the same mapping as the canvases", () => {
+    expect(numericScaleGradient(3)).toBe(
+      `linear-gradient(to right, ${rgbToCss(NUMERIC_NEGATIVE)} 0%, ${rgbToCss(NUMERIC_ZERO)} 50%, ${rgbToCss(NUMERIC_POSITIVE)} 100%)`,
+    );
+  });
+
+  it("takes the ink with the higher contrast: dark on white and on cyan-blue, white on indigo", () => {
+    expect(scaleInk(0)).toBe("#0f172a");
+    expect(scaleInk(0.5)).toBe("#0f172a");
+    expect(scaleInk(1)).toBe("#0f172a");
+    expect(scaleInk(-1)).toBe("#ffffff");
+  });
+
+  it("writes a value on a white surface in the saturated token of its side", () => {
+    expect(scaleText(-0.01)).toBe(hex(NUMERIC_NEGATIVE));
+    expect(scaleText(0.01)).toBe(hex(NUMERIC_POSITIVE));
+    expect(scaleText(0)).toBe("#0f172a");
+    expect(scaleText(Number.NaN)).toBe("#0f172a");
+  });
+
+  it("keeps the static TransformerFlow page on the same three tokens", () => {
+    // The page ships as plain files in public/ and cannot import this module.
+    const css = readFileSync(
+      new URL("../../../../../packages/playground/public/tflow/style.css", import.meta.url),
+      "utf8",
+    );
+    const token = (name: string) =>
+      new RegExp(`--scale-${name}:\\s*(#[0-9a-fA-F]{6})`).exec(css)?.[1]?.toLowerCase();
+    expect({ negative: token("negative"), zero: token("zero"), positive: token("positive") }).toEqual({
+      negative: hex(NUMERIC_NEGATIVE),
+      zero: hex(NUMERIC_ZERO),
+      positive: hex(NUMERIC_POSITIVE),
+    });
   });
 });
 
