@@ -1,4 +1,4 @@
-import type { Edge, Node } from "@xyflow/react";
+import { Position, type Edge, type Node, type NodeHandle } from "@xyflow/react";
 import { OP_SPECS, type AutogradGraph, type AutogradOp, type AutogradPass } from "@ml-vis/core/autograd";
 import { weightColor } from "@ml-vis/core/network";
 
@@ -6,6 +6,32 @@ export const AUTOGRAD_DRAG_TYPE = "application/reactflow-autograd";
 
 export const AUTOGRAD_NODE_WIDTH = 96;
 export const AUTOGRAD_NODE_HEIGHT = 64;
+/** Vertical distance between two neighbouring input ports of one node. */
+const PORT_SPACING = 16;
+/** A port's rendered box: the 9px `.ag-handle` square, ring included, centred on the node border. */
+const PORT_SIZE = 9;
+
+/** The React Flow id of a node's input port; the edge feeding it carries the same as its target handle. */
+export function autogradPortHandle(port: number): string {
+  return `in-${port}`;
+}
+
+/** The port a connection ended on, from its handle id; undefined when the handle is not an input port. */
+export function autogradPortOf(handle?: string | null): number | undefined {
+  if (!handle?.startsWith("in-")) return undefined;
+  const port = Number(handle.slice(3));
+  return Number.isInteger(port) ? port : undefined;
+}
+
+/** A node's height: the base one, or taller once its input ports need more room than that. */
+export function autogradNodeHeight(inputPorts: number): number {
+  return Math.max(AUTOGRAD_NODE_HEIGHT, (inputPorts + 1) * PORT_SPACING);
+}
+
+/** How far down a node an input port sits, as a share of its height: the ports are spread evenly, margins included. */
+export function autogradPortOffset(inputPorts: number, port: number): number {
+  return (port + 1) / (inputPorts + 1);
+}
 
 /** A node's role in the step-by-step passes: what the last step worked on, or what the next one will. */
 export type AutogradStepRole = {
@@ -25,6 +51,8 @@ export type AutogradNodeData = {
   showGrad: boolean;
   /** Whether the node's value is known; operations get it as the forward pass reaches them. */
   computed: boolean;
+  /** One entry per input port of an operation, down its left side: whether an edge feeds it. A leaf has none. */
+  inputPorts: boolean[];
   step: AutogradStepRole | null;
   selected: boolean;
 };
@@ -78,12 +106,34 @@ export function autogradToFlow(
     const isOutput = graph.outputId === node.id;
     // Note: React Flow reserves the "output" node type and paints its own frame,
     // so the sink node uses a custom "sink" type instead.
+    const type = node.isLeaf ? "leaf" : isOutput ? "sink" : "op";
+    const fed = new Set(graph.inputEdges(node.id).map((edge) => edge.slot));
+    const inputPorts = Array.from({ length: graph.inputPortCount(node.id) }, (_, port) => fed.has(port));
+    const height = autogradNodeHeight(inputPorts.length);
+    // A handle's box as React Flow measures it in the DOM, so that declaring it here gives the same bounds.
+    const box = (x: number, y: number) => ({
+      x: x - PORT_SIZE / 2,
+      y: y - PORT_SIZE / 2,
+      width: PORT_SIZE,
+      height: PORT_SIZE,
+    });
+    const handles: NodeHandle[] = inputPorts.map((_, port) => ({
+      type: "target",
+      position: Position.Left,
+      id: autogradPortHandle(port),
+      ...box(0, autogradPortOffset(inputPorts.length, port) * height),
+    }));
+    if (type !== "sink") {
+      handles.push({ type: "source", position: Position.Right, ...box(AUTOGRAD_NODE_WIDTH, height / 2) });
+    }
     nodes.push({
       id: node.id,
-      type: node.isLeaf ? "leaf" : isOutput ? "sink" : "op",
+      type,
       position: pos,
       width: AUTOGRAD_NODE_WIDTH,
-      height: AUTOGRAD_NODE_HEIGHT,
+      height,
+      // Declared, not left to be measured: an edge and the port it feeds appear in the same frame.
+      handles,
       data: {
         op: node.op,
         symbol: spec.symbol,
@@ -94,6 +144,7 @@ export function autogradToFlow(
         isOutput,
         showGrad: graph.hasGrad(node.id),
         computed: graph.isComputed(node.id),
+        inputPorts,
         step: stepOf(node.id),
         selected: options.selectedNodeId === node.id,
       },
@@ -105,6 +156,7 @@ export function autogradToFlow(
       id: edge.id,
       source: edge.source,
       target: edge.target,
+      targetHandle: autogradPortHandle(edge.slot),
       type: "autograd",
       selected: options.selectedEdgeId === edge.id,
       data: {

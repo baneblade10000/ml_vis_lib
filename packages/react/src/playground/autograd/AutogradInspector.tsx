@@ -48,7 +48,10 @@ export function AutogradInspector({
         </div>
         <div className="nn-network-inspector-row">
           <span className="label">{t.inspectorTo}</span>
-          <span className="value">{graph.getNode(edge.target)?.label ?? edge.target}</span>
+          <span className="value">
+            {graph.getNode(edge.target)?.label ?? edge.target} ·{" "}
+            {t.inspectorInput.replace("{n}", String(edge.slot + 1))}
+          </span>
         </div>
         {graph.hasLocalDer(edge.id) && (
           <div className="nn-network-inspector-row">

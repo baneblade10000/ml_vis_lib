@@ -55,6 +55,19 @@ describe("CompGraphEngine", () => {
     expect(engine.graph.backwardProgress()).toEqual({ done: 4, total });
   });
 
+  it("connectNodes feeds the port it is given", () => {
+    const engine = new CompGraphEngine({ preset: "hinge" });
+    const margin = [...engine.graph.nodes.values()].find((n) => n.label === "1−y·ŷ")!;
+    const y = leaf(engine, "y");
+
+    // y takes port 0 over from the constant 1.
+    engine.connectNodes(y.id, margin.id, 0);
+    engine.runForward();
+
+    // y − y·ŷ = −1 − (−1 · 2.5)
+    expect(margin.value).toBe(1.5);
+  });
+
   it("runStep continues into the backward pass once the forward pass is complete", () => {
     const engine = new CompGraphEngine();
     const a = leaf(engine, "a");

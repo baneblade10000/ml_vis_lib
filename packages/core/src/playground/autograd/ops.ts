@@ -36,14 +36,9 @@ export function localDerivatives(op: AutogradOp, inputs: number[], out: number):
     case "add":
       return inputs.map(() => 1);
     case "mul":
-      // d/dxᵢ (∏ xⱼ) = ∏_{j≠i} xⱼ = product / xᵢ (guard against zero factors).
-      return inputs.map((_, i) => {
-        let prod = 1;
-        for (let j = 0; j < inputs.length; j++) {
-          if (j !== i) prod *= inputs[j];
-        }
-        return prod;
-      });
+      // d/dxᵢ (∏ xⱼ) = ∏_{j≠i} xⱼ (guard against zero factors). reduce steps
+      // over the holes an unfed port leaves.
+      return inputs.map((_, i) => inputs.reduce((prod, x, j) => (j === i ? prod : prod * x), 1));
     case "sub":
       return [1, -1];
     case "div": {

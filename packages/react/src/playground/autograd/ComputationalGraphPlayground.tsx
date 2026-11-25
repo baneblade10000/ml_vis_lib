@@ -57,10 +57,13 @@ export function ComputationalGraphPlayground({
     [engine, afterEdit, nextDropPosition],
   );
 
-  const onConnect = useCallback((s: string, tId: string) => {
-    engine.connectNodes(s, tId);
-    afterEdit();
-  }, [engine, afterEdit]);
+  const onConnect = useCallback(
+    (s: string, tId: string, port?: number) => {
+      engine.connectNodes(s, tId, port);
+      afterEdit();
+    },
+    [engine, afterEdit],
+  );
 
   const onDropNode = useCallback((kind: string, position: { x: number; y: number }) => {
     addSlotRef.current += 1;

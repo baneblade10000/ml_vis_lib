@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { AutogradGraph } from "./graph";
+import type { AutogradGraph, AutogradNode } from "./graph";
 import { AUTOGRAD_PRESETS, buildAutogradPreset, type AutogradPresetId } from "./presets";
+import { OP_SPECS } from "./types";
 
-// Node box as the playground renders it; mirrors AUTOGRAD_NODE_WIDTH / HEIGHT in the React adapter.
+// Node box as the playground renders it; mirrors AUTOGRAD_NODE_WIDTH and
+// autogradNodeHeight in the React adapter.
 const NODE_WIDTH = 96;
 const NODE_HEIGHT = 64;
+const PORT_SPACING = 16;
+
+/** A node is as tall as its input ports need: the base height, or one that keeps their spacing. */
+function nodeHeight(graph: AutogradGraph, node: AutogradNode): number {
+  return Math.max(NODE_HEIGHT, (graph.inputPortCount(node.id) + 1) * PORT_SPACING);
+}
 
 const [h1, h2, h3] = [0.5 * 1 - 1 * 0.5 + 0.25, -0.5 * 1 + 1 * 0.5 - 0.25, 1 * 1 + 0.5 * 0.5].map(Math.tanh);
 const [e1, e2] = [Math.exp(1 * 1), Math.exp(1 * -1)];
@@ -60,14 +68,15 @@ describe.each<AutogradPresetId>(AUTOGRAD_PRESETS)("preset %s", (preset) => {
     const boxes = [...g.nodes.values()].map((n) => {
       const position = g.positions.get(n.id);
       expect(position, `node ${n.label} has no position`).toBeDefined();
-      return { x: position!.x, y: position!.y };
+      return { x: position!.x, y: position!.y, width: NODE_WIDTH, height: nodeHeight(g, n) };
     });
 
     for (let i = 0; i < boxes.length; i++) {
       for (let j = i + 1; j < boxes.length; j++) {
         const a = boxes[i];
         const b = boxes[j];
-        const overlaps = a.x < b.x + NODE_WIDTH && b.x < a.x + NODE_WIDTH && a.y < b.y + NODE_HEIGHT && b.y < a.y + NODE_HEIGHT;
+        const overlaps =
+          a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
         expect(overlaps, `nodes ${i} and ${j} overlap`).toBe(false);
       }
     }
@@ -91,6 +100,20 @@ describe.each<AutogradPresetId>(AUTOGRAD_PRESETS)("preset %s", (preset) => {
       for (const edge of g.inputEdges(id)) upstream.add(edge.source);
     }
     expect(upstream.size).toBe(g.nodes.size);
+  });
+
+  it("feeds each operand through a port of its own", () => {
+    const g = buildAutogradPreset(preset);
+
+    for (const node of g.nodes.values()) {
+      if (node.isLeaf) continue;
+      const slots = g.inputEdges(node.id).map((edge) => edge.slot);
+      const arity = OP_SPECS[node.op].arity;
+      expect(slots, `${node.label} ports`).toEqual(slots.map((_, port) => port));
+      expect(g.inputPortCount(node.id), `${node.label} port count`).toBe(
+        arity === Infinity ? Math.max(2, slots.length) : arity,
+      );
+    }
   });
 
   it("matches central finite differences on every leaf", () => {

@@ -39,15 +39,21 @@ export class AutogradEdge {
   source: string;
   target: string;
   /**
+   * Which of the target's input ports the edge feeds, counting from 0 — for
+   * a positional operation (sub, div), which of its two operands.
+   */
+  slot: number;
+  /**
    * Local partial d(target.value)/d(source.value) once the backward pass went
    * through the target — see {@link AutogradGraph.hasLocalDer}.
    */
   localDer = 0;
 
-  constructor(id: string, source: string, target: string) {
+  constructor(id: string, source: string, target: string, slot = 0) {
     this.id = id;
     this.source = source;
     this.target = target;
+    this.slot = slot;
   }
 }
 
@@ -60,6 +66,13 @@ export function resetAutogradIdCounter(start = 1): void {
 function allocAutogradId(): string {
   return String(nextAutogradId++);
 }
+
+/**
+ * An n-ary operation (add, mul) shows this many input ports before anything
+ * is connected to it, like a binary one, and one more than its highest fed
+ * port afterwards.
+ */
+const NARY_MIN_PORTS = 2;
 
 export class AutogradGraph {
   nodes = new Map<string, AutogradNode>();
@@ -85,9 +98,26 @@ export class AutogradGraph {
     return this.topoOrder;
   }
 
-  /** Incoming edges of a node, kept in insertion order (input slot order). */
+  /** Incoming edges of a node through its input ports, lowest port first. */
   inputEdges(nodeId: string): AutogradEdge[] {
-    return [...this.edges.values()].filter((e) => e.target === nodeId);
+    return [...this.edges.values()].filter((e) => e.target === nodeId).sort((a, b) => a.slot - b.slot);
+  }
+
+  /**
+   * How many input ports a node has: a leaf none, an operation as many as its
+   * arity, and an n-ary operation (add, mul) at least two and one more than
+   * its highest fed port.
+   */
+  inputPortCount(nodeId: string): number {
+    const node = this.nodes.get(nodeId);
+    if (!node || node.isLeaf) return 0;
+    const arity = OP_SPECS[node.op].arity;
+    if (arity !== Infinity) return arity;
+    let highest = -1;
+    for (const edge of this.edges.values()) {
+      if (edge.target === nodeId) highest = Math.max(highest, edge.slot);
+    }
+    return Math.max(NARY_MIN_PORTS, highest + 1);
   }
 
   outputEdges(nodeId: string): AutogradEdge[] {
@@ -108,23 +138,45 @@ export class AutogradGraph {
   }
 
   /**
-   * Attempt to connect source -> target. Rejects self-loops, cycles, duplicate
-   * edges, connections into leaf nodes, and edges exceeding the target arity.
+   * Attempt to connect source -> target through one of the target's input
+   * ports, counting from 0. The given port takes the edge, or without `slot`
+   * the first free one. An operation of fixed arity (neg, sub, div, ...) whose
+   * port is fed already hands it to the new source. An n-ary operation (add,
+   * mul) never loses an operand: a wire dropped on a fed port goes to the
+   * first free one, or to a new port. Rejects self-loops, cycles, connections
+   * into leaf nodes, ports the operation does not have, a fixed-arity
+   * operation that is fully fed when no port is given, and a source that
+   * already feeds the port it would take over.
    */
-  connect(sourceId: string, targetId: string): AutogradEdge | null {
+  connect(sourceId: string, targetId: string, slot?: number): AutogradEdge | null {
     if (sourceId === targetId) return null;
     const source = this.nodes.get(sourceId);
     const target = this.nodes.get(targetId);
-    if (!source || !target) return null;
-    if (target.isLeaf) return null;
-
-    const spec = OP_SPECS[target.op];
-    const existingInputs = this.inputEdges(targetId);
-    if (existingInputs.length >= spec.arity) return null;
-    if (existingInputs.some((e) => e.source === sourceId)) return null;
+    if (!source || !target || target.isLeaf) return null;
     if (this.wouldCreateCycle(sourceId, targetId)) return null;
 
-    const edge = new AutogradEdge(allocAutogradId(), sourceId, targetId);
+    const ports = this.inputPortCount(targetId);
+    const fed = new Set(this.inputEdges(targetId).map((edge) => edge.slot));
+    const isPort = (port: number): boolean => Number.isInteger(port) && port >= 0 && port < ports;
+    let firstFree = 0;
+    while (firstFree < ports && fed.has(firstFree)) firstFree += 1;
+
+    let port: number;
+    if (OP_SPECS[target.op].arity === Infinity) {
+      // A free port the wire names, else the first free one, else a new one.
+      port = firstFree < ports ? firstFree : ports;
+      if (slot !== undefined && isPort(slot) && !fed.has(slot)) port = slot;
+    } else {
+      // Full with no port named, or a port the operation does not have.
+      port = slot ?? firstFree;
+      if (!isPort(port)) return null;
+    }
+
+    const occupant = this.inputEdges(targetId).find((edge) => edge.slot === port);
+    if (occupant?.source === sourceId) return null;
+    if (occupant) this.edges.delete(occupant.id);
+
+    const edge = new AutogradEdge(allocAutogradId(), sourceId, targetId, port);
     this.edges.set(edge.id, edge);
     this.recomputeTopoOrder();
     return edge;
@@ -309,26 +361,41 @@ export class AutogradGraph {
     return { done: this.backwardIds.size, total: this.countOperations() };
   }
 
-  /** Write `value` of one operation node from its current inputs. */
-  private evaluate(node: AutogradNode): void {
-    const inputs = this.inputEdges(node.id).map((e) => this.nodes.get(e.source)?.value ?? 0);
-    node.value = evaluateOp(node.op, inputs);
+  /**
+   * The values reaching a node through its ports, each at the index of its
+   * port. An unfed port leaves a hole, which an operation reads as a missing
+   * operand.
+   */
+  private inputValues(nodeId: string): number[] {
+    const values: number[] = [];
+    for (const edge of this.inputEdges(nodeId)) {
+      values[edge.slot] = this.nodes.get(edge.source)?.value ?? 0;
+    }
+    return values;
   }
 
-  /** Push `node`'s gradient through its operation: set the local derivative of each input edge and add to the inputs' gradients. */
+  /** Write `value` of one operation node from its current inputs. */
+  private evaluate(node: AutogradNode): void {
+    node.value = evaluateOp(node.op, this.inputValues(node.id));
+  }
+
+  /**
+   * Push `node`'s gradient through its operation: set the local derivative of
+   * each input edge and add to the inputs' gradients. A source that feeds
+   * several ports collects the gradient of each.
+   */
   private propagate(node: AutogradNode): void {
     const inEdges = this.inputEdges(node.id);
-    const inputs = inEdges.map((e) => this.nodes.get(e.source)?.value ?? 0);
-    const ders = localDerivatives(node.op, inputs, node.value);
-    inEdges.forEach((edge, idx) => {
-      const local = ders[idx] ?? 0;
+    const ders = localDerivatives(node.op, this.inputValues(node.id), node.value);
+    for (const edge of inEdges) {
+      const local = ders[edge.slot] ?? 0;
       edge.localDer = local;
       const source = this.nodes.get(edge.source);
       if (source) {
         source.grad += node.grad * local;
         this.gradIds.add(source.id);
       }
-    });
+    }
   }
 
   /** Start the backward pass from scratch: zero every gradient, then seed the output's with d(output)/d(output) = 1. */
@@ -403,7 +470,7 @@ export class AutogradGraph {
   toSnapshot(): AutogradSnapshot {
     return {
       nodes: [...this.nodes.values()].map((n) => ({ id: n.id, op: n.op, label: n.label, value: n.value })),
-      edges: [...this.edges.values()].map((e) => ({ id: e.id, source: e.source, target: e.target })),
+      edges: [...this.edges.values()].map((e) => ({ id: e.id, source: e.source, target: e.target, slot: e.slot })),
       outputId: this.outputId,
       positions: Object.fromEntries([...this.positions.entries()].map(([id, p]) => [id, { ...p }])),
     };
@@ -417,9 +484,14 @@ export class AutogradGraph {
       const num = Number.parseInt(def.id, 10);
       if (!Number.isNaN(num)) maxId = Math.max(maxId, num);
     }
+    // A snapshot from before operations had ports lists a target's edges in
+    // port order, so they fill its ports in turn.
+    const nextPort = new Map<string, number>();
     for (const def of snapshot.edges) {
-      const edge = new AutogradEdge(def.id, def.source, def.target);
+      const slot = def.slot ?? nextPort.get(def.target) ?? 0;
+      const edge = new AutogradEdge(def.id, def.source, def.target, slot);
       graph.edges.set(def.id, edge);
+      nextPort.set(def.target, slot + 1);
       const num = Number.parseInt(def.id, 10);
       if (!Number.isNaN(num)) maxId = Math.max(maxId, num);
     }

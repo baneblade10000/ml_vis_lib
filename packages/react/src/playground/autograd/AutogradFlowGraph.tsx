@@ -17,6 +17,7 @@ import "@xyflow/react/dist/style.css";
 import { AutogradGraph } from "@ml-vis/core/autograd";
 import {
   autogradKindFromDrag,
+  autogradPortOf,
   autogradToFlow,
   AUTOGRAD_DRAG_TYPE,
   type AutogradEdgeData,
@@ -32,7 +33,7 @@ export interface AutogradFlowGraphProps {
   selectedEdgeId: string | null;
   onSelectNode: (id: string | null) => void;
   onSelectEdge: (id: string | null) => void;
-  onConnect: (sourceId: string, targetId: string) => void;
+  onConnect: (sourceId: string, targetId: string, port?: number) => void;
   onDropNode: (kind: string, position: { x: number; y: number }) => void;
   onMoveNode: (nodeId: string, position: { x: number; y: number }) => void;
   onRemoveNode: (nodeId: string) => void;
@@ -151,7 +152,7 @@ function AutogradFlowGraphInner({
 
   const handleConnect: OnConnect = useCallback(
     (c: Connection) => {
-      if (c.source && c.target) onConnect(c.source, c.target);
+      if (c.source && c.target) onConnect(c.source, c.target, autogradPortOf(c.targetHandle));
     },
     [onConnect],
   );

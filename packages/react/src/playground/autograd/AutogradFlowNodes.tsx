@@ -10,6 +10,9 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import {
+  autogradNodeHeight,
+  autogradPortHandle,
+  autogradPortOffset,
   gradColor,
   type AutogradEdgeData,
   type AutogradNodeData,
@@ -72,25 +75,46 @@ export function LeafFlowNode({ data }: NodeProps<Node<AutogradNodeData>>) {
   );
 }
 
-export function OpFlowNode({ data }: NodeProps<Node<AutogradNodeData>>) {
+/** A node's input ports down its left side, at the positions the adapter declares for them. */
+function InputPorts({ ports }: { ports: boolean[] }) {
+  return (
+    <>
+      {ports.map((fed, port) => (
+        <Handle
+          key={port}
+          type="target"
+          position={Position.Left}
+          id={autogradPortHandle(port)}
+          className={fed ? "ag-handle" : "ag-handle ag-port--empty"}
+          style={{ top: `${autogradPortOffset(ports.length, port) * 100}%` }}
+        />
+      ))}
+    </>
+  );
+}
+
+/** An operation node: as tall as its ports need, with a source handle unless it is the output. */
+function OperationNode({ data, sink = false }: { data: AutogradNodeData; sink?: boolean }) {
   const stepTitle = useStepTitle(data.step);
   return (
-    <div className={nodeClass("ag-node ag-node--op", data)} title={stepTitle}>
-      <Handle type="target" position={Position.Left} className="ag-handle" />
+    <div
+      className={nodeClass(sink ? "ag-node ag-node--op ag-node--sink" : "ag-node ag-node--op", data)}
+      style={{ minHeight: autogradNodeHeight(data.inputPorts.length) }}
+      title={stepTitle}
+    >
+      <InputPorts ports={data.inputPorts} />
       <NodeBody data={data} />
-      <Handle type="source" position={Position.Right} className="ag-handle" />
+      {!sink && <Handle type="source" position={Position.Right} className="ag-handle" />}
     </div>
   );
 }
 
+export function OpFlowNode({ data }: NodeProps<Node<AutogradNodeData>>) {
+  return <OperationNode data={data} />;
+}
+
 export function SinkFlowNode({ data }: NodeProps<Node<AutogradNodeData>>) {
-  const stepTitle = useStepTitle(data.step);
-  return (
-    <div className={nodeClass("ag-node ag-node--op ag-node--sink", data)} title={stepTitle}>
-      <Handle type="target" position={Position.Left} className="ag-handle" />
-      <NodeBody data={data} />
-    </div>
-  );
+  return <OperationNode data={data} sink />;
 }
 
 export const autogradNodeTypes = {

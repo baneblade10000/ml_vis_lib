@@ -27,6 +27,12 @@ export interface AutogradEdgeDef {
   id: string;
   source: string;
   target: string;
+  /**
+   * The input port of the target the edge feeds. Snapshots written before
+   * operations had ports leave it out: such an edge feeds the port after the
+   * ones its target already has.
+   */
+  slot?: number;
 }
 
 export interface AutogradSnapshot {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { AutogradGraph, resetAutogradIdCounter } from "./graph";
+import { AutogradGraph, resetAutogradIdCounter, type AutogradNode } from "./graph";
 import { buildAutogradPreset, type AutogradPresetId } from "./presets";
-import type { AutogradStep } from "./types";
+import type { AutogradOp, AutogradStep } from "./types";
 
 describe("AutogradGraph", () => {
   it("forward + backward on (a+b)*c matches analytic gradients", () => {
@@ -417,5 +417,191 @@ describe("AutogradGraph steps independent operations together", () => {
     const back: string[][] = [];
     for (; s !== null; s = g.step()) back.push(taken(g, s));
     expect(back).toEqual(forward.slice().reverse());
+  });
+});
+
+describe("AutogradGraph input ports", () => {
+  /** Leaves x1 = 2, x2 = 3, … and one operation over them, the output. */
+  function build(op: AutogradOp, leaves = 3) {
+    resetAutogradIdCounter(1);
+    const g = new AutogradGraph();
+    const inputs = Array.from({ length: leaves }, (_, i) => g.addNode("input", { value: i + 2, label: `x${i + 1}` }));
+    const node = g.addNode(op);
+    g.setOutput(node.id);
+    return { g, inputs, node };
+  }
+
+  /** What reaches a node through its ports, in port order. */
+  const fedBy = (g: AutogradGraph, node: AutogradNode): string[] => g.inputEdges(node.id).map((e) => e.source);
+
+  it("counts one port per operand, and two for an n-ary operation before anything is connected", () => {
+    for (const [op, ports] of [["neg", 1], ["tanh", 1], ["sub", 2], ["div", 2], ["add", 2], ["mul", 2]] as const) {
+      const { g, inputs, node } = build(op);
+      expect(g.inputPortCount(node.id), op).toBe(ports);
+      expect(g.inputPortCount(inputs[0].id), `${op} leaf`).toBe(0);
+    }
+  });
+
+  it("feeds the ports in connection order when no port is named", () => {
+    const { g, inputs, node } = build("sub");
+
+    g.connect(inputs[1].id, node.id);
+    g.connect(inputs[0].id, node.id);
+
+    expect(fedBy(g, node)).toEqual([inputs[1].id, inputs[0].id]);
+    g.forward();
+    expect(node.value).toBe(3 - 2);
+  });
+
+  it("feeds the port a connection names, ahead of the ones added before it", () => {
+    const { g, inputs, node } = build("sub");
+
+    g.connect(inputs[1].id, node.id, 1);
+    g.forward();
+    // The unfed port 0 reads as 0.
+    expect(node.value).toBe(-3);
+
+    g.connect(inputs[0].id, node.id, 0);
+
+    expect(g.inputEdges(node.id).map((e) => e.slot)).toEqual([0, 1]);
+    g.forward();
+    expect(node.value).toBe(2 - 3);
+  });
+
+  it.each([
+    ["add", 4, 2],
+    ["mul", 4, 4],
+    ["sub", 0, 0],
+    ["div", 1, 0],
+  ] as const)("lets one source feed both ports of a binary %s", (op, value, grad) => {
+    const { g, inputs, node } = build(op);
+    const x = inputs[0];
+
+    g.connect(x.id, node.id);
+    g.connect(x.id, node.id);
+    g.forward();
+    g.backward();
+
+    expect(fedBy(g, node)).toEqual([x.id, x.id]);
+    expect(node.value).toBe(value);
+    expect(x.grad).toBe(grad);
+  });
+
+  it("hands the port of a fixed-arity operation to the source dropped on it", () => {
+    const { g, inputs, node } = build("sub");
+    g.connect(inputs[0].id, node.id);
+    g.connect(inputs[1].id, node.id);
+
+    g.connect(inputs[2].id, node.id, 1);
+
+    expect(fedBy(g, node)).toEqual([inputs[0].id, inputs[2].id]);
+    expect(g.edges.size).toBe(2);
+    g.forward();
+    expect(node.value).toBe(2 - 4);
+
+    // A source already feeding a port changes nothing by being dropped on it again.
+    expect(g.connect(inputs[0].id, node.id, 0)).toBeNull();
+    expect(fedBy(g, node)).toEqual([inputs[0].id, inputs[2].id]);
+  });
+
+  it("swaps the input of a unary operation the same way", () => {
+    const { g, inputs, node } = build("tanh");
+    g.connect(inputs[0].id, node.id);
+
+    g.connect(inputs[1].id, node.id, 0);
+
+    expect(fedBy(g, node)).toEqual([inputs[1].id]);
+  });
+
+  it("rejects a port the operation does not have", () => {
+    const difference = build("sub");
+    expect(difference.g.connect(difference.inputs[0].id, difference.node.id, 2)).toBeNull();
+    expect(difference.g.connect(difference.inputs[0].id, difference.node.id, -1)).toBeNull();
+    expect(difference.g.connect(difference.inputs[0].id, difference.node.id, NaN)).toBeNull();
+
+    const unary = build("neg");
+    expect(unary.g.connect(unary.inputs[0].id, unary.node.id, 1)).toBeNull();
+  });
+
+  it("gives an n-ary operation a port per operand, and adds one for a wire dropped on a fed port", () => {
+    const { g, inputs, node } = build("add", 4);
+    g.connect(inputs[0].id, node.id);
+    g.connect(inputs[1].id, node.id);
+    expect(g.inputPortCount(node.id)).toBe(2);
+
+    // Both ports are fed: the wire becomes a third operand instead of replacing one.
+    expect(g.connect(inputs[2].id, node.id, 0)?.slot).toBe(2);
+    expect(g.inputPortCount(node.id)).toBe(3);
+    expect(fedBy(g, node)).toEqual(inputs.slice(0, 3).map((n) => n.id));
+    g.forward();
+    expect(node.value).toBe(2 + 3 + 4);
+  });
+
+  it("fills the free port of an n-ary operation before adding one", () => {
+    const { g, inputs, node } = build("add", 4);
+    for (const input of inputs.slice(0, 3)) g.connect(input.id, node.id);
+    g.removeEdge(g.inputEdges(node.id)[1].id);
+
+    expect(g.connect(inputs[3].id, node.id, 0)?.slot).toBe(1);
+    expect(g.inputPortCount(node.id)).toBe(3);
+  });
+
+  it("reads an unfed port of a positional operation as a missing operand", () => {
+    const { g, inputs, node } = build("sub");
+    g.connect(inputs[0].id, node.id);
+    g.connect(inputs[1].id, node.id);
+
+    g.removeEdge(g.inputEdges(node.id)[0].id);
+    g.forward();
+    g.backward();
+
+    // The subtrahend keeps port 1: 0 − x2.
+    expect(g.inputEdges(node.id).map((e) => e.slot)).toEqual([1]);
+    expect(node.value).toBe(-3);
+    expect(inputs[1].grad).toBe(-1);
+
+    // A wire with no port named takes the lowest free one.
+    g.connect(inputs[2].id, node.id);
+    g.forward();
+    expect(node.value).toBe(4 - 3);
+  });
+
+  it("skips an unfed port of an n-ary operation", () => {
+    const product = build("mul");
+    for (const input of product.inputs) product.g.connect(input.id, product.node.id);
+    product.g.removeEdge(product.g.inputEdges(product.node.id)[1].id);
+    product.g.forward();
+    product.g.backward();
+    // 2·4, the middle factor gone.
+    expect(product.node.value).toBe(8);
+    expect(product.inputs.map((input) => input.grad)).toEqual([4, 0, 2]);
+
+    const sum = build("add");
+    for (const input of sum.inputs) sum.g.connect(input.id, sum.node.id);
+    sum.g.removeEdge(sum.g.inputEdges(sum.node.id)[1].id);
+    sum.g.forward();
+    sum.g.backward();
+    expect(sum.node.value).toBe(6);
+    expect(sum.inputs.map((input) => input.grad)).toEqual([1, 0, 1]);
+  });
+
+  it("keeps the ports in a snapshot, and reads older ones in order", () => {
+    const { g, inputs, node } = build("sub");
+    g.connect(inputs[1].id, node.id, 1);
+    g.connect(inputs[0].id, node.id, 0);
+
+    const restored = AutogradGraph.fromSnapshot(g.toSnapshot());
+    expect(restored.inputEdges(node.id).map((e) => [e.source, e.slot])).toEqual([
+      [inputs[0].id, 0],
+      [inputs[1].id, 1],
+    ]);
+
+    // Before operations had ports, an edge fed the port after the ones its target already had.
+    const snapshot = g.toSnapshot();
+    const older = { ...snapshot, edges: snapshot.edges.map(({ id, source, target }) => ({ id, source, target })) };
+    expect(AutogradGraph.fromSnapshot(older).inputEdges(node.id).map((e) => e.source)).toEqual([
+      inputs[1].id,
+      inputs[0].id,
+    ]);
   });
 });

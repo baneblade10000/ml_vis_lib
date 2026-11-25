@@ -33,6 +33,8 @@ export type AutogradMessages = {
   inspectorLocalDer: string;
   inspectorFrom: string;
   inspectorTo: string;
+  /** Names the input port an edge feeds; `{n}` is the port, counting from 1. */
+  inspectorInput: string;
   setAsOutput: string;
   removeNode: string;
   removeEdge: string;
@@ -98,6 +100,7 @@ export const autogradMessages: Record<Locale, AutogradMessages> = {
     inspectorLocalDer: "Local ∂",
     inspectorFrom: "From",
     inspectorTo: "To",
+    inspectorInput: "input {n}",
     setAsOutput: "Set as output",
     removeNode: "Remove node",
     removeEdge: "Remove edge",
@@ -135,6 +138,7 @@ export const autogradMessages: Record<Locale, AutogradMessages> = {
     inspectorLocalDer: "Локальная ∂",
     inspectorFrom: "Откуда",
     inspectorTo: "Куда",
+    inspectorInput: "вход {n}",
     setAsOutput: "Сделать выходом",
     removeNode: "Удалить узел",
     removeEdge: "Удалить ребро",

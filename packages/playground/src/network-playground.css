@@ -2308,10 +2308,17 @@
 }
 
 .ag-handle {
+  /* The whole box is 9px, ring included: the size the adapter declares for a port. */
+  box-sizing: border-box;
   width: 9px;
   height: 9px;
   background: #fff;
   border: 2px solid #3457a3;
+}
+
+/* An input port nothing feeds yet: an operand still missing. */
+.ag-handle.ag-port--empty {
+  border-color: #a5b4fc;
 }
 
 .ag-edge-label {

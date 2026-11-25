@@ -44,17 +44,19 @@ export class CompGraphEngine {
     return node.id;
   }
 
-  connectNodes(sourceId: string, targetId: string): boolean {
-    const edge = this.graph.connect(sourceId, targetId);
+  /** Connect two nodes through a port of the target; without `port`, the first free one. */
+  connectNodes(sourceId: string, targetId: string, port?: number): boolean {
+    const edge = this.graph.connect(sourceId, targetId, port);
     if (!edge) return false;
     this.invalidate();
     return true;
   }
 
+  /** Remove every edge from source to target: one source may feed several ports of the same node. */
   disconnectNodes(sourceId: string, targetId: string): boolean {
-    const edge = [...this.graph.edges.values()].find((e) => e.source === sourceId && e.target === targetId);
-    if (!edge) return false;
-    this.graph.removeEdge(edge.id);
+    const between = [...this.graph.edges.values()].filter((e) => e.source === sourceId && e.target === targetId);
+    for (const edge of between) this.graph.removeEdge(edge.id);
+    if (!between.length) return false;
     this.invalidate();
     return true;
   }
