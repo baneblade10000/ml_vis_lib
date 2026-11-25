@@ -13,6 +13,7 @@
   "dependencies": {
     "@ml-vis/core": "workspace:*",
     "@ml-vis/react": "workspace:*",
+    "@xyflow/react": "^12.11.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.18.1"

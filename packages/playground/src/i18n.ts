@@ -3,7 +3,6 @@ import { Locale } from "@ml-vis/core/i18n";
 export type PlaygroundMessages = {
   language: string;
   catalogTitle: string;
-  catalogDescription: string;
   openVisualization: string;
   backToCatalog: string;
   vizComputationalGraphTitle: string;
@@ -18,6 +17,10 @@ export type PlaygroundMessages = {
   vizTransformerDescription: string;
   vizTransformerFlowTitle: string;
   vizTransformerFlowDescription: string;
+  catalogViewGraph: string;
+  catalogViewList: string;
+  catalogSearchPlaceholder: string;
+  catalogSearchEmpty: string;
   mobileStubService: string;
   mobileStubTitle: string;
   mobileStubBody: string;
@@ -30,8 +33,6 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
   en: {
     language: "Language",
     catalogTitle: "Visualizations",
-    catalogDescription:
-      "Interactive visualizations for machine learning.",
     openVisualization: "Open",
     backToCatalog: "Back to catalog",
     vizComputationalGraphTitle: "Computational Graph",
@@ -52,6 +53,10 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizTransformerFlowTitle: "TransformerFlow — Constructor",
     vizTransformerFlowDescription:
       "Build a transformer graph block by block: data-flow matrices, training, embeddings, attention diagnostics.",
+    catalogViewGraph: "Graph",
+    catalogViewList: "List",
+    catalogSearchPlaceholder: "Search…",
+    catalogSearchEmpty: "Nothing found",
     mobileStubService: "Interactive visualizations service",
     mobileStubTitle: "Access from mobile devices is not supported",
     mobileStubBody:
@@ -65,7 +70,6 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
   ru: {
     language: "Язык",
     catalogTitle: "Визуализации",
-    catalogDescription: "Интерактивные визуализации для изучения методов машинного обучения.",
     openVisualization: "Открыть",
     backToCatalog: "Назад к каталогу",
     vizComputationalGraphTitle: "Вычислительный граф",
@@ -86,6 +90,10 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizTransformerFlowTitle: "TransformerFlow — конструктор",
     vizTransformerFlowDescription:
       "Сборка вычислительного графа трансформера по блокам: матрицы потока данных, обучение, эмбеддинги, диагностика внимания.",
+    catalogViewGraph: "Граф",
+    catalogViewList: "Список",
+    catalogSearchPlaceholder: "Поиск…",
+    catalogSearchEmpty: "Ничего не найдено",
     mobileStubService: "Сервис интерактивных визуализаций",
     mobileStubTitle: "Доступ с мобильных устройств ограничен",
     mobileStubBody:

@@ -50,13 +50,10 @@
 
 .nn-page {
   width: 100%;
-  max-width: 1440px;
-  margin: 0 auto;
   padding: 1.25rem 2rem 2.5rem;
 }
 
 .nn-page--compact {
-  max-width: none;
   padding: 0.5rem 1rem 1rem;
 }
 
@@ -101,12 +98,12 @@
 }
 
 .catalog-intro {
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.25rem;
 }
 
 .catalog-intro-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(min-content, 1fr) minmax(160px, 340px) auto auto;
   align-items: center;
   gap: 1rem 1.5rem;
   margin-bottom: 0.5rem;
@@ -138,6 +135,297 @@
   color: var(--nn-text-secondary);
   font-size: 0.9375rem;
   line-height: 1.55;
+}
+
+/* ─── Catalog header controls (search, graph / list switch) ─────────────────── */
+
+.catalog-search {
+  width: 100%;
+  min-width: 0;
+  height: 2rem;
+  padding: 0 1rem;
+  background: var(--nn-surface);
+  border: 1px solid var(--nn-border-strong);
+  border-radius: var(--nn-radius-full);
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--nn-text);
+  outline: none;
+  transition:
+    border-color var(--nn-transition),
+    box-shadow var(--nn-transition);
+}
+
+.catalog-search:focus {
+  border-color: var(--nn-accent);
+  box-shadow: var(--nn-shadow-glow);
+}
+
+/* Shown when the header search matches nothing in the current view. */
+.catalog-list-empty,
+.catalog-graph-empty {
+  margin: 0;
+  color: var(--nn-text-secondary);
+  font-size: 0.95rem;
+}
+
+.catalog-list-empty {
+  padding: 3rem 0;
+  text-align: center;
+}
+
+.catalog-graph-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.catalog-mode-switch {
+  display: inline-flex;
+  gap: 4px;
+  height: 2rem;
+  padding: 4px;
+  background: var(--nn-surface-muted);
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius-full);
+}
+
+.catalog-mode-option {
+  padding: 0 1.1rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--nn-radius-full);
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--nn-text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--nn-transition),
+    color var(--nn-transition),
+    box-shadow var(--nn-transition);
+}
+
+.catalog-mode-option.selected {
+  background: var(--nn-surface);
+  color: var(--nn-accent);
+  font-weight: 600;
+  box-shadow: var(--nn-shadow-xs);
+}
+
+/* ─── Catalog topic graph ───────────────────────────────────────────────────── */
+
+.catalog-graph {
+  margin-top: 1.25rem;
+}
+
+.catalog-graph-canvas {
+  position: relative;
+  /* Fill the viewport below the page header. */
+  height: calc(100dvh - 190px);
+  min-height: 540px;
+  background: var(--nn-surface);
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius-lg);
+  box-shadow: var(--nn-shadow-sm);
+  overflow: hidden;
+}
+
+.catalog-graph-handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.catalog-tree-node,
+.catalog-viz-node {
+  transition:
+    opacity var(--nn-transition),
+    box-shadow var(--nn-transition),
+    border-color var(--nn-transition);
+}
+
+.catalog-tree-node.is-dimmed,
+.catalog-viz-node.is-dimmed {
+  opacity: 0.16;
+}
+
+.catalog-graph .react-flow__edge.is-dimmed {
+  opacity: 0.1;
+}
+
+.catalog-graph .react-flow__edge.is-highlighted .react-flow__edge-path {
+  stroke: var(--nn-accent);
+  stroke-width: 2.4;
+}
+
+/* Root of the knowledge tree. */
+.catalog-root-node {
+  display: flex;
+  align-items: center;
+  width: 250px;
+  padding: 20px 22px;
+  background: var(--nn-text);
+  border-radius: var(--nn-radius-lg);
+  box-shadow: var(--nn-shadow-lg);
+}
+
+.catalog-root-node-label {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+
+/* Section hubs (level 1). */
+.catalog-section-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 264px;
+  padding: 14px 16px;
+  background: var(--nn-surface);
+  border: 2px solid var(--topic-accent);
+  border-radius: var(--nn-radius-lg);
+  box-shadow: var(--nn-shadow-md);
+  cursor: pointer;
+}
+
+.catalog-section-node:hover {
+  box-shadow: var(--nn-shadow-lg);
+}
+
+.catalog-section-node.is-matched {
+  box-shadow:
+    0 0 0 4px var(--topic-accent-soft),
+    var(--nn-shadow-md);
+}
+
+.catalog-node-dot {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: var(--nn-radius-full);
+  background: var(--topic-accent);
+}
+
+.catalog-section-node-label {
+  font-size: 0.97rem;
+  font-weight: 650;
+  color: var(--nn-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalog-section-node-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.catalog-section-node-count {
+  padding: 2px 9px;
+  background: var(--topic-accent-soft);
+  border-radius: var(--nn-radius-full);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--topic-accent);
+}
+
+.catalog-section-node-chevron {
+  font-size: 0.8rem;
+  color: var(--nn-text-muted);
+}
+
+/* Subtopics (level 2): solid when they already have visualizations, dashed when planned. */
+.catalog-subtopic-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 300px;
+  padding: 10px 14px;
+  background: var(--nn-surface);
+  border: 1.5px solid var(--topic-accent);
+  border-left-width: 5px;
+  border-radius: var(--nn-radius-md);
+  box-shadow: var(--nn-shadow-xs);
+}
+
+.catalog-subtopic-node.is-ghost {
+  background: var(--nn-surface-muted);
+  border-style: dashed;
+  border-left-style: solid;
+  cursor: default;
+}
+
+.catalog-subtopic-node.is-matched {
+  box-shadow: 0 0 0 3px var(--topic-accent-soft);
+}
+
+.catalog-subtopic-node-label {
+  font-size: 0.88rem;
+  color: var(--nn-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalog-subtopic-node.is-ghost .catalog-subtopic-node-label {
+  color: var(--nn-text-muted);
+}
+
+.catalog-subtopic-node-count {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 1px 8px;
+  background: var(--topic-accent-soft);
+  border-radius: var(--nn-radius-full);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--topic-accent);
+}
+
+.catalog-viz-node {
+  width: 268px;
+  min-height: 88px;
+  padding: 11px 14px 11px 16px;
+  background: var(--nn-surface);
+  border: 1px solid var(--nn-border-strong);
+  border-left: 4px solid var(--topic-accent);
+  border-radius: var(--nn-radius-md);
+  box-shadow: var(--nn-shadow-sm);
+  cursor: pointer;
+}
+
+.catalog-viz-node:hover {
+  border-color: rgba(52, 87, 163, 0.45);
+  border-left-color: var(--topic-accent);
+  box-shadow: var(--nn-shadow-md);
+}
+
+.catalog-viz-node.is-highlighted {
+  border-color: var(--nn-accent);
+  border-left-color: var(--topic-accent);
+  box-shadow:
+    0 0 0 3px var(--nn-accent-soft),
+    var(--nn-shadow-md);
+}
+
+.catalog-viz-node-title {
+  margin: 0 0 5px;
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: var(--nn-text);
+}
+
+.catalog-viz-node-description {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--nn-text-secondary);
 }
 
 .catalog-grid {
@@ -1164,6 +1452,13 @@
   }
 }
 
+/* The header's four controls only stop fitting side by side on narrow screens. */
+@media (max-width: 800px) {
+  .catalog-intro-head {
+    gap: 1rem;
+  }
+}
+
 @media (max-width: 640px) {
   .nn-page {
     padding: 1rem;
@@ -1176,6 +1471,10 @@
 
   .catalog-intro-head .locale-switcher {
     justify-self: end;
+  }
+
+  .catalog-intro-head .catalog-mode-switch {
+    justify-self: start;
   }
 
   .viz-page-top {
