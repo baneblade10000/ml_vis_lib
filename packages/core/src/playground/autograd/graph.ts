@@ -239,36 +239,54 @@ export class AutogradGraph {
     return !!edge && this.backwardIds.has(edge.target);
   }
 
-  private nextForwardId(): string | null {
+  /**
+   * Operation nodes a forward step takes next: every one without a value
+   * whose inputs all have theirs, in topological order. None of them depends
+   * on another, so the step computes all of them at once.
+   */
+  private nextForwardIds(): string[] {
+    const ready: string[] = [];
     for (const id of this.topoOrder) {
       const node = this.nodes.get(id);
-      if (node && !node.isLeaf && !this.computedIds.has(id)) return id;
+      if (!node || node.isLeaf || this.computedIds.has(id)) continue;
+      if (this.inputEdges(id).every((edge) => this.isComputed(edge.source))) ready.push(id);
     }
-    return null;
+    return ready;
   }
 
-  private nextBackwardId(): string | null {
+  /**
+   * Operation nodes a backward step takes next: every one that is not done
+   * yet and whose gradient is final because all of its consumers are, in
+   * reverse topological order. As with a forward step, none depends on another.
+   */
+  private nextBackwardIds(): string[] {
+    const ready: string[] = [];
     for (let i = this.topoOrder.length - 1; i >= 0; i--) {
       const id = this.topoOrder[i];
       const node = this.nodes.get(id);
-      if (node && !node.isLeaf && !this.backwardIds.has(id)) return id;
+      if (!node || node.isLeaf || this.backwardIds.has(id)) continue;
+      if (this.outputEdges(id).every((edge) => this.backwardIds.has(edge.target))) ready.push(id);
     }
-    return null;
+    return ready;
   }
 
   private isBackwardComplete(): boolean {
-    return this.backwardSeeded && this.nextBackwardId() === null;
+    return this.backwardSeeded && this.nextBackwardIds().length === 0;
   }
 
-  /** What the next {@link step} does: the forward pass until it is complete, then the backward pass; null once both are. */
+  /**
+   * What the next {@link step} does: every operation node that is ready, in
+   * the forward pass until it is complete, then in the backward pass; null
+   * once both are.
+   */
   get nextStep(): AutogradStep | null {
-    const id = this.nextForwardId();
-    if (id !== null) return { id, pass: "forward" };
-    const backwardId = this.nextBackwardId();
-    return backwardId === null ? null : { id: backwardId, pass: "backward" };
+    const forwardIds = this.nextForwardIds();
+    if (forwardIds.length > 0) return { ids: forwardIds, pass: "forward" };
+    const backwardIds = this.nextBackwardIds();
+    return backwardIds.length === 0 ? null : { ids: backwardIds, pass: "backward" };
   }
 
-  /** The operation node the last {@link step} worked on; null after a whole pass or any change to the graph. */
+  /** The operation nodes the last {@link step} worked on; null after a whole pass or any change to the graph. */
   get lastStep(): AutogradStep | null {
     return this.last;
   }
@@ -355,25 +373,28 @@ export class AutogradGraph {
   }
 
   /**
-   * One step of whichever pass is up next. A forward step computes the first
-   * operation node in topological order without a value, so every input of it
-   * is ready. A backward step seeds the output gradient if it is the first,
-   * then pushes the gradient through the last operation node in topological
-   * order that is not done yet. Returns the step, or null once both passes
-   * are complete.
+   * One step of whichever pass is up next, through every operation node that
+   * is ready, so independent operations advance together. A forward step
+   * computes each node whose inputs all have a value. A backward step seeds
+   * the output gradient if it is the first, then pushes the gradient through
+   * each node whose consumers are all done. Returns the step, or null once
+   * both passes are complete.
    */
   step(): AutogradStep | null {
     const next = this.nextStep;
     if (!next) return null;
 
-    const node = this.nodes.get(next.id)!;
     if (next.pass === "forward") {
-      this.evaluate(node);
-      this.computedIds.add(node.id);
+      for (const id of next.ids) {
+        this.evaluate(this.nodes.get(id)!);
+        this.computedIds.add(id);
+      }
     } else {
       if (!this.backwardSeeded) this.startBackward();
-      this.propagate(node);
-      this.backwardIds.add(node.id);
+      for (const id of next.ids) {
+        this.propagate(this.nodes.get(id)!);
+        this.backwardIds.add(id);
+      }
     }
     this.last = next;
     return next;

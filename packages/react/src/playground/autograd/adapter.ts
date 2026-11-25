@@ -33,7 +33,7 @@ export type AutogradEdgeData = {
   localDer: number;
   /** Whether the local derivative is known; the backward pass sets it when it goes through the edge's target. */
   hasLocalDer: boolean;
-  /** Whether the edge feeds the node the last step worked on: a forward step read its value, a backward step pushed a gradient back along it. */
+  /** Whether the edge feeds a node the last step worked on: a forward step read its value, a backward step pushed a gradient back along it. */
   stepInput: boolean;
 };
 
@@ -64,9 +64,11 @@ export function autogradToFlow(
   const edges: Edge<AutogradEdgeData>[] = [];
   const lastStep = graph.lastStep;
   const nextStep = graph.nextStep;
+  const lastIds = new Set<string>(lastStep?.ids);
+  const nextIds = new Set<string>(nextStep?.ids);
   const stepOf = (id: string): AutogradStepRole | null => {
-    if (lastStep?.id === id) return { state: "active", pass: lastStep.pass };
-    if (nextStep?.id === id) return { state: "next", pass: nextStep.pass };
+    if (lastStep && lastIds.has(id)) return { state: "active", pass: lastStep.pass };
+    if (nextStep && nextIds.has(id)) return { state: "next", pass: nextStep.pass };
     return null;
   };
 
@@ -108,7 +110,7 @@ export function autogradToFlow(
       data: {
         localDer: edge.localDer,
         hasLocalDer: graph.hasLocalDer(edge.id),
-        stepInput: edge.target === lastStep?.id,
+        stepInput: lastIds.has(edge.target),
       },
     });
   }

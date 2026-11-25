@@ -69,8 +69,8 @@ export const autogradMessages: Record<Locale, AutogradMessages> = {
   en: {
     forward: "Forward",
     step: "Step",
-    stepTitle: "Compute the next node",
-    stepTitleBackward: "Push the gradient through the next node",
+    stepTitle: "Compute all the nodes that are ready",
+    stepTitleBackward: "Push the gradient through all the nodes that are ready",
     stepDone: "Forward and backward passes complete",
     stepNextForward: "To be computed by the next step",
     stepNextBackward: "The next step pushes a gradient through this node",
@@ -106,8 +106,8 @@ export const autogradMessages: Record<Locale, AutogradMessages> = {
   ru: {
     forward: "Прямой ход",
     step: "Шаг",
-    stepTitle: "Вычислить следующий узел",
-    stepTitleBackward: "Распространить градиент через следующий узел",
+    stepTitle: "Вычислить все готовые узлы",
+    stepTitleBackward: "Распространить градиент через все готовые узлы",
     stepDone: "Прямой и обратный ход завершены",
     stepNextForward: "Будет вычислен на следующем шаге",
     stepNextBackward: "Следующий шаг распространит градиент через этот узел",

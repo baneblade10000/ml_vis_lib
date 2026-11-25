@@ -1,4 +1,4 @@
-import { AutogradGraph, AutogradNode, resetAutogradIdCounter } from "./graph";
+import { AutogradGraph, resetAutogradIdCounter } from "./graph";
 import type { AutogradPosition } from "./types";
 
 export type AutogradPresetId =
@@ -185,17 +185,13 @@ function buildMlp(): AutogradGraph {
   const graph = new AutogradGraph();
   const at = (col: number, row: number): AutogradPosition => ({ x: col * COL, y: row * ROW });
 
-  // The topological order is a DFS over nodes in insertion order with each
-  // root's subtree reversed. x2 as the first root plus bottom-up fan-out edges
-  // make the step-by-step forward pass walk the neurons top-down.
-  const x2 = graph.addNode("input", { value: 0.5, label: "x2", position: at(1, 6.5) });
   const x1 = graph.addNode("input", { value: 1, label: "x1", position: at(1, 0.5) });
+  const x2 = graph.addNode("input", { value: 0.5, label: "x2", position: at(1, 6.5) });
   const x = [x1, x2];
   const c = graph.addNode("input", { value: 0.1, label: "c", position: at(6, 4.5) });
   const y = graph.addNode("add", { label: "ŷ", position: at(7, 3.5) });
 
   // Hidden neuron j owns rows 2j+1 (x1 branch) and 2j+2 (x2 branch).
-  const muls: AutogradNode[][] = [];
   for (let j = 0; j < weights.length; j++) {
     const n = j + 1;
     const top = 1 + 2 * j;
@@ -205,12 +201,11 @@ function buildMlp(): AutogradGraph {
     const prod = graph.addNode("mul", { label: `v${n}·h${n}`, position: at(6, top + 0.5) });
     const bias = graph.addNode("input", { value: biases[j], label: `b${n}`, position: at(3, top + 1.5) });
 
-    muls.push([]);
     for (let i = 0; i < x.length; i++) {
       const w = graph.addNode("input", { value: weights[j][i], label: `w${n}${i + 1}`, position: at(0, top + i) });
       const m = graph.addNode("mul", { label: `w${n}${i + 1}·x${i + 1}`, position: at(2, top + i) });
-      muls[j].push(m);
       graph.connect(w.id, m.id);
+      graph.connect(x[i].id, m.id);
       graph.connect(m.id, sum.id);
     }
     graph.connect(bias.id, sum.id);
@@ -218,9 +213,6 @@ function buildMlp(): AutogradGraph {
     graph.connect(hidden.id, prod.id);
     graph.connect(v.id, prod.id);
     graph.connect(prod.id, y.id);
-  }
-  for (let j = weights.length - 1; j >= 0; j--) {
-    for (let i = 0; i < x.length; i++) graph.connect(x[i].id, muls[j][i].id);
   }
   graph.connect(c.id, y.id);
   graph.setOutput(y.id);
@@ -234,11 +226,8 @@ function buildMlp(): AutogradGraph {
 function buildAttention(): AutogradGraph {
   resetAutogradIdCounter(1);
   const graph = new AutogradGraph();
-  // k2 is added before k1: the topological order is a DFS over nodes in
-  // insertion order with each root's subtree reversed, so starting it at k2
-  // puts position 1 first in the step-by-step forward pass.
-  const k2 = graph.addNode("input", { value: -1, label: "k2", position: { x: 0, y: 4 * ROW } });
   const k1 = graph.addNode("input", { value: 1, label: "k1", position: { x: 0, y: 0 } });
+  const k2 = graph.addNode("input", { value: -1, label: "k2", position: { x: 0, y: 4 * ROW } });
   const q = graph.addNode("input", { value: 1, label: "q", position: { x: 0, y: 2 * ROW } });
   const v1 = graph.addNode("input", { value: 2, label: "v1", position: { x: 4 * COL, y: 1.5 * ROW } });
   const v2 = graph.addNode("input", { value: -1, label: "v2", position: { x: 4 * COL, y: 2.5 * ROW } });
@@ -262,12 +251,11 @@ function buildAttention(): AutogradGraph {
   graph.connect(s2.id, e2.id);
   graph.connect(e1.id, total.id);
   graph.connect(e2.id, total.id);
-  // div is positional: the numerator goes in first. The denominators are wired
-  // α2 before α1, which keeps position 1 ahead in the step-by-step forward pass.
+  // div is positional: the numerator goes in first.
   graph.connect(e1.id, a1.id);
+  graph.connect(total.id, a1.id);
   graph.connect(e2.id, a2.id);
   graph.connect(total.id, a2.id);
-  graph.connect(total.id, a1.id);
   graph.connect(a1.id, m1.id);
   graph.connect(v1.id, m1.id);
   graph.connect(a2.id, m2.id);

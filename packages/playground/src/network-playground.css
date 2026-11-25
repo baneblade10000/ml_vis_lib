@@ -2244,7 +2244,7 @@
   background: #f8fafc;
 }
 
-/* Step-by-step passes: the operation the next step works on, and the one the last step worked on */
+/* Step-by-step passes: the operations the next step works on, and those the last step worked on */
 .ag-node.ag-node--next {
   border-style: dashed;
   border-color: var(--nn-accent);

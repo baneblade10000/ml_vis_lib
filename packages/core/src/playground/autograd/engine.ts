@@ -17,8 +17,9 @@ export const DEFAULT_COMPGRAPH_CONFIG: CompGraphConfig = {
  * builder UI.
  *
  * Values and gradients become known only as a pass computes them: none on load
- * or after an edit, one node per {@link CompGraphEngine.runStep}, all of them
- * on {@link CompGraphEngine.runForward} and {@link CompGraphEngine.runBackward}.
+ * or after an edit, every node that is ready per {@link CompGraphEngine.runStep}
+ * (independent ones advance together), all of them on
+ * {@link CompGraphEngine.runForward} and {@link CompGraphEngine.runBackward}.
  * `runStep` goes through the forward pass first and, once that is complete,
  * through the backward pass.
  */

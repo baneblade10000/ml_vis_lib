@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AutogradGraph, resetAutogradIdCounter } from "./graph";
-import { buildAutogradPreset } from "./presets";
+import { buildAutogradPreset, type AutogradPresetId } from "./presets";
+import type { AutogradStep } from "./types";
 
 describe("AutogradGraph", () => {
   it("forward + backward on (a+b)*c matches analytic gradients", () => {
@@ -105,23 +106,23 @@ describe("AutogradGraph step-by-step passes", () => {
     expect(g.hasGrad(a.id)).toBe(false);
     expect(g.hasLocalDer(aToSum.id)).toBe(false);
     expect(g.lastStep).toBeNull();
-    expect(g.nextStep).toEqual({ id: sum.id, pass: "forward" });
+    expect(g.nextStep).toEqual({ ids: [sum.id], pass: "forward" });
     expect(g.forwardProgress()).toEqual({ done: 0, total: 2 });
     expect(g.backwardProgress()).toEqual({ done: 0, total: 2 });
   });
 
-  it("steps the forward pass through one operation node at a time, in topological order", () => {
+  it("takes one operation per step where each depends on the last, in topological order", () => {
     const { g, sum, prod } = buildExpr();
 
-    expect(g.step()).toEqual({ id: sum.id, pass: "forward" });
+    expect(g.step()).toEqual({ ids: [sum.id], pass: "forward" });
     expect(sum.value).toBe(-1);
     expect(g.isComputed(sum.id)).toBe(true);
     expect(g.isComputed(prod.id)).toBe(false);
-    expect(g.lastStep).toEqual({ id: sum.id, pass: "forward" });
-    expect(g.nextStep).toEqual({ id: prod.id, pass: "forward" });
+    expect(g.lastStep).toEqual({ ids: [sum.id], pass: "forward" });
+    expect(g.nextStep).toEqual({ ids: [prod.id], pass: "forward" });
     expect(g.forwardProgress()).toEqual({ done: 1, total: 2 });
 
-    expect(g.step()).toEqual({ id: prod.id, pass: "forward" });
+    expect(g.step()).toEqual({ ids: [prod.id], pass: "forward" });
     expect(prod.value).toBe(-4);
     expect(g.forwardProgress()).toEqual({ done: 2, total: 2 });
     expect(g.backwardProgress()).toEqual({ done: 0, total: 2 });
@@ -143,9 +144,9 @@ describe("AutogradGraph step-by-step passes", () => {
     const { g, a, b, c, sum, prod, aToSum, bToSum, sumToProd, cToProd } = buildExpr();
     g.forward();
 
-    expect(g.nextStep).toEqual({ id: prod.id, pass: "backward" });
+    expect(g.nextStep).toEqual({ ids: [prod.id], pass: "backward" });
     // The output gradient is seeded to 1 and pushed through the output node.
-    expect(g.step()).toEqual({ id: prod.id, pass: "backward" });
+    expect(g.step()).toEqual({ ids: [prod.id], pass: "backward" });
     expect(prod.grad).toBe(1);
     expect(g.hasGrad(prod.id)).toBe(true);
     expect(sumToProd.localDer).toBe(4);
@@ -157,7 +158,7 @@ describe("AutogradGraph step-by-step passes", () => {
     expect(g.hasGrad(a.id)).toBe(false);
     expect(g.backwardProgress()).toEqual({ done: 1, total: 2 });
 
-    expect(g.step()).toEqual({ id: sum.id, pass: "backward" });
+    expect(g.step()).toEqual({ ids: [sum.id], pass: "backward" });
     expect(aToSum.localDer).toBe(1);
     expect(bToSum.localDer).toBe(1);
     expect(a.grad).toBe(4);
@@ -191,7 +192,7 @@ describe("AutogradGraph step-by-step passes", () => {
   it("goes back through the operations in the reverse of the forward order", () => {
     const g = buildAutogradPreset("neuron");
     const order: string[] = [];
-    for (let s = g.step(); s !== null; s = g.step()) order.push(s.id);
+    for (let s = g.step(); s !== null; s = g.step()) order.push(...s.ids);
     const turn = order.length / 2;
 
     expect(order.slice(turn).reverse()).toEqual(order.slice(0, turn));
@@ -211,7 +212,7 @@ describe("AutogradGraph step-by-step passes", () => {
 
     g.connect(extra.id, sum.id);
     expect(g.isComputed(sum.id)).toBe(false);
-    expect(g.nextStep).toEqual({ id: sum.id, pass: "forward" });
+    expect(g.nextStep).toEqual({ ids: [sum.id], pass: "forward" });
     g.step();
     expect(sum.value).toBe(9);
   });
@@ -225,7 +226,7 @@ describe("AutogradGraph step-by-step passes", () => {
 
     expect(g.forwardProgress()).toEqual({ done: 0, total: 2 });
     expect(g.hasGrad(a.id)).toBe(false);
-    expect(g.step()).toEqual({ id: sum.id, pass: "forward" });
+    expect(g.step()).toEqual({ ids: [sum.id], pass: "forward" });
     expect(sum.value).toBe(2);
   });
 
@@ -240,7 +241,7 @@ describe("AutogradGraph step-by-step passes", () => {
     expect(g.lastStep).toBeNull();
     expect(g.backwardProgress()).toEqual({ done: 0, total: 2 });
     expect(g.hasGrad(a.id)).toBe(false);
-    expect(g.nextStep).toEqual({ id: prod.id, pass: "backward" });
+    expect(g.nextStep).toEqual({ ids: [prod.id], pass: "backward" });
   });
 
   it("a forward pass keeps the numbers of the last backward pass in place", () => {
@@ -267,5 +268,154 @@ describe("AutogradGraph step-by-step passes", () => {
     expect(g.lastStep).toBeNull();
     expect(g.hasGrad(a.id)).toBe(true);
     expect(g.step()).toBeNull();
+  });
+});
+
+describe("AutogradGraph steps independent operations together", () => {
+  /** Labels of the operation nodes a step takes, sorted: a step lists them in topological order, which is not what these tests are about. */
+  function taken(g: AutogradGraph, step: AutogradStep): string[] {
+    return step.ids.map((id) => g.getNode(id)!.label!).sort();
+  }
+
+  /** a·b and b·c, then their sum: the two products share an input, but neither depends on the other. */
+  function buildFork() {
+    resetAutogradIdCounter(1);
+    const g = new AutogradGraph();
+    const a = g.addNode("input", { value: 2, label: "a" });
+    const b = g.addNode("input", { value: 3, label: "b" });
+    const c = g.addNode("input", { value: 5, label: "c" });
+    const ab = g.addNode("mul", { label: "a·b" });
+    const bc = g.addNode("mul", { label: "b·c" });
+    const out = g.addNode("add", { label: "out" });
+    g.connect(a.id, ab.id);
+    g.connect(b.id, ab.id);
+    g.connect(b.id, bc.id);
+    g.connect(c.id, bc.id);
+    g.connect(ab.id, out.id);
+    g.connect(bc.id, out.id);
+    g.setOutput(out.id);
+    return { g, a, b, c, ab, bc, out };
+  }
+
+  it("computes every operation whose inputs all have a value in one forward step", () => {
+    const { g, ab, bc, out } = buildFork();
+
+    const first = g.step()!;
+    expect(first.pass).toBe("forward");
+    expect(taken(g, first)).toEqual(["a·b", "b·c"]);
+    expect(ab.value).toBe(6);
+    expect(bc.value).toBe(15);
+    expect(g.isComputed(out.id)).toBe(false);
+    expect(g.forwardProgress()).toEqual({ done: 2, total: 3 });
+
+    expect(taken(g, g.step()!)).toEqual(["out"]);
+    expect(out.value).toBe(21);
+  });
+
+  it("pushes the gradient through every operation whose consumers are all done in one backward step", () => {
+    const { g, a, b, c } = buildFork();
+    g.forward();
+
+    const throughOutput = g.step()!;
+    expect(throughOutput.pass).toBe("backward");
+    expect(taken(g, throughOutput)).toEqual(["out"]);
+
+    // Both products feed the output alone, so neither waits for the other.
+    expect(taken(g, g.nextStep!)).toEqual(["a·b", "b·c"]);
+    g.step();
+    expect(a.grad).toBe(3);
+    expect(b.grad).toBe(2 + 5);
+    expect(c.grad).toBe(3);
+    expect(g.backwardProgress()).toEqual({ done: 3, total: 3 });
+    expect(g.step()).toBeNull();
+  });
+
+  it("keeps an operation waiting until every one of its inputs has a value", () => {
+    resetAutogradIdCounter(1);
+    const g = new AutogradGraph();
+    const a = g.addNode("input", { value: 2, label: "a" });
+    const b = g.addNode("input", { value: 3, label: "b" });
+    const c = g.addNode("input", { value: 5, label: "c" });
+    const ab = g.addNode("mul", { label: "a·b" });
+    const bc = g.addNode("mul", { label: "b·c" });
+    const abc = g.addNode("mul", { label: "a·b·c" });
+    const out = g.addNode("add", { label: "out" });
+    g.connect(a.id, ab.id);
+    g.connect(b.id, ab.id);
+    g.connect(b.id, bc.id);
+    g.connect(c.id, bc.id);
+    g.connect(ab.id, abc.id);
+    g.connect(c.id, abc.id);
+    g.connect(abc.id, out.id);
+    g.connect(bc.id, out.id);
+    g.setOutput(out.id);
+
+    expect(taken(g, g.step()!)).toEqual(["a·b", "b·c"]);
+    // c is ready from the start, but a·b·c also reads a·b.
+    expect(taken(g, g.step()!)).toEqual(["a·b·c"]);
+    expect(abc.value).toBe(30);
+    expect(taken(g, g.step()!)).toEqual(["out"]);
+  });
+
+  it("keeps an operation waiting until every one of its consumers is done", () => {
+    resetAutogradIdCounter(1);
+    const g = new AutogradGraph();
+    const a = g.addNode("input", { value: 2, label: "a" });
+    const b = g.addNode("input", { value: 3, label: "b" });
+    const p = g.addNode("mul", { label: "a·b" });
+    const t = g.addNode("tanh", { label: "tanh" });
+    const out = g.addNode("add", { label: "out" });
+    g.connect(a.id, p.id);
+    g.connect(b.id, p.id);
+    g.connect(p.id, out.id);
+    g.connect(p.id, t.id);
+    g.connect(t.id, out.id);
+    g.setOutput(out.id);
+    g.forward();
+
+    expect(taken(g, g.step()!)).toEqual(["out"]);
+    // The output is done, but a·b still feeds the tanh.
+    expect(taken(g, g.step()!)).toEqual(["tanh"]);
+    expect(g.hasGrad(a.id)).toBe(false);
+
+    expect(taken(g, g.step()!)).toEqual(["a·b"]);
+    // d out/d(a·b) = 1 + (1 − tanh²(6)), times b.
+    expect(a.grad).toBeCloseTo(3 * (2 - Math.tanh(6) ** 2), 12);
+    expect(g.hasGrad(a.id)).toBe(true);
+  });
+
+  /** The forward pass of each preset, wave by wave. */
+  const FORWARD_WAVES: [AutogradPresetId, string[][]][] = [
+    ["expr", [["a+b"], ["(a+b)·c"]]],
+    ["neuron", [["w1·x1", "w2·x2"], ["Σ"], ["tanh"]]],
+    ["sigmoid", [["w1·x1", "w2·x2"], ["z"], ["−z"], ["e^(−z)"], ["1+e^(−z)"], ["σ"]]],
+    ["hinge", [["w·x"], ["ŷ"], ["y·ŷ"], ["1−y·ŷ"], ["L"]]],
+    ["twolayer", [["w1·x"], ["z1"], ["h"], ["w2·h"], ["z2"], ["ŷ"]]],
+    [
+      "mlp",
+      [
+        ["w11·x1", "w12·x2", "w21·x1", "w22·x2", "w31·x1", "w32·x2"],
+        ["z1", "z2", "z3"],
+        ["h1", "h2", "h3"],
+        ["v1·h1", "v2·h2", "v3·h3"],
+        ["ŷ"],
+      ],
+    ],
+    [
+      "attention",
+      [["q·k1", "q·k2"], ["e^s1", "e^s2"], ["Σe"], ["α1", "α2"], ["α1·v1", "α2·v2"], ["out"]],
+    ],
+  ];
+
+  it.each(FORWARD_WAVES)("preset %s steps through one wave of independent operations at a time", (preset, forward) => {
+    const g = buildAutogradPreset(preset);
+    const waves: string[][] = [];
+    let s = g.step();
+    for (; s?.pass === "forward"; s = g.step()) waves.push(taken(g, s));
+    expect(waves).toEqual(forward);
+
+    const back: string[][] = [];
+    for (; s !== null; s = g.step()) back.push(taken(g, s));
+    expect(back).toEqual(forward.slice().reverse());
   });
 });

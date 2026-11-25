@@ -23,14 +23,36 @@ describe("CompGraphEngine", () => {
     expect(engine.graph.hasGrad(leaf(engine, "a").id)).toBe(false);
   });
 
-  it("runStep goes through the forward pass one operation node at a time", () => {
+  it("runStep takes one operation per step where each depends on the last", () => {
     const engine = new CompGraphEngine();
     const [sum, prod] = opIds(engine);
 
-    expect(engine.runStep()).toEqual({ id: sum, pass: "forward" });
+    expect(engine.runStep()).toEqual({ ids: [sum], pass: "forward" });
     expect(engine.graph.isComputed(sum)).toBe(true);
     expect(engine.graph.isComputed(prod)).toBe(false);
-    expect(engine.runStep()).toEqual({ id: prod, pass: "forward" });
+    expect(engine.runStep()).toEqual({ ids: [prod], pass: "forward" });
+  });
+
+  it("runStep takes every operation node that is ready at the same time", () => {
+    const engine = new CompGraphEngine({ preset: "mlp" });
+    const total = 16;
+
+    // The six products of a weight by an input read leaves only.
+    engine.runStep();
+    expect(engine.graph.forwardProgress()).toEqual({ done: 6, total });
+
+    // Each of the three sums waits for two of those products.
+    engine.runStep();
+    expect(engine.graph.forwardProgress()).toEqual({ done: 9, total });
+
+    engine.runForward();
+    // The readout is the only operation nothing downstream reads.
+    engine.runStep();
+    expect(engine.graph.backwardProgress()).toEqual({ done: 1, total });
+
+    // The three products v·h feed the readout alone.
+    engine.runStep();
+    expect(engine.graph.backwardProgress()).toEqual({ done: 4, total });
   });
 
   it("runStep continues into the backward pass once the forward pass is complete", () => {
@@ -41,8 +63,8 @@ describe("CompGraphEngine", () => {
     engine.runForward();
     expect(engine.graph.hasGrad(a.id)).toBe(false);
 
-    expect(engine.runStep()).toEqual({ id: prod, pass: "backward" });
-    expect(engine.runStep()).toEqual({ id: sum, pass: "backward" });
+    expect(engine.runStep()).toEqual({ ids: [prod], pass: "backward" });
+    expect(engine.runStep()).toEqual({ ids: [sum], pass: "backward" });
     expect(a.grad).toBe(4);
     expect(engine.runStep()).toBeNull();
   });
@@ -81,7 +103,7 @@ describe("CompGraphEngine", () => {
     engine.setNodeValue(a.id, 7);
 
     expectNothingComputed(engine);
-    expect(engine.runStep()).toEqual({ id: sum, pass: "forward" });
+    expect(engine.runStep()).toEqual({ ids: [sum], pass: "forward" });
     expect(engine.graph.getNode(sum)!.value).toBe(4);
   });
 

@@ -39,9 +39,13 @@ export interface AutogradSnapshot {
 /** Which way a pass over the graph goes: values, then gradients. */
 export type AutogradPass = "forward" | "backward";
 
-/** One step of a pass: the operation node it worked on. */
+/**
+ * One step of a pass: every operation node it worked on. A step takes all the
+ * nodes that are ready at the same time, so independent operations advance
+ * together.
+ */
 export interface AutogradStep {
-  id: string;
+  ids: string[];
   pass: AutogradPass;
 }
 

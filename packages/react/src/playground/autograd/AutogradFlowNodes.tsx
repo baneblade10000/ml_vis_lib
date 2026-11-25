@@ -30,7 +30,7 @@ function nodeClass(base: string, data: AutogradNodeData): string {
   return `${base}${data.selected ? " selected" : ""}${step}`;
 }
 
-/** Tooltip naming what a step does, or will do, to a node — only two nodes have a role. */
+/** Tooltip naming what a step does, or will do, to a node. */
 function useStepTitle(step: AutogradStepRole | null): string | undefined {
   const t = useAutogradMessages();
   if (!step) return undefined;
