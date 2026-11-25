@@ -24,6 +24,42 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    // Static pages and workers under public/ run in the browser, outside the
+    // bundled TS graph; no-undef needs the globals they legitimately use.
+    files: ["packages/playground/public/**/*.js"],
+    languageOptions: {
+      globals: {
+        alert: "readonly",
+        Blob: "readonly",
+        clearInterval: "readonly",
+        clearTimeout: "readonly",
+        CSS: "readonly",
+        devicePixelRatio: "readonly",
+        document: "readonly",
+        FileReader: "readonly",
+        getComputedStyle: "readonly",
+        importScripts: "readonly",
+        innerHeight: "readonly",
+        innerWidth: "readonly",
+        location: "readonly",
+        // tflow/engine.js and tflow/training.js double as CommonJS modules.
+        module: "readonly",
+        onmessage: "writable",
+        performance: "readonly",
+        postMessage: "readonly",
+        requestAnimationFrame: "readonly",
+        ResizeObserver: "readonly",
+        setInterval: "readonly",
+        setTimeout: "readonly",
+        URL: "readonly",
+        window: "readonly",
+        Worker: "readonly",
+        // tflow/worker.js gets the engine from engine.js through importScripts.
+        TFlow: "readonly",
+      },
+    },
+  },
+  {
     files: ["**/*.{ts,tsx,mts,mjs,js,jsx}"],
     rules: {
       // The codebase uses explicit `any` deliberately at worker/protocol and
