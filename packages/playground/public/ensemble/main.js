@@ -12,10 +12,23 @@ import {
 } from './plot2d.js';
 
 import { initDrawer, openTree, updateDrawer, setTitle } from './tree-drawer.js';
+import { token, tokenRgb, rgba, classColor } from './palette.js';
 
 const $ = id => document.getElementById(id);
 const getCtx = id => $(id)?.getContext('2d') || null;
 const SIZE = 380;
+
+// Цвета серий графиков: у каждой модели свой акцент, Test-линия темнее Train.
+const SERIES = {
+  forest: token('--nn-accent'),
+  forestTest: token('--nn-accent-hover'),
+  forestVar: token('--scale-positive'),
+  boost: token('--ens-boost'),
+  boostTest: token('--ens-boost-deep'),
+  boostVar: token('--nn-crimson'),
+  ok: token('--ens-ok'),
+  okDeep: token('--ens-ok-deep'),
+};
 
 const state = {
   X: [], y: [], isTest: [],
@@ -227,7 +240,7 @@ function renderBoost() {
 
 function drawAxesOverlay(ctx, size, view) {
   ctx.save();
-  ctx.strokeStyle = 'rgba(100,116,139,.6)';
+  ctx.strokeStyle = rgba(tokenRgb('--nn-text-secondary'), 0.6);
   ctx.lineWidth = 1.2;
   const [ox, oy] = worldToScreen(view, size, 0, 0);
   if (oy >= 0 && oy <= size) {
@@ -253,19 +266,19 @@ function renderMinis(container, trees, source) {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
     const g = c.getContext('2d');
-    drawAxes(g, 64, { cx: 0, cy: 0, scale: 30 }, { major: '#e8edf3', minor: '#f4f7fa' });
+    // Линии разбивки — тёмными: акцент сливается с полями цвета класса.
+    const miniGrid = { major: token('--nn-border'), minor: token('--nn-surface-muted') };
+    drawAxes(g, 64, { cx: 0, cy: 0, scale: 30 }, miniGrid);
     for (let px = 0; px < 64; px += 3) {
       for (let py = 0; py < 64; py += 3) {
         const [x, y2] = screenToWorld({ cx: 0, cy: 0, scale: 30 }, 64, px + 1.5, py + 1.5);
         const v = predictTree(tree, [x, y2]);
-        const r = Math.round(255 * (1 - v));
-        const g2 = Math.round(255 * v);
-        g.fillStyle = `rgba(${r},${g2},80,0.55)`;
+        g.fillStyle = classColor(v, 0.55);
         g.fillRect(px, py, 3, 3);
       }
     }
     drawPointsOnPlot(g, 64, { cx: 0, cy: 0, scale: 30 }, state.X, state.y, { scale: 0.55 });
-    drawTreeOverlay(g, tree, 64, { color: '#3b82f6' });
+    drawTreeOverlay(g, tree, 64, { color: token('--nn-text') });
     wrap.appendChild(c);
     const num = document.createElement('span');
     num.className = 'num'; num.textContent = idx + 1;
@@ -288,15 +301,15 @@ function renderCharts() {
       fTrain.push(evalMetrics(forestPreds(trees, Xtr), ytr).loss);
       if (Xte.length) fTest.push(evalMetrics(forestPreds(trees, Xte), yte).loss);
     }
-    drawLossChart(ctxChartFTrain, 380, 120, fTrain, '#2f6fed', {
+    drawLossChart(ctxChartFTrain, 380, 120, fTrain, SERIES.forest, {
       xLabel: 'число деревьев', yLabel: 'loss', title: 'Лес · Train Loss'
     });
-    drawLossChart(ctxChartFTest, 380, 120, fTest, '#1d4ed8', {
+    drawLossChart(ctxChartFTest, 380, 120, fTest, SERIES.forestTest, {
       xLabel: 'число деревьев', yLabel: 'loss', title: 'Лес · Test Loss'
     });
   } else {
-    drawLossChart(ctxChartFTrain, 380, 120, [], '#2f6fed', { title: 'Лес · Train Loss' });
-    drawLossChart(ctxChartFTest, 380, 120, [], '#1d4ed8', { title: 'Лес · Test Loss' });
+    drawLossChart(ctxChartFTrain, 380, 120, [], SERIES.forest, { title: 'Лес · Train Loss' });
+    drawLossChart(ctxChartFTest, 380, 120, [], SERIES.forestTest, { title: 'Лес · Test Loss' });
   }
 
   // 2. Loss для Gradient Boosting
@@ -314,15 +327,15 @@ function renderCharts() {
       }
     }
 
-    drawLossChart(ctxChartBTrain, 380, 120, bTrain, '#ff8a3d', {
+    drawLossChart(ctxChartBTrain, 380, 120, bTrain, SERIES.boost, {
       xLabel: 'итерация', yLabel: 'loss', title: 'Бустинг · Train Loss'
     });
-    drawLossChart(ctxChartBTest, 380, 120, bTest, '#ea580c', {
+    drawLossChart(ctxChartBTest, 380, 120, bTest, SERIES.boostTest, {
       xLabel: 'итерация', yLabel: 'loss', title: 'Бустинг · Test Loss'
     });
   } else {
-    drawLossChart(ctxChartBTrain, 380, 120, [], '#ff8a3d', { title: 'Бустинг · Train Loss' });
-    drawLossChart(ctxChartBTest, 380, 120, [], '#ea580c', { title: 'Бустинг · Test Loss' });
+    drawLossChart(ctxChartBTrain, 380, 120, [], SERIES.boost, { title: 'Бустинг · Train Loss' });
+    drawLossChart(ctxChartBTest, 380, 120, [], SERIES.boostTest, { title: 'Бустинг · Test Loss' });
   }
 
   // 3. Пошаговая отрисовка Bias² и Variance (срез до текущего шага)
@@ -335,10 +348,10 @@ function renderCharts() {
     const bBias = (state.bvdData && bStep > 0) ? state.bvdData.bBias.slice(0, bStep) : [];
     const bVar  = (state.bvdData && bStep > 0) ? state.bvdData.bVar.slice(0, bStep)  : [];
 
-    drawBvdChart(ctxChartFBias, 380, 115, fBias.length ? [{ label: 'Bias²', values: fBias, color: '#2f6fed' }] : [], { xLabel: 'число деревьев', title: 'Лес · Bias²' });
-    drawBvdChart(ctxChartFVar,  380, 115, fVar.length  ? [{ label: 'Var',   values: fVar,  color: '#0ea5e9' }] : [], { xLabel: 'число деревьев', title: 'Лес · Variance' });
-    drawBvdChart(ctxChartBBias, 380, 115, bBias.length ? [{ label: 'Bias²', values: bBias, color: '#ff8a3d' }] : [], { xLabel: 'итерация', title: 'Бустинг · Bias²' });
-    drawBvdChart(ctxChartBVar,  380, 115, bVar.length  ? [{ label: 'Var',   values: bVar,  color: '#e11d48' }] : [], { xLabel: 'итерация', title: 'Бустинг · Variance' });
+    drawBvdChart(ctxChartFBias, 380, 115, fBias.length ? [{ label: 'Bias²', values: fBias, color: SERIES.forest }] : [], { xLabel: 'число деревьев', title: 'Лес · Bias²' });
+    drawBvdChart(ctxChartFVar,  380, 115, fVar.length  ? [{ label: 'Var',   values: fVar,  color: SERIES.forestVar }] : [], { xLabel: 'число деревьев', title: 'Лес · Variance' });
+    drawBvdChart(ctxChartBBias, 380, 115, bBias.length ? [{ label: 'Bias²', values: bBias, color: SERIES.boost }] : [], { xLabel: 'итерация', title: 'Бустинг · Bias²' });
+    drawBvdChart(ctxChartBVar,  380, 115, bVar.length  ? [{ label: 'Var',   values: bVar,  color: SERIES.boostVar }] : [], { xLabel: 'итерация', title: 'Бустинг · Variance' });
   }
 }
 function computeTabularBvd(mode) {
@@ -714,13 +727,13 @@ function renderTable() {
 
     const tdSplit = document.createElement('td');
     tdSplit.innerHTML = isTe
-      ? '<span style="color:var(--orange);font-weight:600;font-size:11px">Test</span>'
-      : '<span class="muted" style="font-size:11px">Train</span>';
+      ? '<span class="split split--test">Test</span>'
+      : '<span class="split split--train">Train</span>';
     tr.appendChild(tdSplit);
 
     const cols = [
-      [0, state.X[i], 'x'],
-      [1, state.X[i], 'x'],
+      [0, state.X[i][0], 'x'],
+      [1, state.X[i][1], 'x'],
       [-1, state.y[i], 'y']
     ];
     for (const [colIdx, val, kind] of cols) {
@@ -913,6 +926,11 @@ $('shapeChips').addEventListener('click', e => {
 $('filterClass').onchange = renderTable;
 $('searchX').oninput = renderTable;
 
+// Доля заполненного трека слайдера (см. input[type=range] в style.css).
+function paintRange(slider) {
+  slider.style.setProperty('--range-progress', `${((slider.value - slider.min) / (slider.max - slider.min)) * 100}%`);
+}
+
 function bindRange(id, key, fmt = v => v, onChange = () => {}) {
   const slider = $(id);
   const num = $(id + 'Num');
@@ -928,12 +946,14 @@ function bindRange(id, key, fmt = v => v, onChange = () => {}) {
   const round = v => step > 0 ? Number((Math.round(v / step) * step).toFixed(dec)) : v;
 
   slider.value = state.params[key];
+  paintRange(slider);
   if (num) num.value = fmt(state.params[key]);
 
   const apply = (v, updateText = true) => {
     const c = clamp(round(v));
     state.params[key] = c;
     slider.value = c;
+    paintRange(slider);
     if (num && updateText) num.value = fmt(c);
   };
 
@@ -982,6 +1002,8 @@ bindRange('depthB', 'maxDepthB', v => v);
 bindRange('lr', 'lr', v => v.toFixed(2));
 
 regen();
+// Подписи на canvas рисуются до загрузки Inter — перерисовать после.
+document.fonts.ready.then(() => renderAll());
 
 // ============================================================
 // РЕДАКТОР ДАННЫХ
@@ -1174,12 +1196,14 @@ function bindTableRange(id, key, fmt = v => v, onChange = () => {}) {
   const round = v => step > 0 ? Number((Math.round(v / step) * step).toFixed(dec)) : v;
 
   slider.value = TABLE.params[key];
+  paintRange(slider);
   if (num) num.value = fmt(TABLE.params[key]);
 
   const apply = (v, updateText = true) => {
     const c = clamp(round(v));
     TABLE.params[key] = c;
     slider.value = c;
+    paintRange(slider);
     if (num && updateText) num.value = fmt(c);
   };
 
@@ -1309,8 +1333,8 @@ function renderTableTab() {
 
     const tdSplit = document.createElement('td');
     tdSplit.innerHTML = TABLE.isTest[i]
-      ? '<span style="color:var(--orange);font-weight:600;font-size:11px">Test</span>'
-      : '<span class="muted" style="font-size:11px">Train</span>';
+      ? '<span class="split split--test">Test</span>'
+      : '<span class="split split--train">Train</span>';
     tr.appendChild(tdSplit);
 
     for (let j = 0; j < f; j++) {
@@ -1437,15 +1461,15 @@ function renderTableCharts() {
           teAcc.push(mTe.acc);
         }
       }
-      drawLossChart(cTfTrL, 340, 115, trLoss, '#2f6fed', { xLabel: 'деревьев', yLabel: 'loss', title: 'Лес · Train Loss' });
-      drawLossChart(cTfTeL, 340, 115, teLoss, '#1d4ed8', { xLabel: 'деревьев', yLabel: 'loss', title: 'Лес · Test Loss' });
-      if (cTfTrA) drawLossChart(cTfTrA, 340, 115, trAcc, '#16a34a', { xLabel: 'деревьев', yLabel: 'acc', title: 'Лес · Train Acc' });
-      if (cTfTeA) drawLossChart(cTfTeA, 340, 115, teAcc, '#15803d', { xLabel: 'деревьев', yLabel: 'acc', title: 'Лес · Test Acc' });
+      drawLossChart(cTfTrL, 340, 115, trLoss, SERIES.forest, { xLabel: 'деревьев', yLabel: 'loss', title: 'Лес · Train Loss' });
+      drawLossChart(cTfTeL, 340, 115, teLoss, SERIES.forestTest, { xLabel: 'деревьев', yLabel: 'loss', title: 'Лес · Test Loss' });
+      if (cTfTrA) drawLossChart(cTfTrA, 340, 115, trAcc, SERIES.ok, { xLabel: 'деревьев', yLabel: 'acc', title: 'Лес · Train Acc' });
+      if (cTfTeA) drawLossChart(cTfTeA, 340, 115, teAcc, SERIES.okDeep, { xLabel: 'деревьев', yLabel: 'acc', title: 'Лес · Test Acc' });
     } else {
-      drawLossChart(cTfTrL, 340, 115, [], '#2f6fed', { title: 'Лес · Train Loss' });
-      drawLossChart(cTfTeL, 340, 115, [], '#1d4ed8', { title: 'Лес · Test Loss' });
-      if (cTfTrA) drawLossChart(cTfTrA, 340, 115, [], '#16a34a', { title: 'Лес · Train Acc' });
-      if (cTfTeA) drawLossChart(cTfTeA, 340, 115, [], '#15803d', { title: 'Лес · Test Acc' });
+      drawLossChart(cTfTrL, 340, 115, [], SERIES.forest, { title: 'Лес · Train Loss' });
+      drawLossChart(cTfTeL, 340, 115, [], SERIES.forestTest, { title: 'Лес · Test Loss' });
+      if (cTfTrA) drawLossChart(cTfTrA, 340, 115, [], SERIES.ok, { title: 'Лес · Train Acc' });
+      if (cTfTeA) drawLossChart(cTfTeA, 340, 115, [], SERIES.okDeep, { title: 'Лес · Test Acc' });
     }
   }
 
@@ -1470,15 +1494,15 @@ function renderTableCharts() {
           teAcc.push(accuracy(f, d.yte));
         }
       }
-      drawLossChart(cTbTrL, 340, 115, trLoss, '#ff8a3d', { xLabel: 'итераций', yLabel: 'loss', title: 'Бустинг · Train Loss' });
-      drawLossChart(cTbTeL, 340, 115, teLoss, '#ea580c', { xLabel: 'итераций', yLabel: 'loss', title: 'Бустинг · Test Loss' });
-      if (cTbTrA) drawLossChart(cTbTrA, 340, 115, trAcc, '#16a34a', { xLabel: 'итераций', yLabel: 'acc', title: 'Бустинг · Train Acc' });
-      if (cTbTeA) drawLossChart(cTbTeA, 340, 115, teAcc, '#15803d', { xLabel: 'итераций', yLabel: 'acc', title: 'Бустинг · Test Acc' });
+      drawLossChart(cTbTrL, 340, 115, trLoss, SERIES.boost, { xLabel: 'итераций', yLabel: 'loss', title: 'Бустинг · Train Loss' });
+      drawLossChart(cTbTeL, 340, 115, teLoss, SERIES.boostTest, { xLabel: 'итераций', yLabel: 'loss', title: 'Бустинг · Test Loss' });
+      if (cTbTrA) drawLossChart(cTbTrA, 340, 115, trAcc, SERIES.ok, { xLabel: 'итераций', yLabel: 'acc', title: 'Бустинг · Train Acc' });
+      if (cTbTeA) drawLossChart(cTbTeA, 340, 115, teAcc, SERIES.okDeep, { xLabel: 'итераций', yLabel: 'acc', title: 'Бустинг · Test Acc' });
     } else {
-      drawLossChart(cTbTrL, 340, 115, [], '#ff8a3d', { title: 'Бустинг · Train Loss' });
-      drawLossChart(cTbTeL, 340, 115, [], '#ea580c', { title: 'Бустинг · Test Loss' });
-      if (cTbTrA) drawLossChart(cTbTrA, 340, 115, [], '#16a34a', { title: 'Бустинг · Train Acc' });
-      if (cTbTeA) drawLossChart(cTbTeA, 340, 115, [], '#15803d', { title: 'Бустинг · Test Acc' });
+      drawLossChart(cTbTrL, 340, 115, [], SERIES.boost, { title: 'Бустинг · Train Loss' });
+      drawLossChart(cTbTeL, 340, 115, [], SERIES.boostTest, { title: 'Бустинг · Test Loss' });
+      if (cTbTrA) drawLossChart(cTbTrA, 340, 115, [], SERIES.ok, { title: 'Бустинг · Train Acc' });
+      if (cTbTeA) drawLossChart(cTbTeA, 340, 115, [], SERIES.okDeep, { title: 'Бустинг · Test Acc' });
     }
   }
     drawActiveChartsDrawer(false);
@@ -1586,7 +1610,7 @@ function renderTableForestResults() {
     }
     tr.innerHTML = `
       <td class="muted">${s.origIdx}</td>
-      <td>${s.isTest ? '<span style="color:var(--orange);font-weight:600;font-size:11px">Test</span>' : '<span class="muted" style="font-size:11px">Train</span>'}</td>
+      <td>${s.isTest ? '<span class="split split--test">Test</span>' : '<span class="split split--train">Train</span>'}</td>
       ${s.x.map(v => `<td>${v.toFixed(3)}</td>`).join('')}
       <td class="${s.y === 1 ? 'y1' : 'y0'}">${s.y}</td>
       <td class="${predCls}"><b>${predStr}</b></td>
@@ -1628,7 +1652,7 @@ function renderTableBoostResults() {
     }
     tr.innerHTML = `
       <td class="muted">${s.origIdx}</td>
-      <td>${s.isTest ? '<span style="color:var(--orange);font-weight:600;font-size:11px">Test</span>' : '<span class="muted" style="font-size:11px">Train</span>'}</td>
+      <td>${s.isTest ? '<span class="split split--test">Test</span>' : '<span class="split split--train">Train</span>'}</td>
       ${s.x.map(v => `<td>${v.toFixed(3)}</td>`).join('')}
       <td class="${s.y === 1 ? 'y1' : 'y0'}">${s.y}</td>
       <td class="${predCls}"><b>${predStr}</b></td>
@@ -1745,10 +1769,10 @@ function runBvdAnalysis() {
     compute2dBvdData();
     // Если модели ещё не были запущены, показываем кривые для текущего или полного шага
     if (!state.forest && !state.boost) {
-      drawBvdChart(ctxChartFBias, 380, 115, [{ label: 'Bias²', values: state.bvdData.fBias, color: '#2f6fed' }], { xLabel: 'число деревьев', title: 'Лес · Bias²' });
-      drawBvdChart(ctxChartFVar,  380, 115, [{ label: 'Var',   values: state.bvdData.fVar,  color: '#0ea5e9' }], { xLabel: 'число деревьев', title: 'Лес · Variance' });
-      drawBvdChart(ctxChartBBias, 380, 115, [{ label: 'Bias²', values: state.bvdData.bBias, color: '#ff8a3d' }], { xLabel: 'итерация', title: 'Бустинг · Bias²' });
-      drawBvdChart(ctxChartBVar,  380, 115, [{ label: 'Var',   values: state.bvdData.bVar,  color: '#e11d48' }], { xLabel: 'итерация', title: 'Бустинг · Variance' });
+      drawBvdChart(ctxChartFBias, 380, 115, [{ label: 'Bias²', values: state.bvdData.fBias, color: SERIES.forest }], { xLabel: 'число деревьев', title: 'Лес · Bias²' });
+      drawBvdChart(ctxChartFVar,  380, 115, [{ label: 'Var',   values: state.bvdData.fVar,  color: SERIES.forestVar }], { xLabel: 'число деревьев', title: 'Лес · Variance' });
+      drawBvdChart(ctxChartBBias, 380, 115, [{ label: 'Bias²', values: state.bvdData.bBias, color: SERIES.boost }], { xLabel: 'итерация', title: 'Бустинг · Bias²' });
+      drawBvdChart(ctxChartBVar,  380, 115, [{ label: 'Var',   values: state.bvdData.bVar,  color: SERIES.boostVar }], { xLabel: 'итерация', title: 'Бустинг · Variance' });
     } else {
       renderCharts();
     }
@@ -1784,7 +1808,7 @@ function renderTableSummary() {
   if (balanceEl) {
     const p1 = yValid ? ((c1 / yValid) * 100).toFixed(1) : 0;
     const p0 = yValid ? ((c0 / yValid) * 100).toFixed(1) : 0;
-    balanceEl.innerHTML = `Классы: <b style="color:#16a34a">1 → ${c1} (${p1}%)</b> · <b style="color:#dc2626">0 → ${c0} (${p0}%)</b>${yMiss ? ` · NaN: <b>${yMiss}</b>` : ''}`;
+    balanceEl.innerHTML = `Классы: <b class="cls-1">1 → ${c1} (${p1}%)</b> · <b class="cls-0">0 → ${c0} (${p0}%)</b>${yMiss ? ` · NaN: <b>${yMiss}</b>` : ''}`;
   }
 
   for (let j = 0; j < f; j++) {
@@ -1970,15 +1994,15 @@ function drawActiveChartsDrawer(recalcBvd = false) {
           teLoss.push(mTe.loss); teAcc.push(mTe.acc);
         }
       }
-      drawLossChart(cTrL, 330, 115, trLoss, '#2f6fed', { xLabel: 'деревьев', yLabel: 'loss', title: 'Train Loss' });
-      drawLossChart(cTeL, 330, 115, teLoss, '#1d4ed8', { xLabel: 'деревьев', yLabel: 'loss', title: 'Test Loss' });
-      drawLossChart(cTrA, 330, 115, trAcc,  '#16a34a', { xLabel: 'деревьев', yLabel: 'acc',  title: 'Train Accuracy' });
-      drawLossChart(cTeA, 330, 115, teAcc,  '#15803d', { xLabel: 'деревьев', yLabel: 'acc',  title: 'Test Accuracy' });
+      drawLossChart(cTrL, 330, 115, trLoss, SERIES.forest, { xLabel: 'деревьев', yLabel: 'loss', title: 'Train Loss' });
+      drawLossChart(cTeL, 330, 115, teLoss, SERIES.forestTest, { xLabel: 'деревьев', yLabel: 'loss', title: 'Test Loss' });
+      drawLossChart(cTrA, 330, 115, trAcc,  SERIES.ok, { xLabel: 'деревьев', yLabel: 'acc',  title: 'Train Accuracy' });
+      drawLossChart(cTeA, 330, 115, teAcc,  SERIES.okDeep, { xLabel: 'деревьев', yLabel: 'acc',  title: 'Test Accuracy' });
     } else {
-      drawLossChart(cTrL, 330, 115, [], '#2f6fed', { title: 'Train Loss' });
-      drawLossChart(cTeL, 330, 115, [], '#1d4ed8', { title: 'Test Loss' });
-      drawLossChart(cTrA, 330, 115, [], '#16a34a', { title: 'Train Accuracy' });
-      drawLossChart(cTeA, 330, 115, [], '#15803d', { title: 'Test Accuracy' });
+      drawLossChart(cTrL, 330, 115, [], SERIES.forest, { title: 'Train Loss' });
+      drawLossChart(cTeL, 330, 115, [], SERIES.forestTest, { title: 'Test Loss' });
+      drawLossChart(cTrA, 330, 115, [], SERIES.ok, { title: 'Train Accuracy' });
+      drawLossChart(cTeA, 330, 115, [], SERIES.okDeep, { title: 'Test Accuracy' });
     }
   } else {
     $('chartsDrawerTitle').textContent = '🚀 Графики: Gradient Boosting (табл.)';
@@ -2000,15 +2024,15 @@ function drawActiveChartsDrawer(recalcBvd = false) {
           teAcc.push(accuracy(f, d.yte));
         }
       }
-      drawLossChart(cTrL, 330, 115, trLoss, '#ff8a3d', { xLabel: 'итераций', yLabel: 'loss', title: 'Train Loss' });
-      drawLossChart(cTeL, 330, 115, teLoss, '#ea580c', { xLabel: 'итераций', yLabel: 'loss', title: 'Test Loss' });
-      drawLossChart(cTrA, 330, 115, trAcc,  '#16a34a', { xLabel: 'итераций', yLabel: 'acc',  title: 'Train Accuracy' });
-      drawLossChart(cTeA, 330, 115, teAcc,  '#15803d', { xLabel: 'итераций', yLabel: 'acc',  title: 'Test Accuracy' });
+      drawLossChart(cTrL, 330, 115, trLoss, SERIES.boost, { xLabel: 'итераций', yLabel: 'loss', title: 'Train Loss' });
+      drawLossChart(cTeL, 330, 115, teLoss, SERIES.boostTest, { xLabel: 'итераций', yLabel: 'loss', title: 'Test Loss' });
+      drawLossChart(cTrA, 330, 115, trAcc,  SERIES.ok, { xLabel: 'итераций', yLabel: 'acc',  title: 'Train Accuracy' });
+      drawLossChart(cTeA, 330, 115, teAcc,  SERIES.okDeep, { xLabel: 'итераций', yLabel: 'acc',  title: 'Test Accuracy' });
     } else {
-      drawLossChart(cTrL, 330, 115, [], '#ff8a3d', { title: 'Train Loss' });
-      drawLossChart(cTeL, 330, 115, [], '#ea580c', { title: 'Test Loss' });
-      drawLossChart(cTrA, 330, 115, [], '#16a34a', { title: 'Train Accuracy' });
-      drawLossChart(cTeA, 330, 115, [], '#15803d', { title: 'Test Accuracy' });
+      drawLossChart(cTrL, 330, 115, [], SERIES.boost, { title: 'Train Loss' });
+      drawLossChart(cTeL, 330, 115, [], SERIES.boostTest, { title: 'Test Loss' });
+      drawLossChart(cTrA, 330, 115, [], SERIES.ok, { title: 'Train Accuracy' });
+      drawLossChart(cTeA, 330, 115, [], SERIES.okDeep, { title: 'Test Accuracy' });
     }
   }
 
@@ -2020,8 +2044,8 @@ function drawActiveChartsDrawer(recalcBvd = false) {
   }
 
   const cached = isForest ? TABLE.bvdForest : TABLE.bvdBoost;
-  const colB = isForest ? '#2f6fed' : '#ff8a3d';
-  const colV = isForest ? '#0ea5e9' : '#e11d48';
+  const colB = isForest ? SERIES.forest : SERIES.boost;
+  const colV = isForest ? SERIES.forestVar : SERIES.boostVar;
   const xLbl = isForest ? 'деревьев' : 'итераций';
 
   // Отрисовываем срез Bias² и Variance строго до текущего шага (или весь, если модель ещё не запущена)
@@ -2086,7 +2110,7 @@ function render2dDataSummary() {
   if (balanceEl) {
     const p1 = ((c1 / n) * 100).toFixed(1);
     const p0 = ((c0 / n) * 100).toFixed(1);
-    balanceEl.innerHTML = `Классы: <b style="color:#16a34a">1 → ${c1} (${p1}%)</b> · <b style="color:#dc2626">0 → ${c0} (${p0}%)</b> · Train/Test: <b>${n - nTest}/${nTest}</b>`;
+    balanceEl.innerHTML = `Классы: <b class="cls-1">1 → ${c1} (${p1}%)</b> · <b class="cls-0">0 → ${c0} (${p0}%)</b> · Train/Test: <b>${n - nTest}/${nTest}</b>`;
   }
 
   // Метрики для x1 и x2

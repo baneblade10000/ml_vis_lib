@@ -17,6 +17,8 @@ export type PlaygroundMessages = {
   vizTransformerDescription: string;
   vizTransformerFlowTitle: string;
   vizTransformerFlowDescription: string;
+  vizEnsemblePlaygroundTitle: string;
+  vizEnsemblePlaygroundDescription: string;
   catalogViewGraph: string;
   catalogViewList: string;
   catalogSearchPlaceholder: string;
@@ -53,6 +55,9 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizTransformerFlowTitle: "TransformerFlow — Constructor",
     vizTransformerFlowDescription:
       "Build a transformer graph block by block: data-flow matrices, training, embeddings, attention diagnostics.",
+    vizEnsemblePlaygroundTitle: "Tree Ensembles",
+    vizEnsemblePlaygroundDescription:
+      "Random Forest and gradient boosting step by step: decision plane, individual trees, bias–variance, tabular data with missing values.",
     catalogViewGraph: "Graph",
     catalogViewList: "List",
     catalogSearchPlaceholder: "Search…",
@@ -90,6 +95,9 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizTransformerFlowTitle: "TransformerFlow — конструктор",
     vizTransformerFlowDescription:
       "Сборка вычислительного графа трансформера по блокам: матрицы потока данных, обучение, эмбеддинги, диагностика внимания.",
+    vizEnsemblePlaygroundTitle: "Ансамбли деревьев",
+    vizEnsemblePlaygroundDescription:
+      "Random Forest и градиентный бустинг пошагово: разделяющая плоскость, отдельные деревья, bias–variance, табличные данные с пропусками.",
     catalogViewGraph: "Граф",
     catalogViewList: "Список",
     catalogSearchPlaceholder: "Поиск…",

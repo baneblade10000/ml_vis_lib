@@ -73,6 +73,7 @@ export const catalogKnowledgeTree: CatalogTreeNode = {
         {
           id: "classical-trees",
           label: { ru: "Деревья решений и ансамбли", en: "Decision trees & ensembles" },
+          vizIds: ["ensemble-playground"],
         },
         {
           id: "classical-svm",

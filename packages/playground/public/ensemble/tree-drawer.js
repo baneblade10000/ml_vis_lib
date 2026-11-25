@@ -2,6 +2,8 @@
 // tree-drawer.js — боковая панель с диаграммой дерева
 // ============================================================
 
+import { token, font, classColor, classInk } from './palette.js';
+
 let ctx, canvas;
 let currentNode = null;
 let currentPath = null;
@@ -67,10 +69,10 @@ export function renderTree(root, opts = {}) {
 
   if (!root) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#fafbfd';
+    ctx.fillStyle = token('--nn-surface');
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#8a99ac';
-    ctx.font = '14px Roboto, sans-serif';
+    ctx.fillStyle = token('--nn-text-muted');
+    ctx.font = font(14);
     ctx.textAlign = 'center';
     ctx.fillText('Дерево пустое', canvas.width / 2, canvas.height / 2);
     return;
@@ -112,13 +114,13 @@ function draw() {
   const { nodes, edges, nodeR } = layout;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = token('--nn-surface');
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   for (const e of edges) {
     const a = e.from, b = e.to;
     const onPath = currentPath && currentPath.has(a.node) && currentPath.has(b.node);
-    ctx.strokeStyle = onPath ? '#2f6fed' : '#dbe3ec';
+    ctx.strokeStyle = onPath ? token('--nn-accent') : token('--nn-border-strong');
     ctx.lineWidth = onPath ? 3 : 1.5;
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
@@ -137,39 +139,39 @@ function draw() {
 function drawNode(node, x, y, r, opts = {}) {
   const { onPath, isHover } = opts;
   const isLeaf = !node.left;
+  const stroke = onPath ? token('--nn-accent') : (isHover ? token('--nn-text') : null);
 
   if (isLeaf) {
     const p = node.pred;
-    const green = Math.round(255 * Math.max(0, Math.min(1, p)));
-    const red = Math.round(255 * (1 - Math.max(0, Math.min(1, p))));
-    ctx.fillStyle = `rgb(${red},${green},80)`;
-    ctx.strokeStyle = onPath ? '#2f6fed' : (isHover ? '#1f2937' : '#cbd5e1');
+    ctx.fillStyle = classColor(p);
+    ctx.strokeStyle = stroke ?? token('--nn-border-strong');
     ctx.lineWidth = onPath ? 3 : (isHover ? 2.5 : 1.5);
     ctx.beginPath();
     ctx.arc(x, y, r + 6, 0, Math.PI * 2);
     ctx.fill(); ctx.stroke();
 
-    ctx.fillStyle = '#0b1220';
-    ctx.font = 'bold 11px Roboto, sans-serif';
+    ctx.fillStyle = classInk(p);
+    ctx.font = font(11, 'bold');
     ctx.textAlign = 'center';
     ctx.fillText(`p=${Number(p).toFixed(2)}`, x, y + 3);
-    ctx.font = '9px Roboto, sans-serif';
-    ctx.fillStyle = '#1f2937';
+    ctx.font = font(9);
+    ctx.globalAlpha = 0.8;
     ctx.fillText(`n=${node.n || '?'}`, x, y + 16);
+    ctx.globalAlpha = 1;
   } else {
-    ctx.fillStyle = isHover ? '#eef3fa' : '#fff';
-    ctx.strokeStyle = onPath ? '#2f6fed' : (isHover ? '#1f2937' : '#94a3b8');
+    ctx.fillStyle = isHover ? token('--nn-accent-soft') : token('--nn-surface');
+    ctx.strokeStyle = stroke ?? token('--nn-text-muted');
     ctx.lineWidth = onPath ? 3 : 1.5;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill(); ctx.stroke();
 
-    ctx.fillStyle = '#1f2937';
-    ctx.font = 'bold 11px Roboto, sans-serif';
+    ctx.fillStyle = token('--nn-text');
+    ctx.font = font(11, 'bold');
     ctx.textAlign = 'center';
     ctx.fillText(`x${node.feat + 1}`, x, y - 4);
-    ctx.font = '10px Roboto, sans-serif';
-    ctx.fillStyle = '#475569';
+    ctx.font = font(10);
+    ctx.fillStyle = token('--nn-text-secondary');
     ctx.fillText(`≤ ${Number(node.thresh).toFixed(2)}`, x, y + 9);
   }
 }

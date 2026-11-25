@@ -2,29 +2,33 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ensemble Playground — Random Forest &amp; Gradient Boosting</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./playground.css">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./ensemble/style.css">
 </head>
 <body>
 
-<header>
-  <h1>Ensemble Playground inspired by TensorFlow Playground</h1>
-  <span class="subtitle">Random Forest &amp; Gradient Boosting · интерактивная визуализация</span>
-</header>
+<header class="topbar">
+  <div class="topbar-title">
+    <h1>Ensemble Playground <span>inspired by TensorFlow Playground</span></h1>
+    <span class="subtitle">Random Forest &amp; Gradient Boosting · интерактивная визуализация</span>
+  </div>
 
-<nav class="tabs">
-  <button class="tab" data-tab="data">Данные</button>
-  <button class="tab active" data-tab="viz">Визуализация</button>
-  <button class="tab" data-tab="edit">Создание табличных данных</button>
-  <button class="tab" data-tab="tableForest">Лес для табличных данных</button>
-  <button class="tab" data-tab="tableBoost">Бустинг для табличных данных</button>
-</nav>
+  <nav class="tabs" aria-label="Рабочая область">
+    <button class="tab" data-tab="data">Данные</button>
+    <button class="tab active" data-tab="viz">Визуализация</button>
+    <button class="tab" data-tab="edit">Создание табличных данных</button>
+    <button class="tab" data-tab="tableForest">Лес для табличных данных</button>
+    <button class="tab" data-tab="tableBoost">Бустинг для табличных данных</button>
+  </nav>
+</header>
 
 
 <!-- ================= ВИЗУАЛИЗАЦИЯ ================= -->
-<div class="app" id="tabViz" style="display:none">
+<div class="app" id="tabViz">
 
   <div class="card">
     <h2>Данные</h2>
@@ -75,7 +79,7 @@
         <button class="btn" id="zoomOut">− Уменьшить</button>
         <button class="btn" id="zoomReset">⌂ Сброс</button>
       </div>
-      <p style="font-size:12px;color:var(--muted);margin:10px 0 0;line-height:1.5">
+      <p class="hint" style="margin:10px 0 0">
         Колесо мыши — зум, drag — панорама, клик по точке — выбор.
       </p>
     </div>
@@ -298,7 +302,7 @@
       </div>
       <span class="data-count" id="tCount"></span>
     </div>
-    <p id="tDataInfo" style="font-size:12px;color:var(--muted);margin:0 0 10px">
+    <p id="tDataInfo" class="hint" style="margin:0 0 10px">
       Очистите ячейку, чтобы создать пропуск (NaN). Изменения сразу доступны во вкладках леса и бустинга.
     </p>
     <div class="table-wrap">
@@ -309,6 +313,7 @@
     </div>
   </div>
 </div>
+
 
 
 
@@ -358,9 +363,8 @@
      <button class="btn" id="btnChartsTableForest" style="width:100%;justify-content:center;margin-top:8px">
         Графики
       </button>
-    
 
-    <hr style="border:0;border-top:1px solid var(--border);margin:18px 0">
+    <hr class="rule">
 
     <h2>Метрики</h2>
     <div style="font-size:12px;line-height:1.8">
@@ -368,7 +372,7 @@
       <div>Train Acc / Loss: <b id="tfStatTrain">—</b></div>
       <div>Test Acc / Loss: <b id="tfStatTest">—</b></div>
     </div>
-    <p style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.45">
+    <p class="hint" style="margin-top:12px;line-height:1.45">
       Кликните по любой строке таблицы справа, чтобы открыть деревья леса и увидеть маршрут образца.
     </p>
   </aside>
@@ -427,7 +431,7 @@
       Графики
     </button>
 
-    <hr style="border:0;border-top:1px solid var(--border);margin:18px 0">
+    <hr class="rule">
 
     <h2>Метрики</h2>
     <div style="font-size:12px;line-height:1.8">
@@ -435,7 +439,7 @@
       <div>Train Acc / Loss: <b id="tbStatTrain">—</b></div>
       <div>Test Acc / Loss: <b id="tbStatTest">—</b></div>
     </div>
-    <p style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.45">
+    <p class="hint" style="margin-top:12px;line-height:1.45">
       Кликните по любой строке таблицы справа, чтобы открыть деревья итераций бустинга и увидеть путь образца.
     </p>
   </aside>
@@ -472,9 +476,9 @@
   <div class="drawer-body">
     <canvas id="treeCanvas" width="560" height="420"></canvas>
     <div class="drawer-legend">
-      <span><i class="swatch" style="background:#22c55e"></i>лист → класс 1</span>
-      <span><i class="swatch" style="background:#ef4444"></i>лист → класс 0</span>
-      <span><i class="swatch" style="background:#2f6fed"></i>путь для выбранной точки</span>
+      <span><i class="swatch swatch--class1"></i>лист → класс 1</span>
+      <span><i class="swatch swatch--class0"></i>лист → класс 0</span>
+      <span><i class="swatch swatch--path"></i>путь для выбранной точки</span>
     </div>
   </div>
 </aside>
@@ -512,7 +516,7 @@
         </table>
       </div>
     </div>
-    <p style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5">
+    <p class="hint" style="margin-top:12px">
       Пропуски (NaN) в признаках перед обучением моделей автоматически заполняются медианой, вычисленной только по обучающей выборке (Train).
     </p>
   </div>
@@ -541,6 +545,6 @@
 
 
 
-<script type="module" src="./main.js"></script>
+<script type="module" src="./ensemble/main.js"></script>
 </body>
 </html>

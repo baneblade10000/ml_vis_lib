@@ -16,6 +16,7 @@ export type VisualizationId =
   | "convolutional-network"
   | "transformer"
   | "transformer-flow"
+  | "ensemble-playground"
   | "signal-lab";
 
 export interface VisualizationEntry {
@@ -38,14 +39,23 @@ function TransformerWithWasm() {
   });
 }
 
-// TransformerFlow ships as a self-contained page in public/ (own runtime and
-// styles), so the catalog entry embeds it rather than mounting a component.
-function TransformerFlowFrame() {
+// TransformerFlow and Ensemble Playground ship as self-contained pages in
+// public/ (own runtime and styles), so the catalog embeds them as full pages
+// in an iframe rather than mounting a component.
+function publicPage(src: string, title: string) {
   return createElement("iframe", {
-    className: "transformer-flow-frame",
-    src: `${import.meta.env.BASE_URL}transformer-constructor.html`,
-    title: "TransformerFlow",
+    className: "public-page-frame",
+    src: `${import.meta.env.BASE_URL}${src}`,
+    title,
   });
+}
+
+function TransformerFlowFrame() {
+  return publicPage("transformer-constructor.html", "TransformerFlow");
+}
+
+function EnsemblePlaygroundFrame() {
+  return publicPage("ensemble.html", "Ensemble Playground");
 }
 
 export const visualizations: VisualizationEntry[] = [
@@ -76,6 +86,13 @@ export const visualizations: VisualizationEntry[] = [
     titleKey: "vizTransformerFlowTitle",
     descriptionKey: "vizTransformerFlowDescription",
     component: TransformerFlowFrame,
+  },
+  {
+    id: "ensemble-playground",
+    path: "/viz/ensemble-playground",
+    titleKey: "vizEnsemblePlaygroundTitle",
+    descriptionKey: "vizEnsemblePlaygroundDescription",
+    component: EnsemblePlaygroundFrame,
   },
   {
     id: "convolutional-network",

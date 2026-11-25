@@ -2,6 +2,8 @@
 // ensemble.js — алгоритмы + утилиты визуализации
 // ============================================================
 
+import { token, font } from './palette.js';
+
 export function makeData(n = 250, noise = 0.15, seed = 42) {
   let s = seed;
   const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
@@ -179,7 +181,7 @@ export function accuracy(F, y) {
 }
 
 export function drawTreeNode(ctx, node, size, opts = {}) {
-  const { color = '#60a5fa' } = opts;
+  const { color = token('--nn-accent') } = opts;
   if (!node.left) return;
   const line = (n) => {
     if (!n.left) return;
@@ -198,7 +200,7 @@ export function drawTreeNode(ctx, node, size, opts = {}) {
   line(node);
 }
 
-export function drawLossChart(ctx, w, h, values, color = '#f59e0b', opts = {}) {
+export function drawLossChart(ctx, w, h, values, color = token('--nn-accent'), opts = {}) {
   const {
     xLabel = 'итерация',
     yLabel = 'log-loss',
@@ -206,20 +208,20 @@ export function drawLossChart(ctx, w, h, values, color = '#f59e0b', opts = {}) {
   } = opts;
 
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#fafbfd';
+  ctx.fillStyle = token('--nn-surface-muted');
   ctx.fillRect(0, 0, w, h);
 
   const padL = 44, padR = 10, padT = title ? 22 : 12, padB = 24;
   const plotW = w - padL - padR;
   const plotH = h - padT - padB;
 
-  ctx.strokeStyle = '#e2e8f0';
+  ctx.strokeStyle = token('--nn-border');
   ctx.lineWidth = 1;
   ctx.strokeRect(padL + 0.5, padT + 0.5, plotW, plotH);
 
   if (!values || values.length === 0) {
-    ctx.fillStyle = '#8a99ac';
-    ctx.font = '11px Roboto, sans-serif';
+    ctx.fillStyle = token('--nn-text-muted');
+    ctx.font = font(11);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('нет данных', padL + plotW / 2, padT + plotH / 2);
@@ -238,15 +240,15 @@ export function drawLossChart(ctx, w, h, values, color = '#f59e0b', opts = {}) {
   const xAt = i => padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
   const yAt = v => padT + plotH - ((v - min) / (max - min)) * plotH;
 
-  ctx.font = '10px Roboto, sans-serif';
+  ctx.font = font(10);
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   for (let k = 0; k <= 3; k++) {
     const v = min + (max - min) * (k / 3);
     const y = yAt(v);
-    ctx.strokeStyle = '#eef2f7';
+    ctx.strokeStyle = token('--nn-border');
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
-    ctx.fillStyle = '#8a99ac';
+    ctx.fillStyle = token('--nn-text-muted');
     ctx.fillText(v.toFixed(2), padL - 6, y);
   }
 
@@ -257,17 +259,17 @@ export function drawLossChart(ctx, w, h, values, color = '#f59e0b', opts = {}) {
     for (let k = 0; k <= xTicks; k++) {
       const i = Math.round((k / xTicks) * (n - 1));
       const x = xAt(i);
-      ctx.strokeStyle = '#eef2f7';
+      ctx.strokeStyle = token('--nn-border');
       ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH); ctx.stroke();
-      ctx.fillStyle = '#8a99ac';
+      ctx.fillStyle = token('--nn-text-muted');
       ctx.fillText(String(i + 1), x, padT + plotH + 4);
     }
   } else {
-    ctx.fillStyle = '#8a99ac';
+    ctx.fillStyle = token('--nn-text-muted');
     ctx.fillText('1', xAt(0), padT + plotH + 4);
   }
 
-  ctx.strokeStyle = '#94a3b8';
+  ctx.strokeStyle = token('--nn-border-strong');
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + plotH); ctx.lineTo(padL + plotW, padT + plotH);
@@ -291,8 +293,8 @@ export function drawLossChart(ctx, w, h, values, color = '#f59e0b', opts = {}) {
     }
   }
 
-  ctx.fillStyle = '#5b6b7f';
-  ctx.font = '10px Roboto, sans-serif';
+  ctx.fillStyle = token('--nn-text-secondary');
+  ctx.font = font(10);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText(xLabel, padL + plotW / 2, h - 10);
@@ -307,8 +309,8 @@ export function drawLossChart(ctx, w, h, values, color = '#f59e0b', opts = {}) {
 
   if (title) {
     const last = values[n - 1];
-    ctx.fillStyle = '#3b4a5c';
-    ctx.font = '600 11px Roboto, sans-serif';
+    ctx.fillStyle = token('--nn-text');
+    ctx.font = font(11, 600);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(`${title}: ${last.toFixed(3)}`, padL, 4);
@@ -326,20 +328,20 @@ export function drawBvdChart(ctx, w, h, series, opts = {}) {
   } = opts;
 
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#fafbfd';
+  ctx.fillStyle = token('--nn-surface-muted');
   ctx.fillRect(0, 0, w, h);
 
   const padL = 44, padR = 10, padT = 24, padB = 24;
   const plotW = w - padL - padR;
   const plotH = h - padT - padB;
 
-  ctx.strokeStyle = '#e2e8f0';
+  ctx.strokeStyle = token('--nn-border');
   ctx.lineWidth = 1;
   ctx.strokeRect(padL + 0.5, padT + 0.5, plotW, plotH);
 
   if (!series || !series.length || !series[0].values.length) {
-    ctx.fillStyle = '#8a99ac';
-    ctx.font = '11px Roboto, sans-serif';
+    ctx.fillStyle = token('--nn-text-muted');
+    ctx.font = font(11);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Нажмите «Оценить Bias² / Variance»', padL + plotW / 2, padT + plotH / 2);
@@ -357,15 +359,15 @@ export function drawBvdChart(ctx, w, h, series, opts = {}) {
   const yAt = v => padT + plotH - ((v - min) / (max - min)) * plotH;
 
   // Сетка по Y
-  ctx.font = '10px Roboto, sans-serif';
+  ctx.font = font(10);
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   for (let k = 0; k <= 3; k++) {
     const v = min + (max - min) * (k / 3);
     const y = yAt(v);
-    ctx.strokeStyle = '#eef2f7';
+    ctx.strokeStyle = token('--nn-border');
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
-    ctx.fillStyle = '#8a99ac';
+    ctx.fillStyle = token('--nn-text-muted');
     ctx.fillText(v.toFixed(3), padL - 5, y);
   }
 
@@ -377,18 +379,18 @@ export function drawBvdChart(ctx, w, h, series, opts = {}) {
     for (let k = 0; k <= xTicks; k++) {
       const i = Math.round((k / xTicks) * (n - 1));
       const x = xAt(i);
-      ctx.strokeStyle = '#eef2f7';
+      ctx.strokeStyle = token('--nn-border');
       ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH); ctx.stroke();
-      ctx.fillStyle = '#8a99ac';
+      ctx.fillStyle = token('--nn-text-muted');
       ctx.fillText(String(i + 1), x, padT + plotH + 4);
     }
   } else {
-    ctx.fillStyle = '#8a99ac';
+    ctx.fillStyle = token('--nn-text-muted');
     ctx.fillText('1', xAt(0), padT + plotH + 4);
   }
 
   // Оси
-  ctx.strokeStyle = '#94a3b8';
+  ctx.strokeStyle = token('--nn-border-strong');
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + plotH); ctx.lineTo(padL + plotW, padT + plotH);
@@ -410,11 +412,11 @@ export function drawBvdChart(ctx, w, h, series, opts = {}) {
   }
 
   // Заголовок и цветная легенда вверху
-  ctx.font = '600 10px Roboto, sans-serif';
+  ctx.font = font(10, 600);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   let curX = padL;
-  ctx.fillStyle = '#3b4a5c';
+  ctx.fillStyle = token('--nn-text');
   ctx.fillText(title + ':', curX, 5);
   curX += ctx.measureText(title + ': ').width + 4;
 
@@ -426,8 +428,8 @@ export function drawBvdChart(ctx, w, h, series, opts = {}) {
     curX += ctx.measureText(txt).width + 8;
   }
 
-  ctx.fillStyle = '#5b6b7f';
-  ctx.font = '10px Roboto, sans-serif';
+  ctx.fillStyle = token('--nn-text-secondary');
+  ctx.font = font(10);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText(xLabel, padL + plotW / 2, h - 10);

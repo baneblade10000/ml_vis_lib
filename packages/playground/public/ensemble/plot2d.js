@@ -2,6 +2,8 @@
 // plot2d.js — декартова плоскость в стиле Desmos
 // ============================================================
 
+import { token, tokenRgb, rgba, font, classColor } from './palette.js';
+
 export function createView() {
   return { cx: 0, cy: 0, scale: 160 };
 }
@@ -32,9 +34,14 @@ function niceStep(rawStep) {
 }
 
 export function drawAxes(ctx, size, view, opts = {}) {
-  const { major = '#d9e2ec', minor = '#eef2f7', axis = '#94a3b8', text = '#8a99ac' } = opts;
+  const {
+    major = token('--nn-border-strong'),
+    minor = token('--nn-border'),
+    axis = token('--nn-text-muted'),
+    text = token('--nn-text-muted'),
+  } = opts;
   ctx.save();
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = token('--nn-surface');
   ctx.fillRect(0, 0, size, size);
 
   const unitsAcross = size / view.scale;
@@ -80,7 +87,7 @@ export function drawAxes(ctx, size, view, opts = {}) {
   }
 
   ctx.fillStyle = text;
-  ctx.font = '10px Roboto, sans-serif';
+  ctx.font = font(10);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   const labelY = Math.min(Math.max(oy + 4, 4), size - 14);
@@ -118,10 +125,7 @@ export function drawProbField(ctx, size, view, predictFn) {
   for (let px = 0; px < size; px += step) {
     for (let py = 0; py < size; py += step) {
       const [x, y] = screenToWorld(view, size, px + step / 2, py + step / 2);
-      const v = predictFn([x, y]);
-      const r = Math.round(255 * (1 - v));
-      const g = Math.round(255 * v);
-      ctx.fillStyle = `rgba(${r},${g},80,0.55)`;
+      ctx.fillStyle = classColor(predictFn([x, y]), 0.55);
       ctx.fillRect(px, py, step, step);
     }
   }
@@ -131,6 +135,11 @@ export function drawProbField(ctx, size, view, predictFn) {
 export function drawPointsOnPlot(ctx, size, view, X, y, opts = {}) {
   const { weights = null, selected = -1, scale = 1, isTest = null } = opts;
   const r0 = 4 * scale;
+  const fillOf = [token('--scale-negative'), token('--scale-positive')];
+  const selectedFill = token('--ens-selected');
+  const selectedStroke = token('--ens-selected-ink');
+  const surface = token('--nn-surface');
+  const edge = rgba(tokenRgb('--nn-text'), 0.55);
   for (let i = 0; i < X.length; i++) {
     const [px, py] = worldToScreen(view, size, X[i][0], X[i][1]);
     if (px < -20 || px > size + 20 || py < -20 || py > size + 20) continue;
@@ -139,8 +148,8 @@ export function drawPointsOnPlot(ctx, size, view, X, y, opts = {}) {
     const isSel = i === selected;
     const testPt = isTest ? isTest[i] : false;
 
-    const fill = isSel ? '#facc15' : (y[i] === 1 ? '#22c55e' : '#ef4444');
-    const stroke = isSel ? '#a16207' : (testPt ? '#ffffff' : 'rgba(15,23,42,.55)');
+    const fill = isSel ? selectedFill : fillOf[y[i] === 1 ? 1 : 0];
+    const stroke = isSel ? selectedStroke : (testPt ? surface : edge);
 
     ctx.fillStyle = fill;
     ctx.strokeStyle = stroke;
