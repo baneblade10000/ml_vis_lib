@@ -1,0 +1,61 @@
+/* ─── Design tokens ───────────────────────────────────────────────────────────
+   The one palette of the playground. index.html and the self-contained pages in
+   public/ all link this file: a page embedded in an iframe inherits no custom
+   properties, so it has to load the tokens as a document of its own.
+   Change a color here, never in a stylesheet or a script of a page. */
+
+:root {
+  --nn-font: "Inter", system-ui, -apple-system, sans-serif;
+
+  --nn-accent: #3457a3;
+  --nn-accent-hover: #083275;
+  --nn-accent-soft: rgba(52, 87, 163, 0.15);
+  --nn-accent-glow: rgba(52, 87, 163, 0.35);
+
+  --nn-cyan: #3457a3;
+  --nn-crimson: #dc263a;
+  --nn-crimson-soft: rgba(220, 38, 58, 0.12);
+
+  --nn-bg: #f1f5f9;
+  --nn-bg-gradient: linear-gradient(145deg, #f8fafc 0%, #e8f4fc 45%, #f1f5f9 100%);
+
+  --nn-surface: #ffffff;
+  --nn-surface-raised: #ffffff;
+  --nn-surface-muted: #f8fafc;
+  /* A panel floating over a canvas; the drawing stays visible underneath. */
+  --nn-surface-glass: rgba(255, 255, 255, 0.92);
+
+  --nn-border: #e2e8f0;
+  --nn-border-strong: #cbd5e1;
+
+  --nn-text: #0f172a;
+  --nn-text-secondary: #475569;
+  --nn-text-muted: #94a3b8;
+  /* Ink on the accent. Not --nn-surface: a tinted surface must not recolor a
+     primary button's label. */
+  --nn-on-accent: #ffffff;
+
+  /* Dimming layer behind a modal window or a drawer. */
+  --nn-scrim: rgba(15, 23, 42, 0.35);
+
+  --nn-radius-sm: 6px;
+  --nn-radius-md: 10px;
+  --nn-radius-lg: 14px;
+  --nn-radius-xl: 18px;
+  --nn-radius-full: 9999px;
+
+  --nn-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --nn-shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --nn-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
+  --nn-shadow-lg: 0 8px 32px rgba(15, 23, 42, 0.1);
+  --nn-shadow-glow: 0 0 0 3px var(--nn-accent-soft);
+
+  --nn-transition: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* How a signed number becomes a color: negative → white at 0 → positive.
+     A mirror of NUMERIC_NEGATIVE / NUMERIC_ZERO / NUMERIC_POSITIVE in
+     packages/core/src/playground/network/colors.ts; a core test keeps both equal. */
+  --scale-negative: #3d41b9;
+  --scale-zero: #ffffff;
+  --scale-positive: #1a90d9;
+}

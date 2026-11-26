@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ensemble Playground — Random Forest &amp; Gradient Boosting</title>
+<script>
+// #embedded: страницу открывает каталог, и шапка с вкладками живёт у него.
+if (location.hash === '#embedded') document.documentElement.classList.add('embedded');
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./ensemble/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-title">
+    <h1>Ensemble Playground <span>inspired by TensorFlow Playground</span></h1>
+    <span class="subtitle">Random Forest &amp; Gradient Boosting · интерактивная визуализация</span>
+  </div>
+
+  <nav class="tabs" aria-label="Рабочая область">
+    <button class="tab" data-tab="data">Данные</button>
+    <button class="tab active" data-tab="viz">Визуализация</button>
+    <button class="tab" data-tab="edit">Создание табличных данных</button>
+    <button class="tab" data-tab="tableForest">Лес для табличных данных</button>
+    <button class="tab" data-tab="tableBoost">Бустинг для табличных данных</button>
+  </nav>
+</header>
+
+
+<!-- ================= ВИЗУАЛИЗАЦИЯ ================= -->
+<div class="app" id="tabViz">
+
+  <div class="card">
+    <div class="param-group">
+      <h2>Ансамбль</h2>
+      <div class="seg" id="modelSwitch" role="tablist" aria-label="Ансамбль">
+        <button class="seg-btn active" data-model="forest" role="tab" aria-selected="true">Random Forest</button>
+        <button class="seg-btn" data-model="boost" role="tab" aria-selected="false">Gradient Boosting</button>
+      </div>
+    </div>
+
+    <h2>Данные</h2>
+
+    <div class="param-group">
+      <span class="label">Размер выборки</span>
+      <div class="param-row">
+        <input id="n" type="range" min="50" max="600" step="10">
+        <input id="nNum" type="text" inputmode="decimal"  class="param-input" min="50" max="600" step="10">
+      </div>
+    </div>
+
+    <div class="param-group">
+      <span class="label">Шум в метках</span>
+      <div class="param-row">
+        <input id="noise" type="range" min="0" max="0.4" step="0.01">
+        <input id="noiseNum" type="text" inputmode="decimal"  class="param-input" min="0" max="0.4" step="0.01">
+      </div>
+    </div>
+    <div class="param-group">
+      <span class="label">Доля Test выборки</span>
+      <div class="param-row">
+        <input type="range" id="testSplit" min="0" max="0.5" step="0.05" value="0.25">
+        <input type="text" inputmode="decimal" class="param-input" id="testSplitNum" value="0.25">
+      </div>
+    </div>
+
+    <div class="param-group">
+      <span class="label">Форма границы</span>
+      <div class="chips" id="shapeChips">
+        <button class="chip active" data-shape="circle">Круг</button>
+        <button class="chip" data-shape="xor">XOR</button>
+        <button class="chip" data-shape="spiral">Спираль</button>
+        <button class="chip" data-shape="moons">Луны</button>
+      </div>
+    </div>
+
+     <button class="btn primary" id="btnRegen" style="width:100%;justify-content:center">
+        Перегенерировать
+      </button>
+      <button class="btn" id="btnCalcBvd" style="width:100%;justify-content:center;margin-top:8px">
+        Оценить Bias² и Variance
+      </button>
+    <div style="margin-top:18px">
+      <h2 style="margin-bottom:10px">Вид плоскости</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="zoomIn">+ Увеличить</button>
+        <button class="btn" id="zoomOut">− Уменьшить</button>
+        <button class="btn" id="zoomReset">⌂ Сброс</button>
+      </div>
+      <p class="hint" style="margin:10px 0 0">
+        Колесо мыши — зум, drag — панорама, клик по точке — выбор.
+      </p>
+    </div>
+
+    <div style="margin-top:18px">
+      <h2 style="margin-bottom:10px">Прогресс</h2>
+      <div class="metrics" style="flex-direction:column;gap:6px">
+        <span>Лес: <b id="statForest">—</b></span>
+        <span>Бустинг: <b id="statBoost">—</b></span>
+      </div>
+      <div class="legend-shapes">
+        <span><i class="shape-dot"></i> класс 1</span>
+        <span><i class="shape-sq"></i> класс 0</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="models">
+
+    <div class="card model-card" id="cardForest" role="tabpanel">
+      <div class="model-body">
+        <div class="model-plane">
+          <canvas id="cvForest" class="grid" width="380" height="380"></canvas>
+          <div class="metrics">
+            <span>Деревьев: <b id="mForestTrees">0</b></span>
+            <span>Accuracy: <b id="mForestAcc">—</b></span>
+            <span>Loss: <b id="mForestLoss">—</b></span>
+          </div>
+          <div class="model-actions">
+            <button class="btn primary" id="btnForest">Построить</button>
+            <button class="btn btn-icon" id="btnPlayF" title="Проиграть пошагово">▶</button>
+            <button class="btn" id="btnResetF">Сброс</button>
+          </div>
+        </div>
+        <div class="model-charts">
+          <canvas id="chartForestTrain" width="380" height="120"></canvas>
+          <canvas id="chartForestTest" width="380" height="120"></canvas>
+          <canvas id="chartForestBias" width="380" height="115"></canvas>
+          <canvas id="chartForestVar" width="380" height="115"></canvas>
+        </div>
+      </div>
+      <div class="minis" id="minisForest"></div>
+    </div>
+
+    <div class="card model-card" id="cardBoost" role="tabpanel" hidden>
+      <div class="model-body">
+        <div class="model-plane">
+          <canvas id="cvBoost" class="grid" width="380" height="380"></canvas>
+          <div class="metrics">
+            <span>Итераций: <b id="mBoostIters">0</b></span>
+            <span>Accuracy: <b id="mBoostAcc">—</b></span>
+            <span>Loss: <b id="mBoostLoss">—</b></span>
+          </div>
+          <div class="model-actions">
+            <button class="btn accent" id="btnBoost">Шаг</button>
+            <button class="btn btn-icon" id="btnPlayB" title="Проиграть пошагово">▶</button>
+            <button class="btn" id="btnResetB">Сброс</button>
+          </div>
+        </div>
+        <div class="model-charts">
+          <canvas id="chartBoostTrain" width="380" height="120"></canvas>
+          <canvas id="chartBoostTest" width="380" height="120"></canvas>
+          <canvas id="chartBoostBias" width="380" height="115"></canvas>
+          <canvas id="chartBoostVar" width="380" height="115"></canvas>
+        </div>
+      </div>
+      <div class="minis" id="minisBoost"></div>
+    </div>
+
+    <div class="info empty" id="clickInfo">
+      Кликните по точке на плоскости — покажу вклад отдельных деревьев.
+    </div>
+  </div>
+
+  <div class="card">
+    <section id="paramsForest">
+      <h2>Random Forest</h2>
+
+      <div class="param-group">
+        <span class="label">Число деревьев</span>
+        <div class="param-row">
+          <input id="nTrees" type="range" min="1" max="40">
+          <input id="nTreesNum" type="text" inputmode="decimal" class="param-input" min="1" max="40">
+        </div>
+      </div>
+      <div class="param-group">
+        <span class="label">Глубина дерева</span>
+        <div class="param-row">
+          <input id="depthF" type="range" min="1" max="8">
+          <input id="depthFNum" type="text" inputmode="decimal" class="param-input" min="1" max="8">
+        </div>
+      </div>
+      <div class="param-group">
+        <span class="label">Признаков на сплит</span>
+        <div class="param-row">
+          <input id="nFeatF" type="range" min="1" max="2">
+          <input id="nFeatFNum" type="text" inputmode="decimal" class="param-input" min="1" max="2">
+        </div>
+      </div>
+      <div class="param-group">
+        <span class="label">Bootstrap (доля)</span>
+        <div class="param-row">
+          <input id="fracF" type="range" min="0.3" max="1" step="0.05">
+          <input id="fracFNum" type="text" inputmode="decimal"  class="param-input" min="0.3" max="1" step="0.05">
+        </div>
+      </div>
+    </section>
+
+    <section id="paramsBoost" hidden>
+      <h2>Gradient Boosting</h2>
+
+      <div class="param-group">
+        <span class="label">Итераций</span>
+        <div class="param-row">
+          <input id="nIters" type="range" min="1" max="80">
+          <input id="nItersNum" type="text" inputmode="decimal" class="param-input" min="1" max="80">
+        </div>
+      </div>
+      <div class="param-group">
+        <span class="label">Глубина дерева</span>
+        <div class="param-row">
+          <input id="depthB" type="range" min="1" max="6">
+          <input id="depthBNum" type="text" inputmode="decimal" class="param-input" min="1" max="6">
+        </div>
+      </div>
+      <div class="param-group">
+        <span class="label">Learning rate</span>
+        <div class="param-row">
+          <input id="lr" type="range" min="0.05" max="1" step="0.05">
+          <input id="lrNum" type="text" inputmode="decimal" class="param-input" min="0.05" max="1" step="0.05">
+        </div>
+      </div>
+    </section>
+  </div>
+
+</div>
+
+<!-- ================= ДАННЫЕ (просмотр) ================= -->
+<div id="tabData" class="app data-app" style="display:none">
+  <div class="card">
+    <div class="data-header">
+      <h2>Данные и предсказания</h2>
+      <div class="data-filters">
+        <label>Класс:
+          <select id="filterClass">
+            <option value="all">все</option>
+            <option value="1">только 1</option>
+            <option value="0">только 0</option>
+          </select>
+        </label>
+        <label>Выборка:
+          <select id="filterSplit">
+            <option value="all">все</option>
+            <option value="train">Train</option>
+            <option value="test">Test</option>
+          </select>
+        </label>
+        <label>Поиск: <input type="text" id="searchX" placeholder="x1 или x2"></label>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap">
+        <button class="btn" id="btnAddRow">+ Добавить строку</button>
+        <button class="btn" id="btnResetData">↺ Сбросить</button>
+        <button class="btn" id="btnOpenDataStats">Описательная статистика</button>
+        <label class="btn">Импорт CSV <input type="file" id="csvInput" accept=".csv,.txt" hidden></label>
+        <button class="btn" id="btnExportCsv">⬇ CSV</button>
+      </div>
+      <span class="data-count" id="dataCount"></span>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table edit-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Выборка</th>
+            <th>x1</th>
+            <th>x2</th>
+            <th>y</th>
+            <th>лес p</th>
+            <th>буст p</th>
+            <th>лес ✓</th>
+            <th>буст ✓</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="dataBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ================= РЕДАКТОР ================= -->
+<div id="tabEdit" class="app data-app" style="display:none">
+  <div class="card">
+    <div class="data-header">
+      <h2>Конструктор табличных данных (с пропусками)</h2>
+      <div class="data-filters">
+        <label>Строк: <input type="number" id="tRows" value="200" min="10" max="2000" style="width:65px"></label>
+        <label>Признаков: <input type="number" id="tFeats" value="3" min="2" max="5" style="width:50px"></label>
+        <label>Пропуски: <input type="text" inputmode="decimal" id="tMissing" value="0.05" style="width:55px"></label>
+        <label>Шум: <input type="text" inputmode="decimal" id="tNoise" value="0.1" style="width:55px"></label>
+        <label>Test: <input type="text" inputmode="decimal" id="tTestSplit" value="0.25" style="width:50px"></label>
+        <label>Форма:
+          <select id="tShape">
+            <option value="linear">Линейная</option>
+            <option value="xor">XOR</option>
+            <option value="circle">Круг</option>
+          </select>
+        </label>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap">
+        <button class="btn primary" id="btnGenTable">Сгенерировать</button>
+        <button class="btn" id="btnAddTableRow">+ Строка</button>
+        <button class="btn" id="btnOpenStats">📊 Описательная статистика</button>
+        <button class="btn" id="btnExportTable">⬇ CSV</button>
+      </div>
+      <span class="data-count" id="tCount"></span>
+    </div>
+    <p id="tDataInfo" class="hint" style="margin:0 0 10px">
+      Очистите ячейку, чтобы создать пропуск (NaN). Изменения сразу доступны во вкладках леса и бустинга.
+    </p>
+    <div class="table-wrap">
+      <table class="data-table edit-table">
+        <thead id="tHead"></thead>
+        <tbody id="tBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+
+
+<!-- ================= ТАБЛИЧНЫЕ ДАННЫЕ ================= -->
+<!-- ==================== ВКЛАДКА: ЛЕС ДЛЯ ТАБЛИЧНЫХ ДАННЫХ ==================== -->
+<section id="tabTableForest" class="app" style="display:none;grid-template-columns:280px 1fr">
+  <aside class="card">
+    <h2>Random Forest</h2>
+
+    <div class="param-group">
+      <span class="label">Число деревьев</span>
+      <div class="param-row">
+        <input type="range" id="tfTrees" min="1" max="50" step="1" value="12">
+        <input type="text" inputmode="numeric" class="param-input" id="tfTreesNum" value="12">
+      </div>
+    </div>
+
+    <div class="param-group">
+      <span class="label">Глубина дерева</span>
+      <div class="param-row">
+        <input type="range" id="tfDepth" min="1" max="10" step="1" value="5">
+        <input type="text" inputmode="numeric" class="param-input" id="tfDepthNum" value="5">
+      </div>
+    </div>
+
+    <div class="param-group">
+      <span class="label">Признаков на сплит</span>
+      <div class="param-row">
+        <input type="range" id="tfFeat" min="1" max="5" step="1" value="2">
+        <input type="text" inputmode="numeric" class="param-input" id="tfFeatNum" value="2">
+      </div>
+    </div>
+
+    <div class="param-group">
+      <span class="label">Bootstrap (доля)</span>
+      <div class="param-row">
+        <input type="range" id="tfFrac" min="0.2" max="1" step="0.05" value="1">
+        <input type="text" inputmode="decimal" class="param-input" id="tfFracNum" value="1.00">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;margin-top:16px">
+      <button class="btn primary" id="btnTrainTableForest" style="flex:1;justify-content:center">Построить</button>
+      <button class="btn btn-icon" id="btnPlayTableForest" title="Проиграть по деревьям">▶</button>
+      <button class="btn" id="btnResetTableForest">Сброс</button>
+    </div>
+     <button class="btn" id="btnChartsTableForest" style="width:100%;justify-content:center;margin-top:8px">
+        Графики
+      </button>
+
+    <hr class="rule">
+
+    <h2>Метрики</h2>
+    <div style="font-size:12px;line-height:1.8">
+      <div>Деревьев: <b id="tfStepStat">0</b></div>
+      <div>Train Acc / Loss: <b id="tfStatTrain">—</b></div>
+      <div>Test Acc / Loss: <b id="tfStatTest">—</b></div>
+    </div>
+    <p class="hint" style="margin-top:12px;line-height:1.45">
+      Кликните по любой строке таблицы справа, чтобы открыть деревья леса и увидеть маршрут образца.
+    </p>
+  </aside>
+
+  <div class="card">
+    <div class="data-header">
+      <h2>Результаты классификации (Random Forest)</h2>
+      <span class="data-count" id="tfRowCount">0 строк</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead id="tfResHead"></thead>
+        <tbody id="tfResBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+
+<!-- ==================== ВКЛАДКА: БУСТИНГ ДЛЯ ТАБЛИЧНЫХ ДАННЫХ ==================== -->
+<section id="tabTableBoost" class="app" style="display:none;grid-template-columns:280px 1fr">
+  <aside class="card">
+    <h2>Gradient Boosting</h2>
+
+    <div class="param-group">
+      <span class="label">Итераций</span>
+      <div class="param-row">
+        <input type="range" id="tbIters" min="1" max="80" step="1" value="25">
+        <input type="text" inputmode="numeric" class="param-input" id="tbItersNum" value="25">
+      </div>
+    </div>
+
+    <div class="param-group">
+      <span class="label">Глубина дерева</span>
+      <div class="param-row">
+        <input type="range" id="tbDepth" min="1" max="6" step="1" value="3">
+        <input type="text" inputmode="numeric" class="param-input" id="tbDepthNum" value="3">
+      </div>
+    </div>
+
+    <div class="param-group">
+      <span class="label">Learning rate</span>
+      <div class="param-row">
+        <input type="range" id="tbLr" min="0.01" max="1" step="0.01" value="0.3">
+        <input type="text" inputmode="decimal" class="param-input" id="tbLrNum" value="0.30">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;margin-top:16px">
+      <button class="btn accent" id="btnTrainTableBoost" style="flex:1;justify-content:center">Шаг</button>
+      <button class="btn btn-icon" id="btnPlayTableBoost" title="Проиграть по итерациям">▶</button>
+      <button class="btn" id="btnResetTableBoost">Сброс</button>
+    </div>
+
+    <button class="btn" id="btnChartsTableBoost" style="width:100%;justify-content:center;margin-top:8px">
+      Графики
+    </button>
+
+    <hr class="rule">
+
+    <h2>Метрики</h2>
+    <div style="font-size:12px;line-height:1.8">
+      <div>Итераций: <b id="tbStepStat">0</b></div>
+      <div>Train Acc / Loss: <b id="tbStatTrain">—</b></div>
+      <div>Test Acc / Loss: <b id="tbStatTest">—</b></div>
+    </div>
+    <p class="hint" style="margin-top:12px;line-height:1.45">
+      Кликните по любой строке таблицы справа, чтобы открыть деревья итераций бустинга и увидеть путь образца.
+    </p>
+  </aside>
+
+  <div class="card">
+    <div class="data-header">
+      <h2>Результаты классификации (Gradient Boosting)</h2>
+      <span class="data-count" id="tbRowCount">0 строк</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead id="tbResHead"></thead>
+        <tbody id="tbResBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+
+<div class="drawer-overlay" id="drawerOverlay"></div>
+<aside class="drawer" id="treeDrawer" aria-hidden="true">
+  <div class="drawer-header">
+    <h3 id="drawerTitle">Дерево #1</h3>
+    <span class="badge" id="drawerBadge"></span>
+    <span class="spacer"></span>
+    <button class="drawer-close" id="drawerClose" title="Закрыть">✕</button>
+  </div>
+  <div class="drawer-nav">
+    <button class="btn" id="drawerPrev">←</button>
+    <button class="btn" id="drawerNext">→</button>
+    <span class="pos" id="drawerPos">1 / 1</span>
+    <span style="margin-left:auto">Путь выбранного образца подсвечен синим</span>
+  </div>
+  <div class="drawer-body">
+    <canvas id="treeCanvas" width="560" height="420"></canvas>
+    <div class="drawer-legend">
+      <span><i class="swatch swatch--class1"></i>лист → класс 1</span>
+      <span><i class="swatch swatch--class0"></i>лист → класс 0</span>
+      <span><i class="swatch swatch--path"></i>путь для выбранной точки</span>
+    </div>
+  </div>
+</aside>
+
+<div class="node-tooltip" id="nodeTooltip"></div>
+<!-- ==================== БОКОВАЯ ПАНЕЛЬ: ОПИСАТЕЛЬНАЯ СТАТИСТИКА ==================== -->
+<div class="drawer-overlay" id="statsOverlay"></div>
+<aside class="drawer" id="statsDrawer" aria-hidden="true">
+  <div class="drawer-header">
+    <h3>📊 Описательная статистика</h3>
+    <span class="badge" id="statsBadge">0 строк</span>
+    <span class="spacer"></span>
+    <button class="drawer-close" id="statsClose" title="Закрыть">✕</button>
+  </div>
+  <div class="drawer-nav">
+    <span id="tClassBalance" style="font-size:12px"></span>
+  </div>
+  <div class="drawer-body">
+    <div class="card" style="padding:12px">
+      <div style="overflow-x:auto">
+        <table class="data-table" style="font-size:12px">
+          <thead>
+            <tr>
+              <th>Признак</th>
+              <th>Валидных</th>
+              <th>NaN</th>
+              <th>Среднее</th>
+              <th>Std</th>
+              <th>Мин</th>
+              <th>Медиана</th>
+              <th>Макс</th>
+            </tr>
+          </thead>
+          <tbody id="tSummaryBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:12px">
+      Пропуски (NaN) в признаках перед обучением моделей автоматически заполняются медианой, вычисленной только по обучающей выборке (Train).
+    </p>
+  </div>
+</aside>
+<!-- ==================== БОКОВАЯ ПАНЕЛЬ: ГРАФИКИ ТАБЛИЧНЫХ МОДЕЛЕЙ ==================== -->
+<div class="drawer-overlay" id="chartsOverlay"></div>
+<aside class="drawer" id="chartsDrawer" aria-hidden="true" style="width:min(780px, 95vw)">
+  <div class="drawer-header">
+    <h3 id="chartsDrawerTitle">Графики обучения</h3>
+    <span class="badge" id="chartsDrawerBadge"></span>
+    <span class="spacer"></span>
+    <button class="btn" id="btnRecalcDrawerBvd" style="padding:5px 10px;font-size:12px">Пересчитать Bias и Variance</button>
+    <button class="drawer-close" id="chartsClose" title="Закрыть">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px">
+      <div class="card" style="padding:10px"><canvas id="drwLossTrain" width="330" height="115"></canvas></div>
+      <div class="card" style="padding:10px"><canvas id="drwLossTest"  width="330" height="115"></canvas></div>
+      <div class="card" style="padding:10px"><canvas id="drwAccTrain"  width="330" height="115"></canvas></div>
+      <div class="card" style="padding:10px"><canvas id="drwAccTest"   width="330" height="115"></canvas></div>
+      <div class="card" style="padding:10px"><canvas id="drwBias"      width="330" height="115"></canvas></div>
+      <div class="card" style="padding:10px"><canvas id="drwVar"       width="330" height="115"></canvas></div>
+    </div>
+  </div>
+</aside>
+
+
+
+<script type="module" src="./ensemble/main.js"></script>
+</body>
+</html>
