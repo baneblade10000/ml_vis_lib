@@ -1,4 +1,5 @@
-# Publish playground to the gh-pages branch (served via jsDelivr).
+# Publish playground to the gh-pages branch (served via raw.githack.com:
+# https://raw.githack.com/baneblade10000/ml_vis_lib/gh-pages/index.html).
 # GitHub Pages deploy-pages is intentionally unused: its queue is stuck for this repo.
 name: pages
 
