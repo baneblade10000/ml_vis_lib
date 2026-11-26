@@ -19,13 +19,76 @@ export type VisualizationId =
   | "ensemble-playground"
   | "signal-lab";
 
-export interface VisualizationEntry {
+interface VisualizationBase {
   id: VisualizationId;
   path: string;
   titleKey: keyof PlaygroundMessages;
   descriptionKey: keyof PlaygroundMessages;
-  component: ComponentType;
 }
+
+/** A visualization mounted by the viz page as a React component. */
+export interface ComponentVisualization extends VisualizationBase {
+  component: ComponentType;
+  embeddedPage?: never;
+}
+
+/** A tab of an embedded page, shown in the catalog header. */
+export interface EmbeddedPageTab {
+  /** What the page receives in the tab message. */
+  id: string;
+  labelKey: keyof PlaygroundMessages;
+}
+
+/** A button of an embedded page, shown in the catalog header beside the tabs. */
+export interface EmbeddedPageAction {
+  /** What the page receives in the action message. */
+  id: string;
+  labelKey: keyof PlaygroundMessages;
+}
+
+/**
+ * A self-contained page in public/ (own runtime and styles). The catalog embeds
+ * it as a full page in an iframe instead of mounting a component.
+ */
+export interface EmbeddedPage {
+  /** Path under public/, relative to the app base. */
+  src: string;
+  title: string;
+  tabs?: EmbeddedPageTab[];
+  actions?: EmbeddedPageAction[];
+  defaultTab?: string;
+}
+
+/** Posted to an embedded page when one of its header tabs is picked. */
+export interface EmbeddedPageTabMessage {
+  type: "ml-vis:tab";
+  id: string;
+}
+
+/** Posted to an embedded page when one of its header actions is picked. */
+export interface EmbeddedPageActionMessage {
+  type: "ml-vis:action";
+  id: string;
+}
+
+/**
+ * Posted by an embedded page: the tab it switched to on its own, and what its
+ * header shows beyond the tabs declared here.
+ */
+export interface EmbeddedPageHeaderMessage {
+  type: "ml-vis:header";
+  tab?: string;
+  title?: string;
+  badge?: string;
+}
+
+/** A visualization the viz page embeds as a full page in an iframe. */
+export interface EmbeddedVisualization extends VisualizationBase {
+  component?: never;
+  embeddedPage: EmbeddedPage;
+}
+
+export type VisualizationEntry = ComponentVisualization | EmbeddedVisualization;
 
 function ConvolutionalNetworkWithWasm() {
   return createElement(ConvolutionalNetworkPlayground, {
@@ -37,25 +100,6 @@ function TransformerWithWasm() {
   return createElement(TransformerPlayground, {
     createWorker: createTransformerTrainWorker,
   });
-}
-
-// TransformerFlow and Ensemble Playground ship as self-contained pages in
-// public/ (own runtime and styles), so the catalog embeds them as full pages
-// in an iframe rather than mounting a component.
-function publicPage(src: string, title: string) {
-  return createElement("iframe", {
-    className: "public-page-frame",
-    src: `${import.meta.env.BASE_URL}${src}`,
-    title,
-  });
-}
-
-function TransformerFlowFrame() {
-  return publicPage("transformer-constructor.html", "TransformerFlow");
-}
-
-function EnsemblePlaygroundFrame() {
-  return publicPage("ensemble.html", "Ensemble Playground");
 }
 
 export const visualizations: VisualizationEntry[] = [
@@ -85,14 +129,41 @@ export const visualizations: VisualizationEntry[] = [
     path: "/viz/transformer-flow",
     titleKey: "vizTransformerFlowTitle",
     descriptionKey: "vizTransformerFlowDescription",
-    component: TransformerFlowFrame,
+    // #embedded: the catalog carries the page's header — its tabs, the model
+    // badge and the open/save actions; without the hash the page shows its own.
+    embeddedPage: {
+      src: "transformer-constructor.html#embedded",
+      title: "TransformerFlow",
+      tabs: [
+        { id: "training", labelKey: "transformerFlowTabTraining" },
+        { id: "builder", labelKey: "transformerFlowTabBuilder" },
+        { id: "data", labelKey: "transformerFlowTabData" },
+      ],
+      actions: [
+        { id: "import", labelKey: "transformerFlowActionOpen" },
+        { id: "export", labelKey: "transformerFlowActionSave" },
+      ],
+    },
   },
   {
     id: "ensemble-playground",
     path: "/viz/ensemble-playground",
     titleKey: "vizEnsemblePlaygroundTitle",
     descriptionKey: "vizEnsemblePlaygroundDescription",
-    component: EnsemblePlaygroundFrame,
+    // #embedded tells the page it is framed by the catalog, which carries
+    // its tabs; without the hash the page shows its own header.
+    embeddedPage: {
+      src: "ensemble.html#embedded",
+      title: "Ensemble Playground",
+      defaultTab: "viz",
+      tabs: [
+        { id: "data", labelKey: "ensembleTabData" },
+        { id: "viz", labelKey: "ensembleTabViz" },
+        { id: "edit", labelKey: "ensembleTabTableEditor" },
+        { id: "tableForest", labelKey: "ensembleTabTableForest" },
+        { id: "tableBoost", labelKey: "ensembleTabTableBoost" },
+      ],
+    },
   },
   {
     id: "convolutional-network",

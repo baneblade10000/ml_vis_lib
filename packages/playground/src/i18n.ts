@@ -19,6 +19,16 @@ export type PlaygroundMessages = {
   vizTransformerFlowDescription: string;
   vizEnsemblePlaygroundTitle: string;
   vizEnsemblePlaygroundDescription: string;
+  ensembleTabData: string;
+  ensembleTabViz: string;
+  ensembleTabTableEditor: string;
+  ensembleTabTableForest: string;
+  ensembleTabTableBoost: string;
+  transformerFlowTabTraining: string;
+  transformerFlowTabBuilder: string;
+  transformerFlowTabData: string;
+  transformerFlowActionOpen: string;
+  transformerFlowActionSave: string;
   catalogViewGraph: string;
   catalogViewList: string;
   catalogSearchPlaceholder: string;
@@ -58,6 +68,16 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizEnsemblePlaygroundTitle: "Tree Ensembles",
     vizEnsemblePlaygroundDescription:
       "Random Forest and gradient boosting step by step: decision plane, individual trees, bias–variance, tabular data with missing values.",
+    ensembleTabData: "Data",
+    ensembleTabViz: "Visualization",
+    ensembleTabTableEditor: "Table editor",
+    ensembleTabTableForest: "Table: forest",
+    ensembleTabTableBoost: "Table: boosting",
+    transformerFlowTabTraining: "Training",
+    transformerFlowTabBuilder: "Builder",
+    transformerFlowTabData: "Data",
+    transformerFlowActionOpen: "Open",
+    transformerFlowActionSave: "Save",
     catalogViewGraph: "Graph",
     catalogViewList: "List",
     catalogSearchPlaceholder: "Search…",
@@ -98,6 +118,16 @@ export const playgroundMessages: Record<Locale, PlaygroundMessages> = {
     vizEnsemblePlaygroundTitle: "Ансамбли деревьев",
     vizEnsemblePlaygroundDescription:
       "Random Forest и градиентный бустинг пошагово: разделяющая плоскость, отдельные деревья, bias–variance, табличные данные с пропусками.",
+    ensembleTabData: "Данные",
+    ensembleTabViz: "Визуализация",
+    ensembleTabTableEditor: "Создание табличных данных",
+    ensembleTabTableForest: "Лес для табличных данных",
+    ensembleTabTableBoost: "Бустинг для табличных данных",
+    transformerFlowTabTraining: "Обучение",
+    transformerFlowTabBuilder: "Конструктор",
+    transformerFlowTabData: "Данные",
+    transformerFlowActionOpen: "Открыть",
+    transformerFlowActionSave: "Сохранить",
     catalogViewGraph: "Граф",
     catalogViewList: "Список",
     catalogSearchPlaceholder: "Поиск…",

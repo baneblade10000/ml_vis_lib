@@ -1,44 +1,6 @@
-/* ─── Design tokens ─────────────────────────────────────────────────────────── */
-
-:root {
-  --nn-font: "Inter", system-ui, -apple-system, sans-serif;
-
-  --nn-accent: #3457a3;
-  --nn-accent-hover: #083275;
-  --nn-accent-soft: rgba(52, 87, 163, 0.15);
-  --nn-accent-glow: rgba(52, 87, 163, 0.35);
-
-  --nn-cyan: #3457a3;
-  --nn-crimson: #dc263a;
-
-  --nn-bg: #f1f5f9;
-  --nn-bg-gradient: linear-gradient(145deg, #f8fafc 0%, #e8f4fc 45%, #f1f5f9 100%);
-
-  --nn-surface: #ffffff;
-  --nn-surface-raised: #ffffff;
-  --nn-surface-muted: #f8fafc;
-
-  --nn-border: #e2e8f0;
-  --nn-border-strong: #cbd5e1;
-
-  --nn-text: #0f172a;
-  --nn-text-secondary: #475569;
-  --nn-text-muted: #94a3b8;
-
-  --nn-radius-sm: 6px;
-  --nn-radius-md: 10px;
-  --nn-radius-lg: 14px;
-  --nn-radius-xl: 18px;
-  --nn-radius-full: 9999px;
-
-  --nn-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --nn-shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
-  --nn-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
-  --nn-shadow-lg: 0 8px 32px rgba(15, 23, 42, 0.1);
-  --nn-shadow-glow: 0 0 0 3px var(--nn-accent-soft);
-
-  --nn-transition: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* ─── Design tokens ───────────────────────────────────────────────────────────
+   Live in public/tokens.css, linked by index.html: the self-contained pages in
+   public/ are separate documents and link the same file. */
 
 /* ─── App shell ─────────────────────────────────────────────────────────────── */
 
@@ -182,7 +144,10 @@
   pointer-events: none;
 }
 
-.catalog-mode-switch {
+/* Segmented switch: Graph/List in the catalog header and the tabs of an
+   embedded visualization share one look. */
+.catalog-mode-switch,
+.viz-tabs {
   display: inline-flex;
   gap: 4px;
   height: 2rem;
@@ -192,7 +157,8 @@
   border-radius: var(--nn-radius-full);
 }
 
-.catalog-mode-option {
+.catalog-mode-option,
+.viz-tab {
   padding: 0 1.1rem;
   background: transparent;
   border: none;
@@ -207,7 +173,8 @@
     box-shadow var(--nn-transition);
 }
 
-.catalog-mode-option.selected {
+.catalog-mode-option.selected,
+.viz-tab.selected {
   background: var(--nn-surface);
   color: var(--nn-accent);
   font-weight: 600;
@@ -521,15 +488,31 @@
 }
 
 /* Self-contained pages from public/ (TransformerFlow, Ensemble Playground) are
-   embedded as full pages in an iframe. */
-.viz-page:has(.public-page-frame) {
+   embedded as full pages in an iframe that fills the viewport below the header,
+   like the immersive playgrounds; a fixed height left an empty band below. */
+.nn-app:has(.public-page-frame) {
   display: flex;
   flex-direction: column;
+  min-height: 100vh;
+}
+
+.nn-page--compact:has(.public-page-frame) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.viz-page:has(.public-page-frame) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .public-page-frame {
   width: 100%;
-  height: calc(100dvh - 8rem);
+  flex: 1;
   min-height: 640px;
   border: 1px solid var(--nn-border-strong);
   border-radius: var(--nn-radius-lg);
@@ -544,8 +527,69 @@
   margin-bottom: 1rem;
 }
 
+/* Every control of the row is 2rem tall, as in the catalog header. */
 .viz-page-top .catalog-back {
+  height: 2rem;
   margin-bottom: 0;
+}
+
+/* A header that carries an embedded page's tabs wraps instead of overflowing;
+   the tabs sit beside the back link and the locale switcher keeps the right edge. */
+.viz-page-top:has(.viz-tabs) {
+  flex-wrap: wrap;
+}
+
+.viz-tabs {
+  max-width: 100%;
+  height: auto;
+  min-height: 2rem;
+  flex-wrap: wrap;
+}
+
+.viz-page-top .locale-switcher {
+  margin-left: auto;
+}
+
+.viz-page-top .locale-switcher {
+  height: 2rem;
+  padding-block: 0;
+  line-height: 1;
+}
+
+/* What an embedded page reports for its header: a title, a badge such as
+   "5 blocks · 872 parameters", and its actions, grouped at the right edge. */
+.viz-page-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--nn-text);
+}
+
+.viz-page-badge {
+  color: var(--nn-text-muted);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.viz-page-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.viz-page-top .viz-page-action {
+  height: 2rem;
+  padding: 0 0.875rem;
+  border-radius: var(--nn-radius-full);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.viz-page-top:has(.viz-page-actions) .locale-switcher {
+  margin-left: 0;
 }
 
 .viz-page:has(.mc-playground) {
@@ -1602,7 +1646,7 @@
 }
 
 .nn-flow-node.selected {
-  border-color: #3457a3;
+  border-color: var(--nn-accent);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
 }
 
@@ -1677,7 +1721,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #3457a3;
+  background: var(--nn-accent);
   color: #fff;
   font-size: 0.75rem;
   font-weight: 700;
@@ -1691,7 +1735,7 @@
 .nn-flow-handle {
   width: 8px !important;
   height: 8px !important;
-  background: #3457a3 !important;
+  background: var(--nn-accent) !important;
   border: 2px solid #fff !important;
 }
 
@@ -1791,13 +1835,13 @@
 }
 
 .nn-weight-matrix__cell--selected {
-  box-shadow: inset 0 0 0 2px #0f172a !important;
+  box-shadow: inset 0 0 0 2px var(--nn-text) !important;
   z-index: 2;
   position: relative;
 }
 
 .nn-weight-matrix__cell:focus-visible {
-  box-shadow: inset 0 0 0 2px #3457a3 !important;
+  box-shadow: inset 0 0 0 2px var(--nn-accent) !important;
 }
 
 .nn-weight-matrix__tooltip {
@@ -1815,7 +1859,7 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
-  color: #0f172a;
+  color: var(--nn-text);
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(15, 23, 42, 0.16);
   border-radius: 4px;
@@ -1931,7 +1975,7 @@
 }
 
 .nn-network-palette-item:hover {
-  border-color: #3457a3;
+  border-color: var(--nn-accent);
   box-shadow: var(--nn-shadow-sm);
 }
 
@@ -1952,15 +1996,15 @@
 }
 
 .nn-network-palette-icon--dense {
-  background: #3457a3;
+  background: var(--nn-accent);
 }
 
 .nn-network-palette-icon--sum {
-  background: #3457a3;
+  background: var(--nn-accent);
 }
 
 .nn-network-palette-icon--output {
-  background: #0f172a;
+  background: var(--nn-text);
 }
 
 .nn-network-palette-label {
@@ -2464,7 +2508,7 @@
 }
 
 .ag-palette-icon {
-  background: #3457a3;
+  background: var(--nn-accent);
   width: 1.375rem;
   height: 1.375rem;
   font-size: 0.6875rem;
@@ -2526,7 +2570,7 @@
 }
 
 .ag-node.selected {
-  border-color: #3457a3;
+  border-color: var(--nn-accent);
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
 }
 
@@ -2540,8 +2584,8 @@
 }
 
 .ag-node--sink {
-  border-color: #0f172a;
-  background: #f8fafc;
+  border-color: var(--nn-text);
+  background: var(--nn-surface-muted);
 }
 
 /* Step-by-step passes: the operations the next step works on, and those the last step worked on */
@@ -2578,7 +2622,7 @@
 
 .ag-node-symbol {
   font-weight: 800;
-  color: #3457a3;
+  color: var(--nn-accent);
   font-size: 0.8125rem;
 }
 
@@ -2613,7 +2657,7 @@
   width: 9px;
   height: 9px;
   background: #fff;
-  border: 2px solid #3457a3;
+  border: 2px solid var(--nn-accent);
 }
 
 /* An input port nothing feeds yet: an operand still missing. */
@@ -2749,7 +2793,7 @@
 }
 
 .cnn-node.selected .cnn-node-label {
-  color: #3457a3;
+  color: var(--nn-accent);
 }
 
 .cnn-node--input { min-width: 0; }
@@ -2903,7 +2947,7 @@
   width: 8px;
   height: 8px;
   background: #fff;
-  border: 2px solid #3457a3;
+  border: 2px solid var(--nn-accent);
 }
 
 /* Feature-map tile grid inside a node */
@@ -2965,7 +3009,7 @@
   border-radius: 0;
   overflow: hidden;
   border: 1px solid rgba(52, 87, 163, 0.45);
-  background: #f8fafc;
+  background: var(--nn-surface-muted);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
   line-height: 0;
 }
@@ -3012,10 +3056,10 @@
 .cnn-kernel-mini--empty {
   background: repeating-linear-gradient(
     -45deg,
-    #f1f5f9,
-    #f1f5f9 3px,
-    #e2e8f0 3px,
-    #e2e8f0 6px
+    var(--nn-bg),
+    var(--nn-bg) 3px,
+    var(--nn-border) 3px,
+    var(--nn-border) 6px
   );
 }
 
@@ -3030,7 +3074,7 @@
   border-radius: 0;
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, 0.1);
-  background: #f8fafc;
+  background: var(--nn-surface-muted);
   line-height: 0;
 }
 
@@ -3111,7 +3155,7 @@
 .cnn-readout-col__track {
   width: 28px;
   height: 72px;
-  background: #f1f5f9;
+  background: var(--nn-bg);
   border: 1px solid var(--nn-border);
   border-radius: 4px;
   overflow: hidden;
@@ -3313,7 +3357,7 @@
 .cnn-gallery-item {
   border: 1px solid var(--nn-border);
   border-radius: 3px;
-  background: #f8fafc;
+  background: var(--nn-surface-muted);
   padding: 1px;
   cursor: pointer;
   display: flex;
@@ -3323,11 +3367,11 @@
 }
 
 .cnn-gallery-item:hover {
-  border-color: #3457a3;
+  border-color: var(--nn-accent);
 }
 
 .cnn-gallery-item.selected {
-  border-color: #3457a3;
+  border-color: var(--nn-accent);
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
 }
 

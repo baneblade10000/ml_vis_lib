@@ -24,7 +24,7 @@ const LABEL_PX = 10;
 const LABEL_TILT = -Math.PI / 4;
 
 /**
- * Shared design tokens (`--nn-*` of network-playground.css), as the canvas
+ * Shared design tokens (`--nn-*` of the playground's public/tokens.css), as the canvas
  * inherits them. Canvas has no `var()`, so the layout's chrome colors and font
  * are resolved here; cell fills come from the numeric scale instead.
  */
