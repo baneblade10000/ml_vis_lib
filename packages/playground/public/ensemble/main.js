@@ -45,8 +45,13 @@ const state = {
   }
 };
 
+// Плоскость рисуется в 2×: на широких карточках она показывается крупнее 380 px.
+const RES = 2;
 const cvF = $('cvForest'), cvB = $('cvBoost');
+for (const cv of [cvF, cvB]) cv.width = cv.height = SIZE * RES;
 const ctxF = cvF.getContext('2d'), ctxB = cvB.getContext('2d');
+ctxF.scale(RES, RES);
+ctxB.scale(RES, RES);
 const ctxChartFTrain = $('chartForestTrain').getContext('2d');
 const ctxChartFTest  = $('chartForestTest').getContext('2d');
 const ctxChartBTrain = $('chartBoostTrain').getContext('2d');
@@ -190,7 +195,6 @@ function renderForest() {
     ? `${(tr.acc * 100).toFixed(0)}% / ${(te.acc * 100).toFixed(0)}%` : '—';
   $('mForestLoss').textContent = trees.length
     ? `${tr.loss.toFixed(2)} / ${te.loss.toFixed(2)}` : '—';
-  $('badgeForest').textContent = trees.length ? `${trees.length} деревьев` : 'не обучен';
   $('statForest').textContent = trees.length
     ? `test ${(te.acc * 100).toFixed(1)}%` : '—';
 }
@@ -223,7 +227,6 @@ function renderBoost() {
     $('mBoostIters').textContent = b.trees.length;
     $('mBoostAcc').textContent = `${(tr.acc * 100).toFixed(0)}% / ${(te.acc * 100).toFixed(0)}%`;
     $('mBoostLoss').textContent = `${tr.loss.toFixed(2)} / ${te.loss.toFixed(2)}`;
-    $('badgeBoost').textContent = `${b.trees.length} итераций`;
     $('statBoost').textContent = `test ${(te.acc * 100).toFixed(1)}%`;
   } else {
     drawPointsOnPlot(ctxB, SIZE, view, state.X, state.y, {
@@ -233,7 +236,6 @@ function renderBoost() {
     $('mBoostIters').textContent = '0';
     $('mBoostAcc').textContent = '—';
     $('mBoostLoss').textContent = '—';
-    $('badgeBoost').textContent = 'не обучен';
     $('statBoost').textContent = '—';
   }
 }
@@ -831,31 +833,62 @@ function renderAll() {
 }
 
 
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.onclick = () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    const which = tab.dataset.tab;
-    $('tabViz').style.display         = which === 'viz' ? 'grid' : 'none';
-    $('tabData').style.display        = which === 'data' ? 'grid' : 'none';
-    $('tabEdit').style.display        = which === 'edit' ? 'grid' : 'none';
-    $('tabTableForest').style.display = which === 'tableForest' ? 'grid' : 'none';
-    $('tabTableBoost').style.display  = which === 'tableBoost' ? 'grid' : 'none';
+// ---------- вкладки ----------
+const TAB_PANELS = {
+  viz: 'tabViz', data: 'tabData', edit: 'tabEdit',
+  tableForest: 'tabTableForest', tableBoost: 'tabTableBoost',
+};
 
-    if (which === 'data') renderTable();
-    if (which === 'edit') {
-      if (!TABLE.X.length) genTable();
-      else { renderTableTab(); updateTableStats(); }
-    }
-    if (which === 'tableForest') {
-      if (!TABLE.X.length) genTable();
-      renderTableForestResults();
-    }
-    if (which === 'tableBoost') {
-      if (!TABLE.X.length) genTable();
-      renderTableBoostResults();
-    }
-  };
+// При открытии из каталога (#embedded) вкладки живут в его шапке, и выбранная
+// приходит сюда сообщением; своя строка вкладок — для отдельного открытия.
+function selectTab(which) {
+  const panel = TAB_PANELS[which];
+  if (!panel) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === which));
+  for (const id of Object.values(TAB_PANELS)) $(id).style.display = 'none';
+  $(panel).style.display = 'grid';
+
+  if (which === 'data') renderTable();
+  if (which === 'edit') {
+    if (!TABLE.X.length) genTable();
+    else { renderTableTab(); updateTableStats(); }
+  }
+  if (which === 'tableForest') {
+    if (!TABLE.X.length) genTable();
+    renderTableForestResults();
+  }
+  if (which === 'tableBoost') {
+    if (!TABLE.X.length) genTable();
+    renderTableBoostResults();
+  }
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => selectTab(tab.dataset.tab);
+});
+
+window.addEventListener('message', (e) => {
+  if (e.origin === location.origin && e.data?.type === 'ml-vis:tab') selectTab(e.data.id);
+});
+
+// ---------- переключатель моделей ----------
+// Обе модели считаются всегда — переключатель только показывает одну из них.
+function selectModel(model) {
+  const forest = model === 'forest';
+  document.querySelectorAll('#modelSwitch .seg-btn').forEach(b => {
+    const active = b.dataset.model === model;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-selected', String(active));
+  });
+  $('cardForest').hidden = !forest;
+  $('cardBoost').hidden = forest;
+  $('paramsForest').hidden = !forest;
+  $('paramsBoost').hidden = forest;
+}
+
+$('modelSwitch').addEventListener('click', (e) => {
+  const btn = e.target.closest('.seg-btn');
+  if (btn) selectModel(btn.dataset.model);
 });
 
 

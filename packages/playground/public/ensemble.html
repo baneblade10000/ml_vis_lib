@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ensemble Playground — Random Forest &amp; Gradient Boosting</title>
+<script>
+// #embedded: страницу открывает каталог, и шапка с вкладками живёт у него.
+if (location.hash === '#embedded') document.documentElement.classList.add('embedded');
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -31,6 +35,14 @@
 <div class="app" id="tabViz">
 
   <div class="card">
+    <div class="param-group">
+      <h2>Ансамбль</h2>
+      <div class="seg" id="modelSwitch" role="tablist" aria-label="Ансамбль">
+        <button class="seg-btn active" data-model="forest" role="tab" aria-selected="true">Random Forest</button>
+        <button class="seg-btn" data-model="boost" role="tab" aria-selected="false">Gradient Boosting</button>
+      </div>
+    </div>
+
     <h2>Данные</h2>
 
     <div class="param-group">
@@ -97,125 +109,122 @@
     </div>
   </div>
 
-  <div style="display:flex;flex-direction:column;gap:16px">
+  <div class="models">
 
-    <div class="card">
-      <div class="grid-wrap">
-        <div class="grid-title">
-          Random Forest
-          <span class="badge" id="badgeForest">—</span>
+    <div class="card model-card" id="cardForest" role="tabpanel">
+      <div class="model-body">
+        <div class="model-plane">
+          <canvas id="cvForest" class="grid" width="380" height="380"></canvas>
+          <div class="metrics">
+            <span>Деревьев: <b id="mForestTrees">0</b></span>
+            <span>Accuracy: <b id="mForestAcc">—</b></span>
+            <span>Loss: <b id="mForestLoss">—</b></span>
+          </div>
+          <div class="model-actions">
+            <button class="btn primary" id="btnForest">Построить</button>
+            <button class="btn btn-icon" id="btnPlayF" title="Проиграть пошагово">▶</button>
+            <button class="btn" id="btnResetF">Сброс</button>
+          </div>
         </div>
-        <canvas id="cvForest" class="grid" width="380" height="380"></canvas>
-        <div class="metrics">
-          <span>Деревьев: <b id="mForestTrees">0</b></span>
-          <span>Accuracy: <b id="mForestAcc">—</b></span>
-          <span>Loss: <b id="mForestLoss">—</b></span>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn primary" id="btnForest">Построить</button>
-          <button class="btn btn-icon" id="btnPlayF" title="Проиграть пошагово">▶</button>
-          <button class="btn" id="btnResetF">Сброс</button>
-        </div>
-        <div class="minis" id="minisForest"></div>
-        <div class="chart-wrap" style="width:100%;display:flex;flex-direction:column;gap:8px;align-items:center">
+        <div class="model-charts">
           <canvas id="chartForestTrain" width="380" height="120"></canvas>
           <canvas id="chartForestTest" width="380" height="120"></canvas>
           <canvas id="chartForestBias" width="380" height="115"></canvas>
           <canvas id="chartForestVar" width="380" height="115"></canvas>
         </div>
       </div>
+      <div class="minis" id="minisForest"></div>
     </div>
 
-    <div class="card">
-      <div class="grid-wrap">
-        <div class="grid-title">
-          Gradient Boosting
-          <span class="badge" id="badgeBoost">—</span>
+    <div class="card model-card" id="cardBoost" role="tabpanel" hidden>
+      <div class="model-body">
+        <div class="model-plane">
+          <canvas id="cvBoost" class="grid" width="380" height="380"></canvas>
+          <div class="metrics">
+            <span>Итераций: <b id="mBoostIters">0</b></span>
+            <span>Accuracy: <b id="mBoostAcc">—</b></span>
+            <span>Loss: <b id="mBoostLoss">—</b></span>
+          </div>
+          <div class="model-actions">
+            <button class="btn accent" id="btnBoost">Шаг</button>
+            <button class="btn btn-icon" id="btnPlayB" title="Проиграть пошагово">▶</button>
+            <button class="btn" id="btnResetB">Сброс</button>
+          </div>
         </div>
-        <canvas id="cvBoost" class="grid" width="380" height="380"></canvas>
-        <div class="metrics">
-          <span>Итераций: <b id="mBoostIters">0</b></span>
-          <span>Accuracy: <b id="mBoostAcc">—</b></span>
-          <span>Loss: <b id="mBoostLoss">—</b></span>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn accent" id="btnBoost">Шаг</button>
-          <button class="btn btn-icon" id="btnPlayB" title="Проиграть пошагово">▶</button>
-          <button class="btn" id="btnResetB">Сброс</button>
-        </div>
-        <div class="minis" id="minisBoost"></div>
-        <div class="chart-wrap" style="width:100%;display:flex;flex-direction:column;gap:8px;align-items:center">
+        <div class="model-charts">
           <canvas id="chartBoostTrain" width="380" height="120"></canvas>
           <canvas id="chartBoostTest" width="380" height="120"></canvas>
           <canvas id="chartBoostBias" width="380" height="115"></canvas>
           <canvas id="chartBoostVar" width="380" height="115"></canvas>
         </div>
-
-
-
       </div>
+      <div class="minis" id="minisBoost"></div>
     </div>
 
     <div class="info empty" id="clickInfo">
-      Кликните по точке на любой сетке — покажу вклад отдельных деревьев.
+      Кликните по точке на плоскости — покажу вклад отдельных деревьев.
     </div>
   </div>
 
   <div class="card">
-    <h2>Random Forest</h2>
+    <section id="paramsForest">
+      <h2>Random Forest</h2>
 
-    <div class="param-group">
-      <span class="label">Число деревьев</span>
-      <div class="param-row">
-        <input id="nTrees" type="range" min="1" max="40">
-        <input id="nTreesNum" type="text" inputmode="decimal" class="param-input" min="1" max="40">
+      <div class="param-group">
+        <span class="label">Число деревьев</span>
+        <div class="param-row">
+          <input id="nTrees" type="range" min="1" max="40">
+          <input id="nTreesNum" type="text" inputmode="decimal" class="param-input" min="1" max="40">
+        </div>
       </div>
-    </div>
-    <div class="param-group">
-      <span class="label">Глубина дерева</span>
-      <div class="param-row">
-        <input id="depthF" type="range" min="1" max="8">
-        <input id="depthFNum" type="text" inputmode="decimal" class="param-input" min="1" max="8">
+      <div class="param-group">
+        <span class="label">Глубина дерева</span>
+        <div class="param-row">
+          <input id="depthF" type="range" min="1" max="8">
+          <input id="depthFNum" type="text" inputmode="decimal" class="param-input" min="1" max="8">
+        </div>
       </div>
-    </div>
-    <div class="param-group">
-      <span class="label">Признаков на сплит</span>
-      <div class="param-row">
-        <input id="nFeatF" type="range" min="1" max="2">
-        <input id="nFeatFNum" type="text" inputmode="decimal" class="param-input" min="1" max="2">
+      <div class="param-group">
+        <span class="label">Признаков на сплит</span>
+        <div class="param-row">
+          <input id="nFeatF" type="range" min="1" max="2">
+          <input id="nFeatFNum" type="text" inputmode="decimal" class="param-input" min="1" max="2">
+        </div>
       </div>
-    </div>
-    <div class="param-group">
-      <span class="label">Bootstrap (доля)</span>
-      <div class="param-row">
-        <input id="fracF" type="range" min="0.3" max="1" step="0.05">
-        <input id="fracFNum" type="text" inputmode="decimal"  class="param-input" min="0.3" max="1" step="0.05">
+      <div class="param-group">
+        <span class="label">Bootstrap (доля)</span>
+        <div class="param-row">
+          <input id="fracF" type="range" min="0.3" max="1" step="0.05">
+          <input id="fracFNum" type="text" inputmode="decimal"  class="param-input" min="0.3" max="1" step="0.05">
+        </div>
       </div>
-    </div>
+    </section>
 
-    <h2 style="margin-top:24px">Gradient Boosting</h2>
+    <section id="paramsBoost" hidden>
+      <h2>Gradient Boosting</h2>
 
-    <div class="param-group">
-      <span class="label">Итераций</span>
-      <div class="param-row">
-        <input id="nIters" type="range" min="1" max="80">
-        <input id="nItersNum" type="text" inputmode="decimal" class="param-input" min="1" max="80">
+      <div class="param-group">
+        <span class="label">Итераций</span>
+        <div class="param-row">
+          <input id="nIters" type="range" min="1" max="80">
+          <input id="nItersNum" type="text" inputmode="decimal" class="param-input" min="1" max="80">
+        </div>
       </div>
-    </div>
-    <div class="param-group">
-      <span class="label">Глубина дерева</span>
-      <div class="param-row">
-        <input id="depthB" type="range" min="1" max="6">
-        <input id="depthBNum" type="text" inputmode="decimal" class="param-input" min="1" max="6">
+      <div class="param-group">
+        <span class="label">Глубина дерева</span>
+        <div class="param-row">
+          <input id="depthB" type="range" min="1" max="6">
+          <input id="depthBNum" type="text" inputmode="decimal" class="param-input" min="1" max="6">
+        </div>
       </div>
-    </div>
-    <div class="param-group">
-      <span class="label">Learning rate</span>
-      <div class="param-row">
-        <input id="lr" type="range" min="0.05" max="1" step="0.05">
-        <input id="lrNum" type="text" inputmode="decimal" class="param-input" min="0.05" max="1" step="0.05">
+      <div class="param-group">
+        <span class="label">Learning rate</span>
+        <div class="param-row">
+          <input id="lr" type="range" min="0.05" max="1" step="0.05">
+          <input id="lrNum" type="text" inputmode="decimal" class="param-input" min="0.05" max="1" step="0.05">
+        </div>
       </div>
-    </div>
+    </section>
   </div>
 
 </div>

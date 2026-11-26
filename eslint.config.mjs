@@ -56,6 +56,8 @@ export default tseslint.config(
         Worker: "readonly",
         // tflow/worker.js gets the engine from engine.js through importScripts.
         TFlow: "readonly",
+        // constructor/app.js gets the token readers from tflow/palette.js.
+        TFlowPalette: "readonly",
       },
     },
   },

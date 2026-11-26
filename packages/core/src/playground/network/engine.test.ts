@@ -199,10 +199,11 @@ describe("numeric color scale", () => {
     expect(scaleText(Number.NaN)).toBe("#0f172a");
   });
 
-  it("keeps the static TransformerFlow page on the same three tokens", () => {
-    // The page ships as plain files in public/ and cannot import this module.
+  it("keeps the playground's token file on the same three scale tokens", () => {
+    // The pages in public/ read the scale as custom properties of tokens.css;
+    // a canvas here cannot import them, hence the same three constants.
     const css = readFileSync(
-      new URL("../../../../../packages/playground/public/tflow/style.css", import.meta.url),
+      new URL("../../../../../packages/playground/public/tokens.css", import.meta.url),
       "utf8",
     );
     const token = (name: string) =>
@@ -212,6 +213,32 @@ describe("numeric color scale", () => {
       zero: hex(NUMERIC_ZERO),
       positive: hex(NUMERIC_POSITIVE),
     });
+  });
+
+  it("keeps TransformerFlow on that token file: no color of its own, no token missing", () => {
+    const publicDir = new URL("../../../../../packages/playground/public/", import.meta.url);
+    const read = (file: string) => readFileSync(new URL(file, publicDir), "utf8");
+    const definitions = (css: string) => [...css.matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1]);
+    // --font-* and --tint-* are the page's own; every other token is shared.
+    const tokens = new Set([...definitions(read("tokens.css")), ...definitions(read("tflow/style.css"))]);
+    const files = [
+      "transformer-constructor.html",
+      "tflow/style.css",
+      "tflow/palette.js",
+      "constructor/constructor.css",
+      "constructor/app.js",
+    ];
+    for (const file of files) {
+      // Comments may name a color; only code has to stay free of one.
+      const source = read(file).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+      // A color written out, as opposed to one assembled from a token.
+      expect(source, file).not.toMatch(
+        /#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d[\d.]*\s*(,\s*[\d.]+\s*){2,3}\)|(?<![-\w])(?:white|black)(?![-\w])/,
+      );
+      for (const [, name] of source.matchAll(/var\((--[\w-]+)/g)) {
+        expect(tokens.has(name), `${file}: ${name}`).toBe(true);
+      }
+    }
   });
 });
 

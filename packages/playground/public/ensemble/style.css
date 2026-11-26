@@ -1,6 +1,6 @@
 /* Ensemble Playground — самостоятельная страница в public/, встраивается в каталог
    через iframe и потому объявляет токены плейграунда сама, а не наследует их.
-   --nn-* — зеркало :root из packages/playground/src/network-playground.css,
+   --nn-* — зеркало :root из packages/playground/public/tokens.css,
    --scale-* — зеркало NUMERIC_* из packages/core/src/playground/network/colors.ts. */
 :root {
   --nn-font: "Inter", system-ui, -apple-system, sans-serif;
@@ -56,6 +56,8 @@
 
 * { box-sizing: border-box; }
 
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: var(--nn-font);
@@ -102,6 +104,8 @@ body {
 @media (max-width: 1100px) {
   .topbar-title .subtitle { display: none; }
 }
+/* #embedded: страницу открывает каталог, и шапка с вкладками живёт у него. */
+.embedded .topbar { display: none; }
 
 .tabs {
   display: flex;
@@ -137,13 +141,12 @@ body {
 
 /* ===== Сетка страницы ===== */
 
+/* На всю ширину, без max-width и центрирования: пустые полосы по бокам не нужны. */
 .app {
   display: grid;
-  grid-template-columns: 280px 1fr 340px;
-  gap: 16px;
-  padding: 16px 24px;
-  max-width: 1500px;
-  margin: 0 auto;
+  grid-template-columns: 280px minmax(0, 1fr) 340px;
+  gap: 12px;
+  padding: 12px;
   align-items: start;
 }
 .app.data-app { grid-template-columns: 1fr; }
@@ -368,25 +371,76 @@ input[type=range]:focus-visible {
   color: var(--nn-accent);
 }
 
-/* ===== Плоскость и миниатюры ===== */
+/* ===== Переключатель моделей и карточка модели ===== */
 
-.grid-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.grid-title {
+.models {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
 }
-.grid-title .badge {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--nn-text-secondary);
+
+.seg {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
   background: var(--nn-surface-muted);
-  padding: 2px 8px;
+  border: 1px solid var(--nn-border);
   border-radius: var(--nn-radius-full);
 }
+.seg-btn {
+  flex: 1;
+  height: 2rem;
+  padding: 0 0.375rem;
+  border: none;
+  border-radius: var(--nn-radius-full);
+  background: transparent;
+  color: var(--nn-text-secondary);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--nn-transition),
+    color var(--nn-transition),
+    box-shadow var(--nn-transition);
+}
+.seg-btn:hover { color: var(--nn-text); }
+.seg-btn.active {
+  background: var(--nn-surface);
+  color: var(--nn-accent);
+  box-shadow: var(--nn-shadow-xs);
+}
+
+.model-card {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.model-body { display: contents; }
+.model-plane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.model-actions { display: flex; align-items: center; gap: 8px; }
+.model-charts {
+  order: 3;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.model-card .minis { order: 2; }
+
+/* Холст рисуется в 2× (760 px) и показывается меньше. */
 canvas.grid {
+  width: 380px;
+  height: 380px;
   border: 1px solid var(--nn-border);
   border-radius: var(--nn-radius-md);
   cursor: crosshair;
@@ -394,6 +448,25 @@ canvas.grid {
   transition: box-shadow var(--nn-transition);
 }
 canvas.grid:hover { box-shadow: var(--nn-shadow-glow); }
+
+/* Широкая карточка: плоскость слева, графики столбцом справа, миниатюры на всю ширину. */
+@container (min-width: 900px) {
+  .model-body {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: center;
+    align-items: start;
+    gap: 24px;
+  }
+  .model-charts {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+  canvas.grid {
+    width: clamp(380px, calc(100cqw - 440px), 640px);
+    height: auto;
+  }
+}
 
 .metrics { display: flex; gap: 18px; font-size: 12px; color: var(--nn-text-muted); }
 .metrics b { color: var(--nn-text); font-variant-numeric: tabular-nums; }
@@ -437,8 +510,6 @@ canvas.grid:hover { box-shadow: var(--nn-shadow-glow); }
   color: #fff;
   background: rgba(15, 23, 42, 0.55);
 }
-
-.chart-wrap { position: relative; }
 
 .info {
   min-height: 42px;
